@@ -3,11 +3,13 @@
 
 const AdvancedAnalytics = {
     observer: null,
-    contentObserver: null,
-    routeIdCounter: 0,
+    updateInterval: null,
+    currentSortColumn: 'ridership',
+    currentSortOrder: 'desc',
+    debug: true, // Set to false to enable auto-refresh
 
     init() {
-        console.log('[Advanced Analytics] Initializing mod...');
+        console.log('[Advanced Analytics] Initializing mod... (debug mode:', this.debug, ')');
         
         // Use proper lifecycle hook instead of immediate execution
         if (window.SubwayBuilderAPI) {
@@ -51,10 +53,6 @@ const AdvancedAnalytics = {
             return;
         }
 
-        // Add classes to wrapper
-        wrapperEl.classList.add('flex-row');
-        wrapperEl.classList.remove('min-w-80');
-
         // Find the existing content div
         const existingContentEl = wrapperEl.querySelector('.flex.flex-col.gap-2.w-full.h-full');
         if (!existingContentEl) {
@@ -62,98 +60,75 @@ const AdvancedAnalytics = {
             return;
         }
 
-        // Add class to existing content
-        existingContentEl.classList.add('min-w-80');
+        // Add identifying class for navigation detection
+        existingContentEl.classList.add('aa-sb-content');
 
-        // Create all columns
-        const capacityColumnEl = this.createColumn('Daily Capacity');
-        const highDemandColumnEl = this.createColumn('High Demand');
-        const mediumDemandColumnEl = this.createColumn('Medium Demand');
-        const lowDemandColumnEl = this.createColumn('Low Demand');
-        const costColumnEl = this.createColumn('Daily Cost');
-        const costPerPassengerColumnEl = this.createColumn('Cost/Passenger');
-        
-        wrapperEl.appendChild(capacityColumnEl);
-        wrapperEl.appendChild(highDemandColumnEl);
-        wrapperEl.appendChild(mediumDemandColumnEl);
-        wrapperEl.appendChild(lowDemandColumnEl);
-        wrapperEl.appendChild(costColumnEl);
-        wrapperEl.appendChild(costPerPassengerColumnEl);
-
-        // Initial sync
-        this.syncColumns(existingContentEl, capacityColumnEl, highDemandColumnEl, mediumDemandColumnEl, lowDemandColumnEl, costColumnEl, costPerPassengerColumnEl);
-
-        // Watch for changes in ridership column
-        this.watchRidershipColumn(existingContentEl, wrapperEl);
-    },
-
-    createColumn(title) {
-        const columnEl = document.createElement('div');
-        columnEl.className = 'flex flex-col gap-2 w-full border-l border-primary/15 pl-2';
-        columnEl.innerHTML = `
-            <div class="text-base font-medium whitespace-nowrap">
-                ${title}
-            </div>
-            <div class="aa-list flex flex-col gap-1"></div>
-        `;
-        return columnEl;
-    },
-
-    watchRidershipColumn(ridershipContentEl, wrapperEl) {
-        // Find the route list container
-        const routeListEl = ridershipContentEl.querySelector('.flex.flex-col.gap-1');
-        if (!routeListEl) {
-            console.error('[Advanced Analytics] Could not find route list');
-            return;
+        // Click "Show more" button if it exists to reveal all routes
+        const showMoreButtonEl = existingContentEl.querySelector('button');
+        if (showMoreButtonEl && showMoreButtonEl.textContent.includes('Show')) {
+            console.log('[Advanced Analytics] Clicking "Show more" button');
+            showMoreButtonEl.click();
         }
 
-        // Get all column references
-        const columnEls = wrapperEl.querySelectorAll('.border-l.border-primary\\/15');
-        const capacityColumnEl = columnEls[0];
-        const highDemandColumnEl = columnEls[1];
-        const mediumDemandColumnEl = columnEls[2];
-        const lowDemandColumnEl = columnEls[3];
-        const costColumnEl = columnEls[4];
-        const costPerPassengerColumnEl = columnEls[5];
-
-        // Watch for changes in the route list
-        this.contentObserver = new MutationObserver(() => {
-            this.syncColumns(ridershipContentEl, capacityColumnEl, highDemandColumnEl, mediumDemandColumnEl, lowDemandColumnEl, costColumnEl, costPerPassengerColumnEl);
+        // Hide the existing content but keep it in DOM for data extraction and click forwarding
+        existingContentEl.classList.add('absolute', 'pointer-events-none', 'opacity-0', 'z-0');
+        
+        // Make all clickable elements in badges accessible via JS
+        const originalClickableEls = existingContentEl.querySelectorAll('flex.items-center.h-6 .cursor-pointer');
+        originalClickableEls.forEach(clickableEl => {
+            clickableEl.classList.add('pointer-events-auto');
         });
 
-        this.contentObserver.observe(routeListEl, {
-            childList: true,
-            subtree: true
-        });
+        // Create table container with higher z-index
+        const tableContainerEl = document.createElement('div');
+        tableContainerEl.className = 'aa-table-container w-full z-20 relative';
+        wrapperEl.appendChild(tableContainerEl);
 
-        // Watch for navigation (when content is replaced)
+        // Initial render
+        this.renderTable(tableContainerEl, existingContentEl);
+
+        // Update table every second (only if not in debug mode)
+        if (!this.debug) {
+            this.updateInterval = setInterval(() => {
+                this.renderTable(tableContainerEl, existingContentEl);
+            }, 1000);
+            console.log('[Advanced Analytics] Auto-refresh enabled (every 1s)');
+        } else {
+            console.log('[Advanced Analytics] Debug mode: auto-refresh disabled');
+        }
+
+        // Watch for navigation
+        this.watchForNavigation(wrapperEl, existingContentEl, tableContainerEl);
+    },
+
+    watchForNavigation(wrapperEl, existingContentEl, tableContainerEl) {
         const navigationObserver = new MutationObserver(() => {
-            const sbContentEl = wrapperEl.querySelector('.min-w-80');
+            // Check if aa-sb-content still exists in the wrapper
+            const sbContentEl = wrapperEl.querySelector('.aa-sb-content');
+            
             if (!sbContentEl) {
-                // Content was removed, clean up and reactivate main observer
-                console.log('[Advanced Analytics] Panel navigation detected, cleaning up...');
+                // Content was replaced (navigated away), clean up
+                console.log('[Advanced Analytics] Navigation detected, cleaning up...');
                 
-                if (this.contentObserver) {
-                    this.contentObserver.disconnect();
-                    this.contentObserver = null;
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                    this.updateInterval = null;
                 }
                 
-                // Remove all added columns
-                columnEls.forEach(columnEl => {
-                    if (columnEl?.parentElement) columnEl.remove();
-                });
-                
-                // Restore original wrapper classes
-                wrapperEl.classList.remove('flex-row');
-                wrapperEl.classList.add('min-w-80');
+                // Remove table container
+                if (tableContainerEl && tableContainerEl.parentElement) {
+                    tableContainerEl.remove();
+                }
                 
                 navigationObserver.disconnect();
                 
-                // Reset the processed flag so the observer can detect the panel again
+                // Reset the processed flag so observer can detect the panel again
                 const processedTitleEl = document.querySelector('[data-aa-processed="true"]');
                 if (processedTitleEl) {
                     processedTitleEl.removeAttribute('data-aa-processed');
                 }
+                
+                console.log('[Advanced Analytics] Cleanup complete, ready to re-enhance on return');
             }
         });
 
@@ -161,24 +136,38 @@ const AdvancedAnalytics = {
             childList: true,
             subtree: false
         });
+
+        // Also watch for complete panel close
+        const closeObserver = new MutationObserver(() => {
+            if (!document.body.contains(wrapperEl)) {
+                console.log('[Advanced Analytics] Panel closed completely, cleaning up...');
+                
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                    this.updateInterval = null;
+                }
+                
+                closeObserver.disconnect();
+                navigationObserver.disconnect();
+                
+                // Reset the processed flag
+                const processedTitleEl = document.querySelector('[data-aa-processed="true"]');
+                if (processedTitleEl) {
+                    processedTitleEl.removeAttribute('data-aa-processed');
+                }
+            }
+        });
+
+        closeObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
     },
 
-    syncColumns(ridershipContentEl, capacityColumnEl, highDemandColumnEl, mediumDemandColumnEl, lowDemandColumnEl, costColumnEl, costPerPassengerColumnEl) {
-        const routeListEl = ridershipContentEl.querySelector('.flex.flex-col.gap-1');
+    renderTable(containerEl, sourceEl) {
+        const routeListEl = sourceEl.querySelector('.flex.flex-col.gap-1');
         if (!routeListEl) {
-            console.warn('[Advanced Analytics] Route list not found during sync');
-            return;
-        }
-
-        const capacityListEl = capacityColumnEl.querySelector('.aa-list');
-        const highDemandListEl = highDemandColumnEl.querySelector('.aa-list');
-        const mediumDemandListEl = mediumDemandColumnEl.querySelector('.aa-list');
-        const lowDemandListEl = lowDemandColumnEl.querySelector('.aa-list');
-        const costListEl = costColumnEl.querySelector('.aa-list');
-        const costPerPassengerListEl = costPerPassengerColumnEl.querySelector('.aa-list');
-        
-        if (!capacityListEl || !highDemandListEl || !mediumDemandListEl || !lowDemandListEl || !costListEl || !costPerPassengerListEl) {
-            console.error('[Advanced Analytics] Missing column lists');
+            console.warn('[Advanced Analytics] Route list not found during render');
             return;
         }
 
@@ -201,30 +190,19 @@ const AdvancedAnalytics = {
         };
 
         // Cost multiplier to convert API values to actual game costs
-        // (API reports annual costs, game uses daily costs equivalent to a year)
         const COST_MULTIPLIER = 365;
 
-        // Assign unique IDs to route entries if not already assigned
-        routeEntryEls.forEach((entryEl) => {
-            if (!entryEl.hasAttribute('data-aa-route-id')) {
-                entryEl.setAttribute('data-aa-route-id', `route-${this.routeIdCounter++}`);
-            }
-        });
-
-        // Build entries for each column
-        const capacityHTML = [];
-        const highDemandHTML = [];
-        const mediumDemandHTML = [];
-        const lowDemandHTML = [];
-        const costHTML = [];
-        const costPerPassengerHTML = [];
+        // Build data array
+        const tableData = [];
 
         routeEntryEls.forEach((ridershipEntryEl) => {
-            const routeId = ridershipEntryEl.getAttribute('data-aa-route-id');
-            
             // Extract route bullet text from badge
             const routeBadgeEl = ridershipEntryEl.querySelector('div[style*="height: 1rem"]');
             const bulletText = routeBadgeEl?.querySelector('span')?.textContent.trim() || '';
+            
+            // Clone badge for display and store reference to original for click forwarding
+            const clonedBadgeEl = routeBadgeEl?.cloneNode(true) || null;
+            const originalBadgeEl = routeBadgeEl;
             
             // Extract ridership from DOM
             const ridershipEl = ridershipEntryEl.querySelector('.font-mono.font-semibold');
@@ -234,126 +212,262 @@ const AdvancedAnalytics = {
             // Find matching route by bullet
             const route = routes.find(r => r.bullet === bulletText);
             
-            // Calculate capacity, trains per hour, daily cost, and cost per passenger
-            let capacity = 0;
-            let trainsPerHour = { high: 0, medium: 0, low: 0 };
-            let dailyCost = 0;
-            let costPerPassenger = 0;
+            const rowData = {
+                badgeEl: clonedBadgeEl,
+                originalBadgeEl: originalBadgeEl,
+                bullet: bulletText,
+                ridership: dailyRidership,
+                capacity: 0,
+                trainsPerHourHigh: 0,
+                trainsPerHourMedium: 0,
+                trainsPerHourLow: 0,
+                dailyCost: 0,
+                costPerPassenger: 0
+            };
             
             if (route) {
                 const trainType = route.trainType;
                 const schedule = route.trainSchedule;
                 
                 if (trainTypes[trainType]) {
-                    // Use route's carsPerTrain if available, otherwise fallback to train type's default
                     const carsPerTrain = route.carsPerTrain !== undefined 
                         ? route.carsPerTrain 
                         : trainTypes[trainType].stats.carsPerCarSet;
                     
                     const capacityPerCar = trainTypes[trainType].stats.capacityPerCar;
-                    const dailyTrains = schedule.highDemand + schedule.mediumDemand + schedule.lowDemand;
-                    capacity = dailyTrains * carsPerTrain * capacityPerCar;
+                    const capacityPerTrain = carsPerTrain * capacityPerCar;
                     
-                    // Calculate cost per train per hour
-                    const trainCostPerHour = trainTypes[trainType].stats.trainOperationalCostPerHour * COST_MULTIPLIER;
-                    const carCostPerHour = trainTypes[trainType].stats.carOperationalCostPerHour * COST_MULTIPLIER;
-                    const costPerTrainPerHour = trainCostPerHour + (carsPerTrain * carCostPerHour);
-                    
-                    // Calculate daily operating cost
-                    dailyCost = (schedule.lowDemand * DEMAND_HOURS.low * costPerTrainPerHour) +
-                               (schedule.mediumDemand * DEMAND_HOURS.medium * costPerTrainPerHour) +
-                               (schedule.highDemand * DEMAND_HOURS.high * costPerTrainPerHour);
-                    
-                    // Calculate cost per passenger
-                    if (dailyRidership > 0) {
-                        costPerPassenger = dailyCost / dailyRidership;
-                    }
-                    
-                    // Calculate loop time from stComboTimings
+                    // Calculate loop time and trains per hour from stComboTimings
                     if (route.stComboTimings && route.stComboTimings.length > 0) {
                         const timings = route.stComboTimings;
                         const loopTimeSeconds = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
                         
                         if (loopTimeSeconds > 0) {
+                            const loopsPerHour = 3600 / loopTimeSeconds;
+                            
                             // Calculate trains per hour for each demand period
-                            trainsPerHour.high = Math.round(schedule.highDemand * (3600 / loopTimeSeconds) * 10) / 10;
-                            trainsPerHour.medium = Math.round(schedule.mediumDemand * (3600 / loopTimeSeconds) * 10) / 10;
-                            trainsPerHour.low = Math.round(schedule.lowDemand * (3600 / loopTimeSeconds) * 10) / 10;
-                        } else {
-                            console.warn(`[Advanced Analytics] Invalid loop time for route ${bulletText}`);
+                            rowData.trainsPerHourHigh = Math.round(schedule.highDemand * loopsPerHour * 10) / 10;
+                            rowData.trainsPerHourMedium = Math.round(schedule.mediumDemand * loopsPerHour * 10) / 10;
+                            rowData.trainsPerHourLow = Math.round(schedule.lowDemand * loopsPerHour * 10) / 10;
+                            
+                            // Calculate actual daily capacity
+                            const highCapacity = schedule.highDemand * DEMAND_HOURS.high * loopsPerHour * capacityPerTrain;
+                            const mediumCapacity = schedule.mediumDemand * DEMAND_HOURS.medium * loopsPerHour * capacityPerTrain;
+                            const lowCapacity = schedule.lowDemand * DEMAND_HOURS.low * loopsPerHour * capacityPerTrain;
+                            
+                            rowData.capacity = Math.round(highCapacity + mediumCapacity + lowCapacity);
                         }
                     }
-                } else {
-                    console.warn(`[Advanced Analytics] Train type not found: ${trainType}`);
+                    
+                    // Calculate daily operating cost
+                    const trainCostPerHour = trainTypes[trainType].stats.trainOperationalCostPerHour * COST_MULTIPLIER;
+                    const carCostPerHour = trainTypes[trainType].stats.carOperationalCostPerHour * COST_MULTIPLIER;
+                    const costPerTrainPerHour = trainCostPerHour + (carsPerTrain * carCostPerHour);
+                    
+                    rowData.dailyCost = (schedule.lowDemand * DEMAND_HOURS.low * costPerTrainPerHour) +
+                                       (schedule.mediumDemand * DEMAND_HOURS.medium * costPerTrainPerHour) +
+                                       (schedule.highDemand * DEMAND_HOURS.high * costPerTrainPerHour);
+                    
+                    // Calculate cost per passenger
+                    if (dailyRidership > 0) {
+                        rowData.costPerPassenger = rowData.dailyCost / dailyRidership;
+                    }
                 }
-            } else {
-                console.warn(`[Advanced Analytics] Route not found for bullet: ${bulletText}`);
             }
             
-            // Build HTML for each column
-            const baseClasses = 'flex items-center bg-transparent h-6 relative pl-1';
-            const barClasses = 'bg-primary/20 absolute left-0 top-0 h-full rounded-r-md transition-transform duration-30 -z-10';
-            const textClasses = 'text-xs ml-auto font-mono font-semibold pr-1';
-            
-            capacityHTML.push(`
-                <div class="${baseClasses}" data-aa-route-id="${routeId}">
-                    <div class="${barClasses}" style="width: 0%;"></div>
-                    <p class="${textClasses}">${capacity > 0 ? capacity.toLocaleString() : 'N/A'}</p>
-                </div>
-            `);
-            
-            highDemandHTML.push(`
-                <div class="${baseClasses}" data-aa-route-id="${routeId}">
-                    <div class="${barClasses}" style="width: 0%;"></div>
-                    <p class="${textClasses}">${trainsPerHour.high > 0 ? trainsPerHour.high : 'N/A'}</p>
-                </div>
-            `);
-            
-            mediumDemandHTML.push(`
-                <div class="${baseClasses}" data-aa-route-id="${routeId}">
-                    <div class="${barClasses}" style="width: 0%;"></div>
-                    <p class="${textClasses}">${trainsPerHour.medium > 0 ? trainsPerHour.medium : 'N/A'}</p>
-                </div>
-            `);
-            
-            lowDemandHTML.push(`
-                <div class="${baseClasses}" data-aa-route-id="${routeId}">
-                    <div class="${barClasses}" style="width: 0%;"></div>
-                    <p class="${textClasses}">${trainsPerHour.low > 0 ? trainsPerHour.low : 'N/A'}</p>
-                </div>
-            `);
-            
-            costHTML.push(`
-                <div class="${baseClasses}" data-aa-route-id="${routeId}">
-                    <div class="${barClasses}" style="width: 0%;"></div>
-                    <p class="${textClasses}">${dailyCost > 0 ? '$' + dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0}) : 'N/A'}</p>
-                </div>
-            `);
-            
-            costPerPassengerHTML.push(`
-                <div class="${baseClasses}" data-aa-route-id="${routeId}">
-                    <div class="${barClasses}" style="width: 0%;"></div>
-                    <p class="${textClasses}">${costPerPassenger > 0 ? '$' + costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'N/A'}</p>
-                </div>
-            `);
+            tableData.push(rowData);
         });
 
-        capacityListEl.innerHTML = capacityHTML.join('');
-        highDemandListEl.innerHTML = highDemandHTML.join('');
-        mediumDemandListEl.innerHTML = mediumDemandHTML.join('');
-        lowDemandListEl.innerHTML = lowDemandHTML.join('');
-        costListEl.innerHTML = costHTML.join('');
-        costPerPassengerListEl.innerHTML = costPerPassengerHTML.join('');
+        // Sort data
+        this.sortTableData(tableData);
+
+        // Build table structure
+        const tableEl = document.createElement('table');
+        tableEl.className = 'w-full caption-bottom';
         
-        console.log(`[Advanced Analytics] Synced ${routeEntryEls.length} routes with all analytics data`);
+        // Build thead
+        const theadEl = document.createElement('thead');
+        theadEl.className = '[&_tr]:border-b';
+        const headerRowEl = document.createElement('tr');
+        headerRowEl.className = 'border-b';
+        
+        const headers = [
+            { key: 'badge', label: 'Route', align: 'left' },
+            { key: 'ridership', label: 'Ridership', align: 'right' },
+            { key: 'capacity', label: 'Daily Capacity', align: 'right' },
+            { key: 'trainsPerHourHigh', label: 'High Demand', align: 'right' },
+            { key: 'trainsPerHourMedium', label: 'Medium Demand', align: 'right' },
+            { key: 'trainsPerHourLow', label: 'Low Demand', align: 'right' },
+            { key: 'dailyCost', label: 'Daily Cost', align: 'right' },
+            { key: 'costPerPassenger', label: 'Cost/Passenger', align: 'right' }
+        ];
+        
+        headers.forEach(header => {
+            const thEl = document.createElement('th');
+            thEl.className = `h-12 px-4 text-${header.align} align-middle font-medium whitespace-nowrap cursor-pointer ${this.getHeaderClasses(header.key)}`;
+            thEl.setAttribute('data-sort', header.key);
+            thEl.innerHTML = `${header.label} ${this.getSortIndicator(header.key)}`;
+            
+            thEl.onclick = () => {
+                // Toggle order if clicking same column, otherwise default to desc
+                if (this.currentSortColumn === header.key) {
+                    this.currentSortOrder = this.currentSortOrder === 'desc' ? 'asc' : 'desc';
+                } else {
+                    this.currentSortColumn = header.key;
+                    this.currentSortOrder = 'desc';
+                }
+                
+                this.renderTable(containerEl, sourceEl);
+            };
+            
+            headerRowEl.appendChild(thEl);
+        });
+        
+        theadEl.appendChild(headerRowEl);
+        tableEl.appendChild(theadEl);
+        
+        // Build tbody
+        const tbodyEl = document.createElement('tbody');
+        tbodyEl.className = '[&_tr:last-child]:border-0';
+        
+        tableData.forEach((row, rowIndex) => {
+            const trEl = document.createElement('tr');
+            trEl.className = 'border-b transition-colors hover:bg-muted/50';
+            
+            // Badge column
+            const badgeTdEl = document.createElement('td');
+            badgeTdEl.className = `p-4 align-middle font-medium ${this.getCellClasses('badge')}`;
+            const badgeContainerEl = document.createElement('div');
+            badgeContainerEl.style.height = '1rem';
+            badgeContainerEl.style.maxHeight = '1rem';
+            badgeContainerEl.className = 'cursor-pointer';
+            
+            if (row.badgeEl) {
+                badgeContainerEl.appendChild(row.badgeEl);
+                
+                // Forward clicks to the actual clickable element inside the original badge
+                badgeContainerEl.onclick = (e) => {
+                    e.stopPropagation();
+                    
+                    // Find the clickable element in the original badge
+                    const originalClickableEl = row.originalBadgeEl?.querySelector('.flex.items-center.h-6 .cursor-pointer');
+                    
+                    if (originalClickableEl) {
+                        console.log('[Advanced Analytics] Forwarding click to clickable element for:', row.bullet);
+                        originalClickableEl.click();
+                    } else {
+                        console.warn('[Advanced Analytics] Could not find clickable element for:', row.bullet);
+                    }
+                };
+            }
+            badgeTdEl.appendChild(badgeContainerEl);
+            trEl.appendChild(badgeTdEl);
+            
+            // Ridership column
+            const ridershipTdEl = document.createElement('td');
+            ridershipTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('ridership')}`;
+            ridershipTdEl.textContent = row.ridership.toLocaleString();
+            trEl.appendChild(ridershipTdEl);
+            
+            // Capacity column
+            const capacityTdEl = document.createElement('td');
+            capacityTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('capacity')}`;
+            capacityTdEl.textContent = row.capacity > 0 ? row.capacity.toLocaleString() : 'N/A';
+            trEl.appendChild(capacityTdEl);
+            
+            // High demand column
+            const highTdEl = document.createElement('td');
+            highTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('trainsPerHourHigh')}`;
+            highTdEl.textContent = row.trainsPerHourHigh > 0 ? row.trainsPerHourHigh : 'N/A';
+            trEl.appendChild(highTdEl);
+            
+            // Medium demand column
+            const mediumTdEl = document.createElement('td');
+            mediumTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('trainsPerHourMedium')}`;
+            mediumTdEl.textContent = row.trainsPerHourMedium > 0 ? row.trainsPerHourMedium : 'N/A';
+            trEl.appendChild(mediumTdEl);
+            
+            // Low demand column
+            const lowTdEl = document.createElement('td');
+            lowTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('trainsPerHourLow')}`;
+            lowTdEl.textContent = row.trainsPerHourLow > 0 ? row.trainsPerHourLow : 'N/A';
+            trEl.appendChild(lowTdEl);
+            
+            // Daily cost column
+            const costTdEl = document.createElement('td');
+            costTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('dailyCost')}`;
+            costTdEl.textContent = row.dailyCost > 0 ? '$' + row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0}) : 'N/A';
+            trEl.appendChild(costTdEl);
+            
+            // Cost per passenger column
+            const costPerPassengerTdEl = document.createElement('td');
+            costPerPassengerTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('costPerPassenger')}`;
+            costPerPassengerTdEl.textContent = row.costPerPassenger > 0 ? '$' + row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'N/A';
+            trEl.appendChild(costPerPassengerTdEl);
+            
+            tbodyEl.appendChild(trEl);
+        });
+        
+        tableEl.appendChild(tbodyEl);
+        
+        // Clear container and append table
+        containerEl.innerHTML = '';
+        containerEl.appendChild(tableEl);
+    },
+
+    getHeaderClasses(column) {
+        if (this.currentSortColumn === column) {
+            return 'text-blue-500 hover:text-blue-700 bg-muted/50';
+        }
+        return 'text-muted-foreground hover:text-foreground';
+    },
+
+    getCellClasses(column) {
+        if (this.currentSortColumn === column) {
+            return 'bg-muted/50';
+        }
+        return '';
+    },
+
+    sortTableData(data) {
+        const column = this.currentSortColumn;
+        const order = this.currentSortOrder;
+        
+        data.sort((a, b) => {
+            let aVal = a[column];
+            let bVal = b[column];
+            
+            // Handle string sorting for badge/bullet
+            if (column === 'badge' || column === 'bullet') {
+                aVal = a.bullet;
+                bVal = b.bullet;
+                return order === 'desc' 
+                    ? bVal.localeCompare(aVal)
+                    : aVal.localeCompare(bVal);
+            }
+            
+            // Numeric sorting
+            if (order === 'desc') {
+                return bVal - aVal;
+            } else {
+                return aVal - bVal;
+            }
+        });
+    },
+
+    getSortIndicator(column) {
+        if (this.currentSortColumn !== column) {
+            return '';
+        }
+        return this.currentSortOrder === 'desc' ? '↓' : '↑';
     },
 
     cleanup() {
         if (this.observer) {
             this.observer.disconnect();
         }
-        if (this.contentObserver) {
-            this.contentObserver.disconnect();
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
         }
     }
 };
