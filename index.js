@@ -8,18 +8,30 @@ const AdvancedAnalytics = {
     currentSortOrder: 'desc',
     debug: true, // Set to false to enable auto-refresh
 
-    init() {
-        console.log('[Advanced Analytics] Initializing mod... (debug mode:', this.debug, ')');
-        
+    init() {        
         // Use proper lifecycle hook instead of immediate execution
         if (window.SubwayBuilderAPI) {
             window.SubwayBuilderAPI.hooks.onGameInit(() => {
-                console.log('[Advanced Analytics] Game initialized, starting panel watch...');
+                console.log('[Advanced Analytics] Mod initialized, starting panel watch...');
+                this.injectStyles();
                 this.watchForPanel();
             });
         } else {
             console.error('[Advanced Analytics] SubwayBuilderAPI not available');
         }
+    },
+    injectStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+            html.dark .aa-wrapper {
+                color-scheme: dark;
+            }
+            .aa-badge-container > div {
+                display: flex;
+                justify-content: end;
+            }
+        `;
+        document.head.appendChild(style);
     },
 
     watchForPanel() {
@@ -47,11 +59,13 @@ const AdvancedAnalytics = {
         console.log('[Advanced Analytics] Enhancing panel...');
 
         // Find the panel wrapper
-        const wrapperEl = titleEl.closest('.p-2.flex.bg-primary-foreground\\/60');
+        const wrapperEl = titleEl.closest('.flex.bg-primary-foreground\\/60');
         if (!wrapperEl) {
             console.error('[Advanced Analytics] Could not find panel wrapper');
             return;
         }
+        wrapperEl.classList.remove('p-2');
+        wrapperEl.classList.add('aa-wrapper');
 
         // Find the existing content div
         const existingContentEl = wrapperEl.querySelector('.flex.flex-col.gap-2.w-full.h-full');
@@ -71,17 +85,12 @@ const AdvancedAnalytics = {
         }
 
         // Hide the existing content but keep it in DOM for data extraction and click forwarding
-        existingContentEl.classList.add('absolute', 'pointer-events-none', 'opacity-0', 'z-0');
+        existingContentEl.classList.add('absolute', 'pointer-events-none', 'opacity-0', 'z-0', 'overflow-hidden');
         
-        // Make all clickable elements in badges accessible via JS
-        const originalClickableEls = existingContentEl.querySelectorAll('flex.items-center.h-6 .cursor-pointer');
-        originalClickableEls.forEach(clickableEl => {
-            clickableEl.classList.add('pointer-events-auto');
-        });
 
         // Create table container with higher z-index
-        const tableContainerEl = document.createElement('div');
-        tableContainerEl.className = 'aa-table-container w-full z-20 relative';
+        const tableContainerEl = document.createElement('section');
+        tableContainerEl.className = 'aa-table-container w-full max-w-5xl z-20 relative';
         wrapperEl.appendChild(tableContainerEl);
 
         // Initial render
@@ -127,6 +136,8 @@ const AdvancedAnalytics = {
                 if (processedTitleEl) {
                     processedTitleEl.removeAttribute('data-aa-processed');
                 }
+                wrapperEl.classList.add('p-2');
+                wrapperEl.classList.remove('aa-wrapper');
                 
                 console.log('[Advanced Analytics] Cleanup complete, ready to re-enhance on return');
             }
@@ -136,32 +147,16 @@ const AdvancedAnalytics = {
             childList: true,
             subtree: false
         });
+    },
 
-        // Also watch for complete panel close
-        const closeObserver = new MutationObserver(() => {
-            if (!document.body.contains(wrapperEl)) {
-                console.log('[Advanced Analytics] Panel closed completely, cleaning up...');
-                
-                if (this.updateInterval) {
-                    clearInterval(this.updateInterval);
-                    this.updateInterval = null;
-                }
-                
-                closeObserver.disconnect();
-                navigationObserver.disconnect();
-                
-                // Reset the processed flag
-                const processedTitleEl = document.querySelector('[data-aa-processed="true"]');
-                if (processedTitleEl) {
-                    processedTitleEl.removeAttribute('data-aa-processed');
-                }
-            }
-        });
-
-        closeObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+    getUtilizationClasses(utilization) {
+        if (utilization < 30 || utilization > 95) {
+            return 'text-red-600 dark:text-red-400';
+        } else if ((utilization >= 30 && utilization < 45) || (utilization >= 85 && utilization <= 95)) {
+            return 'text-yellow-600 dark:text-yellow-400';
+        } else {
+            return 'text-green-600 dark:text-green-400';
+        }
     },
 
     renderTable(containerEl, sourceEl) {
@@ -218,6 +213,8 @@ const AdvancedAnalytics = {
                 bullet: bulletText,
                 ridership: dailyRidership,
                 capacity: 0,
+                utilization: 0,
+                stations: 0,
                 trainsPerHourHigh: 0,
                 trainsPerHourMedium: 0,
                 trainsPerHourLow: 0,
@@ -228,6 +225,12 @@ const AdvancedAnalytics = {
             if (route) {
                 const trainType = route.trainType;
                 const schedule = route.trainSchedule;
+                
+                // Calculate stations served
+                if (route.stNodes && route.stNodes.length > 0) {
+                    // Subtract 1 because the last station is the same as the first (circular route)
+                    rowData.stations = route.stNodes.length - 1;
+                }
                 
                 if (trainTypes[trainType]) {
                     const carsPerTrain = route.carsPerTrain !== undefined 
@@ -256,6 +259,11 @@ const AdvancedAnalytics = {
                             const lowCapacity = schedule.lowDemand * DEMAND_HOURS.low * loopsPerHour * capacityPerTrain;
                             
                             rowData.capacity = Math.round(highCapacity + mediumCapacity + lowCapacity);
+                            
+                            // Calculate capacity utilization percentage
+                            if (rowData.capacity > 0) {
+                                rowData.utilization = Math.round((dailyRidership / rowData.capacity) * 100);
+                            }
                         }
                     }
                     
@@ -265,8 +273,8 @@ const AdvancedAnalytics = {
                     const costPerTrainPerHour = trainCostPerHour + (carsPerTrain * carCostPerHour);
                     
                     rowData.dailyCost = (schedule.lowDemand * DEMAND_HOURS.low * costPerTrainPerHour) +
-                                       (schedule.mediumDemand * DEMAND_HOURS.medium * costPerTrainPerHour) +
-                                       (schedule.highDemand * DEMAND_HOURS.high * costPerTrainPerHour);
+                                        (schedule.mediumDemand * DEMAND_HOURS.medium * costPerTrainPerHour) +
+                                        (schedule.highDemand * DEMAND_HOURS.high * costPerTrainPerHour);
                     
                     // Calculate cost per passenger
                     if (dailyRidership > 0) {
@@ -294,19 +302,18 @@ const AdvancedAnalytics = {
         const headers = [
             { key: 'badge', label: 'Route', align: 'left' },
             { key: 'ridership', label: 'Ridership', align: 'right' },
-            { key: 'capacity', label: 'Daily Capacity', align: 'right' },
-            { key: 'trainsPerHourHigh', label: 'High Demand', align: 'right' },
-            { key: 'trainsPerHourMedium', label: 'Medium Demand', align: 'right' },
-            { key: 'trainsPerHourLow', label: 'Low Demand', align: 'right' },
-            { key: 'dailyCost', label: 'Daily Cost', align: 'right' },
-            { key: 'costPerPassenger', label: 'Cost/Passenger', align: 'right' }
+            { key: 'capacity', label: 'Capacity', align: 'right' },
+            { key: 'utilization', label: 'Use', align: 'right' },
+            { key: 'stations', label: 'Stations', align: 'right' },
+            { key: 'dailyCost', label: 'Cost', align: 'right' },
+            { key: 'costPerPassenger', label: 'Cost/Pax', align: 'right' }
         ];
         
         headers.forEach(header => {
             const thEl = document.createElement('th');
-            thEl.className = `h-12 px-4 text-${header.align} align-middle font-medium whitespace-nowrap cursor-pointer ${this.getHeaderClasses(header.key)}`;
+            thEl.className = `border-1 border-s border h-12 px-3 text-${header.align} align-middle font-medium whitespace-nowrap cursor-pointer ${this.getHeaderClasses(header.key)}`;
             thEl.setAttribute('data-sort', header.key);
-            thEl.innerHTML = `${header.label} ${this.getSortIndicator(header.key)}`;
+            thEl.innerHTML = `<span class="${!this.isColumnSorting(header.key) ? 'opacity-0': ''}">${this.getSortIndicator(header.key)}</span> ${header.label}`;
             
             thEl.onclick = () => {
                 // Toggle order if clicking same column, otherwise default to desc
@@ -336,11 +343,11 @@ const AdvancedAnalytics = {
             
             // Badge column
             const badgeTdEl = document.createElement('td');
-            badgeTdEl.className = `p-4 align-middle font-medium ${this.getCellClasses('badge')}`;
+            badgeTdEl.className = `py-2 px-3 align-middle font-medium ${this.getCellClasses('badge')}`;
             const badgeContainerEl = document.createElement('div');
             badgeContainerEl.style.height = '1rem';
             badgeContainerEl.style.maxHeight = '1rem';
-            badgeContainerEl.className = 'cursor-pointer';
+            badgeContainerEl.className = 'aa-badge-container cursor-pointer';
             
             if (row.badgeEl) {
                 badgeContainerEl.appendChild(row.badgeEl);
@@ -350,7 +357,7 @@ const AdvancedAnalytics = {
                     e.stopPropagation();
                     
                     // Find the clickable element in the original badge
-                    const originalClickableEl = row.originalBadgeEl?.querySelector('.flex.items-center.h-6 .cursor-pointer');
+                    const originalClickableEl = row.originalBadgeEl?.querySelector('.cursor-pointer');
                     
                     if (originalClickableEl) {
                         console.log('[Advanced Analytics] Forwarding click to clickable element for:', row.bullet);
@@ -365,43 +372,38 @@ const AdvancedAnalytics = {
             
             // Ridership column
             const ridershipTdEl = document.createElement('td');
-            ridershipTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('ridership')}`;
+            ridershipTdEl.className = `border-1 border-s border px-3 align-middle text-right font-mono ${this.getCellClasses('ridership')}`;
             ridershipTdEl.textContent = row.ridership.toLocaleString();
             trEl.appendChild(ridershipTdEl);
             
             // Capacity column
             const capacityTdEl = document.createElement('td');
-            capacityTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('capacity')}`;
+            capacityTdEl.className = `border-1 border-s border px-3 align-middle text-right font-mono ${this.getCellClasses('capacity')}`;
             capacityTdEl.textContent = row.capacity > 0 ? row.capacity.toLocaleString() : 'N/A';
             trEl.appendChild(capacityTdEl);
             
-            // High demand column
-            const highTdEl = document.createElement('td');
-            highTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('trainsPerHourHigh')}`;
-            highTdEl.textContent = row.trainsPerHourHigh > 0 ? row.trainsPerHourHigh : 'N/A';
-            trEl.appendChild(highTdEl);
+            // Utilization column (with conditional colors)
+            const utilizationTdEl = document.createElement('td');
+            const utilizationClasses = row.utilization > 0 ? this.getUtilizationClasses(row.utilization) : '';
+            utilizationTdEl.className = `border-1 border-s border px-3 align-middle text-right font-mono ${this.getCellClasses('utilization')} ${utilizationClasses}`;
+            utilizationTdEl.textContent = row.utilization > 0 ? '∿' + row.utilization + '%' : 'N/A';
+            trEl.appendChild(utilizationTdEl);
             
-            // Medium demand column
-            const mediumTdEl = document.createElement('td');
-            mediumTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('trainsPerHourMedium')}`;
-            mediumTdEl.textContent = row.trainsPerHourMedium > 0 ? row.trainsPerHourMedium : 'N/A';
-            trEl.appendChild(mediumTdEl);
-            
-            // Low demand column
-            const lowTdEl = document.createElement('td');
-            lowTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('trainsPerHourLow')}`;
-            lowTdEl.textContent = row.trainsPerHourLow > 0 ? row.trainsPerHourLow : 'N/A';
-            trEl.appendChild(lowTdEl);
+            // Stations column
+            const stationsTdEl = document.createElement('td');
+            stationsTdEl.className = `border-1 border-s border px-3 align-middle text-right font-mono ${this.getCellClasses('stations')}`;
+            stationsTdEl.textContent = row.stations > 0 ? row.stations : 'N/A';
+            trEl.appendChild(stationsTdEl);
             
             // Daily cost column
             const costTdEl = document.createElement('td');
-            costTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('dailyCost')}`;
+            costTdEl.className = `border-1 border-s border px-3 align-middle text-right font-mono ${this.getCellClasses('dailyCost')}`;
             costTdEl.textContent = row.dailyCost > 0 ? '$' + row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0}) : 'N/A';
             trEl.appendChild(costTdEl);
             
             // Cost per passenger column
             const costPerPassengerTdEl = document.createElement('td');
-            costPerPassengerTdEl.className = `p-4 align-middle text-right font-mono ${this.getCellClasses('costPerPassenger')}`;
+            costPerPassengerTdEl.className = `border-1 border-s border px-3 align-middle text-right font-mono ${this.getCellClasses('costPerPassenger')}`;
             costPerPassengerTdEl.textContent = row.costPerPassenger > 0 ? '$' + row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'N/A';
             trEl.appendChild(costPerPassengerTdEl);
             
@@ -417,7 +419,7 @@ const AdvancedAnalytics = {
 
     getHeaderClasses(column) {
         if (this.currentSortColumn === column) {
-            return 'text-blue-500 hover:text-blue-700 bg-muted/50';
+            return 'text-foreground bg-muted/50';
         }
         return 'text-muted-foreground hover:text-foreground';
     },
@@ -455,9 +457,13 @@ const AdvancedAnalytics = {
         });
     },
 
+    isColumnSorting(column) {
+        return this.currentSortColumn === column;
+    },
+
     getSortIndicator(column) {
-        if (this.currentSortColumn !== column) {
-            return '';
+        if (!this.isColumnSorting) {
+            return '↓';
         }
         return this.currentSortOrder === 'desc' ? '↓' : '↑';
     },
