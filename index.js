@@ -2,12 +2,20 @@
 // Using addFloatingPanel API for React-powered updates
 
 const AdvancedAnalytics = {
+    // API References (cached on init)
+    api: null,
+    React: null,
+    h: null,
+    
     // State
     sortState: {
         column: 'ridership',
         order: 'desc'
     },
-    debug: false, // Set to true to disable auto-refresh
+    
+    // Debug mode: Set to true to pause data updates (useful for inspecting data in console)
+    // When true, the panel will load once but won't auto-refresh
+    debug: false,
 
     // Configuration
     CONFIG: {
@@ -44,16 +52,19 @@ const AdvancedAnalytics = {
             return;
         }
 
-        const api = window.SubwayBuilderAPI;
+        // Cache API references for reuse throughout the module
+        this.api = window.SubwayBuilderAPI;
+        this.React = this.api.utils.React;
+        this.h = this.React.createElement;
 
-        api.hooks.onGameInit(() => {
+        this.api.hooks.onGameInit(() => {
             console.log(`${this.CONFIG.LOG_PREFIX} Mod initialized`);
 
             this.injectStyles();
             
             // Register floating panel (creates toolbar button automatically)
-            if (typeof api.ui.addFloatingPanel === 'function') {
-                api.ui.addFloatingPanel({
+            if (typeof this.api.ui.addFloatingPanel === 'function') {
+                this.api.ui.addFloatingPanel({
                     id: 'advanced-analytics',
                     title: 'Advanced Route Analytics',
                     icon: 'ChartPie',
@@ -64,7 +75,7 @@ const AdvancedAnalytics = {
                 console.log(`${this.CONFIG.LOG_PREFIX} Floating panel registered`);
             } else {
                 console.error(`${this.CONFIG.LOG_PREFIX} addFloatingPanel not available`);
-                api.ui.showNotification('Advanced Analytics requires newer game version', 'error');
+                this.api.ui.showNotification('Advanced Analytics requires newer game version', 'error');
             }
         });
     },
@@ -98,9 +109,10 @@ const AdvancedAnalytics = {
     },
 
     renderAnalyticsPanel() {
-        const api = window.SubwayBuilderAPI;
-        const { React } = api.utils;
-        const h = React.createElement;
+        // Use cached references instead of fetching again
+        const api = this.api;
+        const { React } = this;
+        const h = this.h;
 
         // Main panel component with React hooks
         const AnalyticsPanel = () => {
@@ -120,8 +132,8 @@ const AdvancedAnalytics = {
                     routes.forEach(route => {
                         const metrics = lineMetrics.find(m => m.routeId === route.id);
                         const ridership = metrics ? metrics.ridersPerHour * timeWindowHours : 0;
-                        const revenuePerHour = metrics ? metrics.revenuePerHour : 0;  // NEW
-                        const dailyRevenue = revenuePerHour * 24;  // Convert to daily (24 hours)
+                        const revenuePerHour = metrics ? metrics.revenuePerHour : 0;
+                        const dailyRevenue = revenuePerHour * 24;
 
                         if (!this.validateRouteData(route)) {
                             processedData.push({
@@ -177,13 +189,20 @@ const AdvancedAnalytics = {
                     setTableData(processedData);
                 };
 
+                // Always fetch data initially
                 updateData();
                 
-                // Auto-update interval (only if not in debug mode)
+                // Only set up auto-refresh if NOT in debug mode
                 if (!this.debug) {
-                    const interval = setInterval(updateData, this.CONFIG.REFRESH_INTERVAL);
+                    const interval = setInterval(() => {
+                        // Only update if game is not paused
+                        if (!api.gameState.isPaused()) {
+                            updateData();
+                        }
+                    }, this.CONFIG.REFRESH_INTERVAL);
                     return () => clearInterval(interval);
                 }
+                // In debug mode, no interval is set up, so no cleanup needed
             }, [sortState]);
 
             const handleSort = (column) => {
@@ -331,9 +350,8 @@ const AdvancedAnalytics = {
     },
 
     createReactCostCell(columnKey, content, percentageChange, sortState) {
-        const api = window.SubwayBuilderAPI;
-        const { React } = api.utils;
-        const h = React.createElement;
+        // Use cached references
+        const h = this.h;
 
         return h('td', {
             key: columnKey,
@@ -350,9 +368,8 @@ const AdvancedAnalytics = {
     },
 
     createReactRevenueCell(columnKey, content, percentageChange, sortState) {
-        const api = window.SubwayBuilderAPI;
-        const { React } = api.utils;
-        const h = React.createElement;
+        // Use cached references
+        const h = this.h;
 
         return h('td', {
             key: columnKey,
@@ -370,9 +387,8 @@ const AdvancedAnalytics = {
     },
 
     createReactProfitCell(columnKey, profitValue, percentageChange, sortState) {
-        const api = window.SubwayBuilderAPI;
-        const { React } = api.utils;
-        const h = React.createElement;
+        // Use cached references
+        const h = this.h;
 
         // Format the profit value with proper negative formatting
         const isNegative = profitValue < 0;
