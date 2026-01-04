@@ -33,6 +33,27 @@ const AdvancedAnalytics = {
             medium: 9,   // 5am-6am (1h) + 9am-4pm (7h) + 7pm-8pm (1h)
             high: 6      // 6am-9am (3h) + 4pm-7pm (3h)
         },
+        COLORS: {
+            // Utilization status colors
+            UTILIZATION: {
+                CRITICAL: 'text-red-600 dark:text-red-400',
+                WARNING: 'text-yellow-600 dark:text-yellow-400',
+                GOOD: 'text-green-600 dark:text-green-400'
+            },
+            // Percentage change colors
+            PERCENTAGE: {
+                POSITIVE: 'text-green-600 dark:text-green-400',  // Good (revenue/profit increase, cost decrease)
+                NEGATIVE: 'text-red-600 dark:text-red-400'       // Bad (revenue/profit decrease, cost increase)
+            },
+            // Value colors
+            VALUE: {
+                NEGATIVE: 'text-red-600 dark:text-red-400',  // For negative profit values
+                DEFAULT: ''                                    // Default text color
+            }
+        },
+        STYLES: {
+            PERCENTAGE_FONT_SIZE: 'text-[10px]'
+        },
         TABLE_HEADERS: [
             { key: 'name', label: 'Route', align: 'right' },
             { key: 'ridership', label: 'Ridership', align: 'right' },
@@ -349,58 +370,20 @@ const AdvancedAnalytics = {
         ]);
     },
 
-    createReactCostCell(columnKey, content, percentageChange, sortState) {
+    createReactMetricCell(columnKey, content, percentageChange, sortState, options = {}) {
         // Use cached references
         const h = this.h;
 
-        return h('td', {
-            key: columnKey,
-            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState)}`
-        }, 
-            h('div', { className: 'flex flex-col items-end gap-0.5' }, [
-                h('div', { key: 'value' }, content),
-                percentageChange !== null && h('div', {
-                    key: 'percent',
-                    className: `text-[10px] ${percentageChange > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`
-                }, `${percentageChange > 0 ? '+' : ''}${percentageChange.toFixed(1)}%`)
-            ])
-        );
-    },
+        // Options for customization
+        const {
+            valueColorClass = this.CONFIG.COLORS.VALUE.DEFAULT,  // Optional color class for the value
+            invertPercentageColors = false                        // true for revenue/profit (increase=good), false for cost (increase=bad)
+        } = options;
 
-    createReactRevenueCell(columnKey, content, percentageChange, sortState) {
-        // Use cached references
-        const h = this.h;
-
-        return h('td', {
-            key: columnKey,
-            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState)}`
-        }, 
-            h('div', { className: 'flex flex-col items-end gap-0.5' }, [
-                h('div', { key: 'value' }, content),
-                percentageChange !== null && h('div', {
-                    key: 'percent',
-                    // Revenue: increase = good (green), decrease = bad (red)
-                    className: `text-[10px] ${percentageChange > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`
-                }, `${percentageChange > 0 ? '+' : ''}${percentageChange.toFixed(1)}%`)
-            ])
-        );
-    },
-
-    createReactProfitCell(columnKey, profitValue, percentageChange, sortState) {
-        // Use cached references
-        const h = this.h;
-
-        // Format the profit value with proper negative formatting
-        const isNegative = profitValue < 0;
-        const absValue = Math.abs(profitValue);
-        const formattedValue = isNegative 
-            ? `-$${absValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`
-            : `$${absValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-
-        // Determine text color based on profit value
-        const valueColorClass = isNegative 
-            ? 'text-red-600 dark:text-red-400' 
-            : '';
+        // Determine percentage color based on inversion flag
+        const percentColorClass = percentageChange > 0
+            ? (invertPercentageColors ? this.CONFIG.COLORS.PERCENTAGE.POSITIVE : this.CONFIG.COLORS.PERCENTAGE.NEGATIVE)
+            : (invertPercentageColors ? this.CONFIG.COLORS.PERCENTAGE.NEGATIVE : this.CONFIG.COLORS.PERCENTAGE.POSITIVE);
 
         return h('td', {
             key: columnKey,
@@ -410,13 +393,45 @@ const AdvancedAnalytics = {
                 h('div', { 
                     key: 'value',
                     className: valueColorClass
-                }, formattedValue),
+                }, content),
                 percentageChange !== null && h('div', {
                     key: 'percent',
-                    className: `text-[10px] ${percentageChange > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`
+                    className: `${this.CONFIG.STYLES.PERCENTAGE_FONT_SIZE} ${percentColorClass}`
                 }, `${percentageChange > 0 ? '+' : ''}${percentageChange.toFixed(1)}%`)
             ])
         );
+    },
+
+    // Convenience wrapper for cost cells (increase = bad = red)
+    createReactCostCell(columnKey, content, percentageChange, sortState) {
+        return this.createReactMetricCell(columnKey, content, percentageChange, sortState, {
+            invertPercentageColors: false  // Cost increase = red
+        });
+    },
+
+    // Convenience wrapper for revenue cells (increase = good = green)
+    createReactRevenueCell(columnKey, content, percentageChange, sortState) {
+        return this.createReactMetricCell(columnKey, content, percentageChange, sortState, {
+            invertPercentageColors: true  // Revenue increase = green
+        });
+    },
+
+    // Convenience wrapper for profit cells (with negative value formatting and coloring)
+    createReactProfitCell(columnKey, profitValue, percentageChange, sortState) {
+        // Format the profit value with proper negative formatting
+        const isNegative = profitValue < 0;
+        const absValue = Math.abs(profitValue);
+        const formattedValue = isNegative 
+            ? `-$${absValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`
+            : `$${absValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+
+        // Color negative profits red
+        const valueColorClass = isNegative ? this.CONFIG.COLORS.VALUE.NEGATIVE : this.CONFIG.COLORS.VALUE.DEFAULT;
+
+        return this.createReactMetricCell(columnKey, formattedValue, percentageChange, sortState, {
+            valueColorClass,
+            invertPercentageColors: true  // Profit increase = green
+        });
     },
 
     calculateRouteMetrics(route, trainType, ridership, dailyRevenue) {
@@ -498,14 +513,15 @@ const AdvancedAnalytics = {
 
     getUtilizationClasses(utilization) {
         const thresholds = this.CONFIG.UTILIZATION_THRESHOLDS;
+        const colors = this.CONFIG.COLORS.UTILIZATION;
         
         if (utilization < thresholds.CRITICAL_LOW || utilization > thresholds.CRITICAL_HIGH) {
-            return 'text-red-600 dark:text-red-400';
+            return colors.CRITICAL;
         } else if ((utilization >= thresholds.CRITICAL_LOW && utilization < thresholds.WARNING_LOW) || 
                    (utilization >= thresholds.WARNING_HIGH && utilization <= thresholds.CRITICAL_HIGH)) {
-            return 'text-yellow-600 dark:text-yellow-400';
+            return colors.WARNING;
         }
-        return 'text-green-600 dark:text-green-400';
+        return colors.GOOD;
     },
 
     calculatePercentageChange(currentValue, baselineValue) {
