@@ -1,5 +1,5 @@
-// Advanced Analytics Mod for Subway Builder v3.0
-// Using addFloatingPanel API for React-powered updates
+// Advanced Analytics Mod for Subway Builder v3.1.1
+// Fixed: React state management and performance issues
 
 const AdvancedAnalytics = {
     // API References (cached on init)
@@ -7,13 +7,13 @@ const AdvancedAnalytics = {
     React: null,
     h: null,
     
-    // States
-    sortState: {
+    // States (initial values only - React will manage actual state)
+    initialSortState: {
         column: 'ridership',
         order: 'desc'
     },
-    groupState: {
-        trains: false,
+    initialGroupState: {
+        trains: true,
         finance: true,
         performance: true
     },
@@ -142,21 +142,31 @@ const AdvancedAnalytics = {
                 padding: 0;
                 width: auto;
             }
+
+            /* Toolbar checkbox styling */
+            .aa-toolbar-checkbox {
+                appearance: none;
+                width: 0;
+                height: 0;
+                position: absolute;
+            }
         `;
         document.head.appendChild(style);
     },
 
     renderAnalyticsPanel() {
-        // Use cached references instead of fetching again
         const api = this.api;
         const { React } = this;
         const h = this.h;
+        const self = this; // Reference for closures
 
         const AnalyticsPanel = () => {
             const [tableData, setTableData] = React.useState([]);
-            const [sortState, setSortState] = React.useState(this.sortState);
-            const groupState = React.useState(this.groupState);
+            const [sortState, setSortState] = React.useState(self.initialSortState);
+            // FIXED: Properly destructure useState to get [state, setState]
+            const [groupState, setGroupState] = React.useState(self.initialGroupState);
 
+            // Setup wrapper classes on mount
             React.useEffect(() => {
                 const ourContent = document.getElementById('advanced-analytics');
                 if (!ourContent) return;
@@ -172,7 +182,13 @@ const AdvancedAnalytics = {
                 }
             }, []);
 
+            // Data fetching effect
             React.useEffect(() => {
+                if (self.debug) {
+                    console.log(`${self.CONFIG.LOG_PREFIX} Debug mode enabled - updates paused`);
+                    return;
+                }
+
                 const updateData = () => {
                     const routes = api.gameState.getRoutes();
                     const trainTypes = api.trains.getTrainTypes();
@@ -187,13 +203,13 @@ const AdvancedAnalytics = {
                         const revenuePerHour = metrics ? metrics.revenuePerHour : 0;
                         const dailyRevenue = revenuePerHour * 24;
 
-                        if (!this.validateRouteData(route)) {
+                        if (!self.validateRouteData(route)) {
                             processedData.push({
                                 id: route.id,
                                 name: route.name || route.bullet,
                                 ridership,
                                 dailyRevenue,
-                                ...this.getEmptyMetrics()
+                                ...self.getEmptyMetrics()
                             });
                             return;
                         }
@@ -205,260 +221,297 @@ const AdvancedAnalytics = {
                                 name: route.name || route.bullet,
                                 ridership,
                                 dailyRevenue,
-                                ...this.getEmptyMetrics()
+                                ...self.getEmptyMetrics()
                             });
                             return;
                         }
 
-                        const metrics_calc = this.calculateRouteMetrics(route, trainType, ridership, dailyRevenue);
+                        const calculatedMetrics = self.calculateRouteMetrics(route, trainType, ridership, dailyRevenue);
                         
                         processedData.push({
                             id: route.id,
                             name: route.name || route.bullet,
                             ridership,
                             dailyRevenue,
-                            ...metrics_calc
+                            ...calculatedMetrics
                         });
                     });
 
-                    // Sort data
-                    const column = sortState.column;
-                    const order = sortState.order;
-
-                    processedData.sort((a, b) => {
-                        let aVal = a[column];
-                        let bVal = b[column];
-
-                        if (column === 'name') {
-                            return order === 'desc' 
+                    const sortedData = [...processedData].sort((a, b) => {
+                        const aVal = a[sortState.column];
+                        const bVal = b[sortState.column];
+                        
+                        if (sortState.column === 'name') {
+                            return sortState.order === 'desc' 
                                 ? bVal.localeCompare(aVal)
                                 : aVal.localeCompare(bVal);
                         }
-
-                        return order === 'desc' ? bVal - aVal : aVal - bVal;
+                        
+                        return sortState.order === 'desc' ? bVal - aVal : aVal - bVal;
                     });
 
-                    console.log(this.groupState)
-
-                    setTableData(processedData);
+                    setTableData(sortedData);
                 };
 
-                // Always fetch data initially
                 updateData();
-                
-                // Only set up auto-refresh if NOT in debug mode
-                if (!this.debug) {
-                    const interval = setInterval(() => {
-                        // Only update if game is not paused
-                        if (!api.gameState.isPaused()) {
-                            updateData();
-                        }
-                    }, this.CONFIG.REFRESH_INTERVAL);
-                    return () => clearInterval(interval);
-                }
-            }, [sortState, groupState]);
+                const interval = setInterval(updateData, self.CONFIG.REFRESH_INTERVAL);
+                return () => clearInterval(interval);
+            }, [sortState]); // FIXED: Only depend on sortState, not groupState
 
             const handleSort = (column) => {
-                const newSortState = {
+                setSortState(prev => ({
                     column,
-                    order: sortState.column === column 
-                        ? (sortState.order === 'desc' ? 'asc' : 'desc')
-                        : 'desc'
-                };
-                this.sortState = newSortState;
-                setSortState(newSortState);
+                    order: prev.column === column && prev.order === 'desc' ? 'asc' : 'desc'
+                }));
+            };
+
+            const handleGroupToggle = (groupKey) => {
+                setGroupState(prev => ({
+                    ...prev,
+                    [groupKey]: !prev[groupKey]
+                }));
+            };
+
+            // Toolbar
+            const btnBaseClasses = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border';
+            const btnClasses = 'bg-background hover:bg-accent hover:text-accent-foreground border-input';
+            const btnActiveClasses = 'bg-primary text-primary-foreground border-primary hover:bg-primary/90';
+
+            const renderToolbar = () => {
+                return h('div', { 
+                    className: 'flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30'
+                }, [
+                    // Left side - Filter buttons
+                    h('div', { key: 'filters', className: 'flex items-center gap-1.5' }, [
+                        h('span', { key: 'label', className: 'text-xs font-medium text-muted-foreground mr-1' }, 'Metrics:'),
+                        
+                        // Trains toggle
+                        h('button', {
+                            key: 'trains',
+                            className: `${btnBaseClasses} ${groupState.trains ? btnActiveClasses : btnClasses}`,
+                            onClick: () => handleGroupToggle('trains'),
+                            title: 'Toggle Train Metrics'
+                        }, [
+                            h(api.utils.icons.Train, { key: 'icon', size: 14 }),
+                            h('span', { key: 'text' }, 'Trains')
+                        ]),
+                        
+                        // Finance toggle
+                        h('button', {
+                            key: 'finance',
+                            className: `${btnBaseClasses} ${groupState.finance ? btnActiveClasses : btnClasses}`,
+                            onClick: () => handleGroupToggle('finance'),
+                            title: 'Toggle Finance Metrics'
+                        }, [
+                            h(api.utils.icons.DollarSign, { key: 'icon', size: 14 }),
+                            h('span', { key: 'text' }, 'Finance')
+                        ]),
+                        
+                        // Performance toggle
+                        h('button', {
+                            key: 'performance',
+                            className: `${btnBaseClasses} ${groupState.performance ? btnActiveClasses : btnClasses}`,
+                            onClick: () => handleGroupToggle('performance'),
+                            title: 'Toggle Performance Metrics'
+                        }, [
+                            h(api.utils.icons.TrendingUp, { key: 'icon', size: 14 }),
+                            h('span', { key: 'text' }, 'Performance')
+                        ])
+                    ]),
+                    
+                    // Right side - Update indicator
+                    h('div', { key: 'status', className: 'flex items-center gap-2' }, [
+                        !api.gameState.isPaused() && h('div', {
+                            key: 'indicator',
+                            className: `absolute w-2 h-2 rounded-full bg-green-500 opacity-75 ${api.gameState.isPaused() ? 'hidden' : 'animate-ping'}`
+                        }),
+                        api.gameState.isPaused() && h('span', {className:`text-muted-foreground text-xs`}, "Pause"),
+                        h('span', {className:`relative inline-flex w-2 h-2 rounded-full ${api.gameState.isPaused() ? 'bg-amber-400' : 'bg-green-500'}`})
+                    ])
+                ]);
+            };
+
+            const renderTableHeader = (header) => {
+                const alignClass = header.align === 'right' ? 'text-right' : 
+                                 header.align === 'center' ? 'text-center' : 'text-left';
+                
+                const isActiveSort = sortState.column === header.key;
+                
+                return h('th', {
+                    key: header.key,
+                    className: `px-3 py-2 ${alignClass} cursor-pointer select-none transition-colors ${self.getHeaderClasses(header.key, sortState, groupState, header.group)}`,
+                    onClick: () => handleSort(header.key)
+                }, 
+                    h('div', { className: `flex ${header.align === 'center' ? 'justify-center' : 'justify-end'} items-center gap-0.5 whitespace-nowrap` }, [
+                        h('span', { 
+                            key: 'sort', 
+                            className: isActiveSort ? 'inline-block' : 'inline-block opacity-0'
+                        }, self.getSortIndicator(header.key, sortState)),
+                        h('div', { key: 'labels', className: 'whitespace-nowrap' }, [
+                            h('span', { key: 'label', className: 'font-medium text-xs' }, header.label),
+                            header.small && h('span', {
+                                key: 'small',
+                                className: 'text-[10px] text-muted-foreground font-normal ml-1'
+                            }, header.small)
+                        ])
+                    ])
+                );
+            };
+
+            const renderRow = (row) => {
+                const nameCell = h('td', {
+                    key: 'name',
+                    className: `px-3 py-2 align-middle text-left cursor-pointer hover:text-primary transition-colors ${self.getCellClasses('name', sortState, groupState)}`,
+                    onClick: () => {
+                        const route = api.gameState.getRoutes().find(r => r.id === row.id);
+                        if (route && route.stations && route.stations[0]) {
+                            const station = api.gameState.getStations().find(s => s.id === route.stations[0]);
+                            if (station) {
+                                const map = api.utils.getMap();
+                                if (map) {
+                                    map.flyTo({
+                                        center: station.coords,
+                                        zoom: 14,
+                                        duration: 1000
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }, 
+                    h('div', { className: 'font-medium' }, row.name)
+                );
+
+                const ridershipCell = self.createReactMetricCell(
+                    'ridership',
+                    row.ridership.toLocaleString(undefined, {maximumFractionDigits: 0}),
+                    null,
+                    sortState,
+                    groupState,
+                    'performance'
+                );
+
+                const capacityCell = self.createReactMetricCell(
+                    'capacity',
+                    row.capacity.toLocaleString(undefined, {maximumFractionDigits: 0}),
+                    null,
+                    sortState,
+                    groupState,
+                    'trains'
+                );
+
+                const utilizationClasses = self.getUtilizationClasses(row.utilization);
+                const utilizationCell = h('td', {
+                    key: 'utilization',
+                    className: `px-3 py-2 align-middle text-right font-mono ${utilizationClasses} ${self.getCellClasses('utilization', sortState, groupState, 'performance')}`
+                }, `${row.utilization}%`);
+
+                const stationsCell = self.createReactMetricCell(
+                    'stations',
+                    row.stations.toString(),
+                    null,
+                    sortState,
+                    groupState,
+                    'trains'
+                );
+
+                const trainColors = self.CONFIG.COLORS.TRAINS;
+                const trainScheduleCell = h('td', {
+                    key: 'trainSchedule',
+                    className: `px-3 py-2 align-middle text-right font-mono ${self.getCellClasses('trainSchedule', sortState, groupState, 'trains')}`
+                },
+                    h('span', { className: `font-bold` }, (row.trainsHigh + row.trainsMedium + row.trainsLow)),
+                    ' (',
+                    h('small', {hey: 'details'},
+                        h('span', { className: `${trainColors.HIGH}` }, row.trainsHigh), '-',
+                        h('span', { className: `${trainColors.MEDIUM}` }, row.trainsMedium), '-',
+                        h('span', { className: `${trainColors.LOW}` }, row.trainsLow),
+                    ),
+                    ')',
+                );
+
+                const dailyCostCell = self.createReactCostCell(
+                    'dailyCost',
+                    `$${row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`,
+                    null,
+                    sortState,
+                    groupState,
+                    'finance'
+                );
+
+                const dailyRevenueCell = self.createReactRevenueCell(
+                    'dailyRevenue',
+                    `$${row.dailyRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}`,
+                    null,
+                    sortState,
+                    groupState,
+                    'finance'
+                );
+
+                const dailyProfitCell = self.createReactProfitCell(
+                    'dailyProfit',
+                    row.dailyProfit,
+                    null,
+                    sortState,
+                    groupState,
+                    'finance'
+                );
+
+                const costPerPassengerCell = self.createReactMetricCell(
+                    'costPerPassenger',
+                    row.costPerPassenger > 0 
+                        ? `$${row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                        : '$0.00',
+                    null,
+                    sortState,
+                    groupState,
+                    'performance'
+                );
+
+                return h('tr', {
+                    key: row.id,
+                    className: 'border-b border-border hover:bg-muted/50 transition-colors'
+                }, [
+                    nameCell,
+                    ridershipCell,
+                    capacityCell,
+                    utilizationCell,
+                    stationsCell,
+                    trainScheduleCell,
+                    dailyCostCell,
+                    dailyRevenueCell,
+                    dailyProfitCell,
+                    costPerPassengerCell
+                ]);
             };
 
             return h('div', { 
                 id: 'advanced-analytics',
-                className: 'flex flex-col h-full overflow-hidden'
+                className: 'flex flex-col h-full'
             }, [
-                h('div', {
-                    id: 'aa_toolbar',
-                    className:'relative flex gap-2 py-2 px-3'}, [
-                    this.buildReactTableToolbar(),
-                    h('span', {
-                            id: 'aa_toolbar_status',
-                            className:'relative flex ml-auto',
-                            style: {
-                                width: '0.575rem',
-                                height: '0.575rem'
-                            }
-                        }, [
-                            h('span', {className:'absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75'}), 
-                            h('span', {className:'relative inline-flex w-full rounded-full bg-green-600'}),
-                        ]
-                    )]
-                ),
-                h('div', { key: 'table-container', className: 'flex-1 overflow-auto'}, this.buildReactTable(tableData, sortState, handleSort))
+                renderToolbar(),
+                h('div', { 
+                    key: 'table-wrapper',
+                    className: 'flex-1 overflow-auto'
+                },
+                    h('table', { className: 'w-full border-collapse text-sm' }, [
+                        h('thead', { key: 'head' },
+                            h('tr', { className: 'border-b border-border' },
+                                self.CONFIG.TABLE_HEADERS.map(header => renderTableHeader(header))
+                            )
+                        ),
+                        h('tbody', { key: 'body' },
+                            tableData.map(row => renderRow(row))
+                        )
+                    ])
+                )
             ]);
         };
 
         return h(AnalyticsPanel);
     },
 
-    buildReactTableToolbar() {
-        const api = window.SubwayBuilderAPI;
-        const { React, icons, components } = api.utils;
-        const { Button, Card, CardContent, Progress, Switch, Label, Input, Badge } = components;
-        const { Settings, Play, Pause, Train, MapPin } = icons;  // 1000+ Lucide icons
-        const h = React.createElement;  // Shorthand for building UI
-
-        const btnClasses = 'bg-background/95 border border-border/50 rounded-lg flex gap-2 px-3 py-1.5 cursor-pointer hover:bg-secondary'
-
-        return [
-            h('label', {for:'aa_toolbar_toggle_train', className: btnClasses, title: 'Toggle Trains Matrics'}, [
-                h('input', { id: 'aa_toolbar_toggle_train', type: 'checkbox', className:'', onChange: async (ev) => {this.groupState.trains = ev.target.checked}}),
-                h(api.utils.icons.TramFront, { size: 18 }),
-            ]),
-
-            h('label', {for:'aa_toolbar_toggle_finance', className: btnClasses, title: 'Toggle Finance Matrics'}, [
-                h('input', { id: 'aa_toolbar_toggle_finance', type: 'checkbox', className:'', onChange: (ev) => {this.groupState.finance = ev.target.checked;}}),
-                h(api.utils.icons.DollarSign, { size: 18 }),
-            ]),
-            h('label', {for:'aa_toolbar_toggle_performance', className: btnClasses, title: 'Toggle Performance Matrics'}, [
-                h('input', { id: 'aa_toolbar_toggle_performance', type: 'checkbox', className:'', onChange: async (ev) => {this.groupState.performance = ev.target.checked}}),
-                h(api.utils.icons.Activity, { size: 18 }),
-            ])
-        ];
-    },
-
-
-    buildReactTable(data, sortState, handleSort) {
-        const api = window.SubwayBuilderAPI;
-        const { React, components } = api.utils;
-        const { Button, Card, CardContent, Progress, Switch, Label, Input, Badge } = components;
-        const h = React.createElement;
-
-        return h('table', { className: 'w-full text-sm border-collapse' }, [
-            h('thead', { key: 'thead', className: 'z-10 relative' }, 
-                h('tr', { className: 'top-0 border-b bg-primary-foreground/60 backdrop-blur-sm' },
-                    this.CONFIG.TABLE_HEADERS.map(header => 
-                        h('th', {
-                            key: header.key,
-                            className: `h-12 px-3 text-${header.align} align-middle font-medium whitespace-nowrap cursor-pointer transition-colors ${this.getHeaderClasses(header.key, sortState, header.group)}`,
-                            onClick: () => handleSort(header.key)
-                        }, [
-                            h('span', { 
-                                key: 'indicator',
-                                className: sortState.column !== header.key ? 'opacity-0' : '' 
-                            }, this.getSortIndicator(header.key, sortState)),
-                            ' ' + header.label,
-                            h('small', { className: !header.small? 'hidden': ''}, ' ' + header.small) 
-                        ])
-                    )
-                )
-            ),
-            h('tbody', { key: 'tbody', className: 'z-0' },
-                data.map((row, rowIndex) => {
-                    let baselineRow = null;
-                    if (['dailyCost', 'dailyRevenue', 'dailyProfit', 'costPerPassenger'].includes(sortState.column)) {
-                        const valueKey = sortState.column;
-                        // For profit, we need the first row (regardless of sign), for others we need first positive value
-                        if (sortState.column === 'dailyProfit') {
-                            baselineRow = data[0]; // First row in sorted order
-                        } else {
-                            baselineRow = data.find(r => r[valueKey] > 0);
-                        }
-                    }
-                    const showCostPercentage = baselineRow && rowIndex > 0;
-
-                    return h('tr', {
-                        key: row.id,
-                        className: 'border-b transition-colors hover:bg-background/50'
-                    }, [
-                        h('td', {
-                            key: 'name',
-                            className: `px-3 py-2 align-middle text-right w-0 font-medium bg-primary-foreground/60 backdrop-blur-sm ${this.getCellClasses('name', sortState)}`
-                        }, row.name),
-                        
-                        h('td', {
-                            key: 'ridership',
-                            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses('ridership', sortState, 'performance')}`
-                        }, row.ridership.toLocaleString()),
-                        
-                        h('td', {
-                            key: 'capacity',
-                            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses('capacity', sortState, 'trains')}`
-                        }, row.capacity > 0 ? row.capacity.toLocaleString() : 'N/A'),
-                        
-                        h('td', {
-                            key: 'utilization',
-                            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses('utilization', sortState, 'performance')} ${row.utilization > 0 ? this.getUtilizationClasses(row.utilization) : ''}`
-                        }, row.utilization > 0 ? '∿' + row.utilization + '%' : 'N/A'),
-                        
-                        h('td', {
-                            key: 'stations',
-                            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses('stations', sortState, 'trains')}`
-                        }, row.stations > 0 ? row.stations : 'N/A'),
-
-                        this.createTrainScheduleCell(row, sortState, 'trains'),
-
-                
-                        this.createReactCostCell(
-                            'dailyCost',
-                            row.dailyCost > 0 ? '$' + row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0}) : 'N/A',
-                            showCostPercentage && row.dailyCost > 0 && sortState.column === 'dailyCost' 
-                                ? this.calculatePercentageChange(row.dailyCost, baselineRow.dailyCost) 
-                                : null,
-                            sortState,
-                            'finance'
-                        ),
-
-                        this.createReactRevenueCell(
-                            'dailyRevenue',
-                            row.dailyRevenue > 0 ? '$' + row.dailyRevenue.toLocaleString(undefined, {maximumFractionDigits: 0}) : 'N/A',
-                            showCostPercentage && row.dailyRevenue > 0 && sortState.column === 'dailyRevenue' 
-                                ? this.calculatePercentageChange(row.dailyRevenue, baselineRow.dailyRevenue) 
-                                : null,
-                            sortState,
-                            'finance'
-                        ),
-
-                        this.createReactProfitCell(
-                            'dailyProfit',
-                            row.dailyProfit,
-                            showCostPercentage && sortState.column === 'dailyProfit' 
-                                ? this.calculatePercentageChange(row.dailyProfit, baselineRow.dailyProfit) 
-                                : null,
-                            sortState,
-                            'finance'
-                        ),
-                        
-                        this.createReactCostCell(
-                            'costPerPassenger',
-                            row.costPerPassenger > 0 ? '$' + row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'N/A',
-                            showCostPercentage && row.costPerPassenger > 0 && sortState.column === 'costPerPassenger'
-                                ? this.calculatePercentageChange(row.costPerPassenger, baselineRow.costPerPassenger)
-                                : null,
-                            sortState,
-                            'performance'
-                        )
-                    ]);
-                })
-            )
-        ]);
-    },
-
-    createTrainScheduleCell(row, sortState, group) {
-        const h = this.h;
-        const colors = this.CONFIG.COLORS.TRAINS;
-
-        return h('td', {
-            key: 'trainSchedule',
-            className: `px-3 py-2 align-middle text-center font-mono whitespace-nowrap ${this.getCellClasses('trainSchedule', sortState, group)}`
-        }, [
-            h('span', { className: `font-bold` }, (row.trainsHigh + row.trainsMedium + row.trainsLow)),
-            ' (',
-            h('span', { className: `${colors.HIGH} font-bold` }, 'H'), `:${row.trainsHigh}`,
-            ', ',
-            h('span', { className: `${colors.MEDIUM} font-bold` }, 'M'), `:${row.trainsMedium}`,
-            ', ',
-            h('span', { className: `${colors.LOW} font-bold` }, 'L'), `:${row.trainsLow})`
-        ]);
-    },
-
-    createReactMetricCell(columnKey, content, percentageChange, sortState, group, options = {}) {
+    createReactMetricCell(columnKey, content, percentageChange, sortState, groupState, group, options = {}) {
         const h = this.h;
         const {
             valueColorClass = this.CONFIG.COLORS.VALUE.DEFAULT,
@@ -471,7 +524,7 @@ const AdvancedAnalytics = {
 
         return h('td', {
             key: columnKey,
-            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, group)}`
+            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, groupState, group)}`
         }, 
             h('div', { className: 'flex flex-col items-end gap-0.5' }, [
                 h('div', { key: 'value', className: valueColorClass }, content),
@@ -483,20 +536,19 @@ const AdvancedAnalytics = {
         );
     },
 
-    createReactCostCell(columnKey, content, percentageChange, sortState, group) {
-        console.log(columnKey, group)
-        return this.createReactMetricCell(columnKey, content, percentageChange, sortState, group, {
+    createReactCostCell(columnKey, content, percentageChange, sortState, groupState, group) {
+        return this.createReactMetricCell(columnKey, content, percentageChange, sortState, groupState, group, {
             invertPercentageColors: false
         });
     },
 
-    createReactRevenueCell(columnKey, content, percentageChange, sortState, group) {
-        return this.createReactMetricCell(columnKey, content, percentageChange, sortState, group, {
+    createReactRevenueCell(columnKey, content, percentageChange, sortState, groupState, group) {
+        return this.createReactMetricCell(columnKey, content, percentageChange, sortState, groupState, group, {
             invertPercentageColors: true
         });
     },
 
-    createReactProfitCell(columnKey, profitValue, percentageChange, sortState, group) {
+    createReactProfitCell(columnKey, profitValue, percentageChange, sortState, groupState, group) {
         const isNegative = profitValue < 0;
         const absValue = Math.abs(profitValue);
         const formattedValue = isNegative 
@@ -505,7 +557,7 @@ const AdvancedAnalytics = {
 
         const valueColorClass = isNegative ? this.CONFIG.COLORS.VALUE.NEGATIVE : this.CONFIG.COLORS.VALUE.DEFAULT;
 
-        return this.createReactMetricCell(columnKey, formattedValue, percentageChange, sortState, group, {
+        return this.createReactMetricCell(columnKey, formattedValue, percentageChange, sortState, groupState, group, {
             valueColorClass,
             invertPercentageColors: true
         });
@@ -565,11 +617,9 @@ const AdvancedAnalytics = {
             capacity,
             utilization,
             stations,
-            // Individual values for rendering
             trainsLow: trainCounts.low,
             trainsMedium: trainCounts.medium,
             trainsHigh: trainCounts.high,
-            // Mapped 'trainSchedule' to High trains for sorting purposes
             trainSchedule: trainCounts.high,
             dailyCost,
             dailyProfit,
@@ -618,12 +668,12 @@ const AdvancedAnalytics = {
         return ((currentValue - baselineValue) / baselineValue) * 100;
     },
 
-    getHeaderClasses(column, sortState, group) {
-        if (group && group in this.groupState) {
-            if (this.groupState[group] === false) {
-                return 'hidden';
-            }
+    getHeaderClasses(column, sortState, groupState, group) {
+        // Hide column if its group is toggled off
+        if (group && groupState && groupState[group] === false) {
+            return 'hidden';
         }
+        
         if (sortState.column === column) {
             return 'text-foreground bg-background/80';
         } else if (column === 'name') {
@@ -632,12 +682,12 @@ const AdvancedAnalytics = {
         return 'text-muted-foreground hover:text-foreground';
     },
 
-    getCellClasses(column, sortState, group) {
-        if (group && group in this.groupState) {
-            if (this.groupState[group] === false) {
-                return 'hidden';
-            }
+    getCellClasses(column, sortState, groupState, group) {
+        // Hide cell if its group is toggled off
+        if (group && groupState && groupState[group] === false) {
+            return 'hidden';
         }
+        
         if (sortState.column === column) {
             return 'bg-background/80';
         } else if (column === 'name') {
