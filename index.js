@@ -1,8 +1,9 @@
-// Advanced Analytics Mod for Subway Builder v4.2.0
+// Advanced Analytics Mod for Subway Builder v4.2.1
 // Phase 4: Route Status Tracking System - properly detect NEW/DELETED routes using lifecycle hooks
 // Status lifecycle: 'new' (created) → 'ongoing' (after day change) → 'deleted' (if deleted)
 // v4.1.0: Code cleanup - removed debug logs, added utility functions and section comments
 // v4.2.0: Method extraction - buildComparisonRow (~160 lines), renderDayDropdown, JSDoc comments
+// v4.2.1: Fix - added $ currency formatting to finance columns in absolute comparison mode
 
 const AdvancedAnalytics = {
     // API References (cached on init)
@@ -1735,7 +1736,19 @@ const AdvancedAnalytics = {
                 const arrow = value > 0 ? this.CONFIG.ARROWS.UP : this.CONFIG.ARROWS.DOWN;
                 const prefix = value > 0 ? '+' : '-';
                 const absDelta = Math.abs(delta);
-                const formattedValue = `${prefix}${absDelta.toLocaleString(undefined, {maximumFractionDigits: 0})} ${arrow}`;
+                
+                // Check if this is a finance column (needs $ prefix)
+                const isFinanceColumn = ['dailyCost', 'dailyRevenue', 'dailyProfit', 'costPerPassenger'].includes(columnKey);
+                const currencyPrefix = isFinanceColumn ? ' $' : '';
+                
+                // Format with proper decimal places for costPerPassenger
+                const decimals = columnKey === 'costPerPassenger' ? 2 : 0;
+                const formattedDelta = absDelta.toLocaleString(undefined, {
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals
+                });
+                
+                const formattedValue = `${prefix}${currencyPrefix}${formattedDelta} ${arrow}`;
                 
                 return h('td', {
                     key: columnKey,
