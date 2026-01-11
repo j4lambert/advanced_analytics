@@ -1,5 +1,5 @@
-// Advanced Analytics Mod for Subway Builder v3.6.0
-// Phase 1: Removed percentage comparisons (cleaner UI)
+// Advanced Analytics Mod for Subway Builder v3.8.3
+// Fixed: Neutral color for 0% + Save migration for all name changes
 
 const AdvancedAnalytics = {
     // API References (cached on init)
@@ -28,7 +28,10 @@ const AdvancedAnalytics = {
         historicalDataVersion: 0,  // Increment this to trigger component refresh
         isInitialized: false,
         currentSaveName: null,  // Track which save we're in
-        tempSaveId: null  // Temporary ID before first save
+        tempSaveId: null,  // Temporary ID before first save
+        compareMode: false,  // Comparison mode enabled
+        comparePrimaryDay: null,  // Primary day (newer)
+        compareSecondaryDay: null  // Compare day (older)
     },
     
     // Debug mode: Set to true to pause data updates (useful for inspecting data in console)
@@ -72,7 +75,20 @@ const AdvancedAnalytics = {
             VALUE: {
                 NEGATIVE: 'text-red-600 dark:text-red-400',
                 DEFAULT: ''
+            },
+            // Comparison mode colors
+            COMPARE: {
+                POSITIVE: 'text-green-600 dark:text-green-400',  // Good improvement
+                NEGATIVE: 'text-red-600 dark:text-red-400',      // Decline
+                NEUTRAL: 'text-muted-foreground',                // No change (0%)
+                NEW: 'text-purple-600 dark:text-purple-400',     // New route
+                DELETED: 'text-gray-400 dark:text-gray-500'      // Deleted route
             }
+        },
+        ARROWS: {
+            UP: '↑',
+            DOWN: '↓',
+            NEUTRAL: '→'
         },
         STYLES: {
             PERCENTAGE_FONT_SIZE: 'text-[10px]'
@@ -102,14 +118,9 @@ const AdvancedAnalytics = {
         this.React = this.api.utils.React;
         this.h = this.React.createElement;
 
-        this.api.hooks.onGameInit(async () => {
+        this.api.hooks.onGameInit(() => {
             console.log(`${this.CONFIG.LOG_PREFIX} Mod initialized`);
             this.injectStyles();
-            
-            // Restore from API storage if we have a save name (shouldn't on fresh game init, but just in case)
-            if (this.StateCache.currentSaveName) {
-                await this.restoreFromApiStorage();
-            }
             
             if (typeof this.api.ui.addFloatingPanel === 'function') {
                 this.api.ui.addFloatingPanel({
@@ -132,49 +143,47 @@ const AdvancedAnalytics = {
             this.captureHistoricalData(dayThatEnded);
         });
 
-        // Track which save is loaded and switch storage context
+        // Track which save is loaded and restore from backup
         this.api.hooks.onGameLoaded(async (saveName) => {
             // Update current save name for storage scoping
             this.StateCache.currentSaveName = saveName;
             
-            // Restore from API storage (clears localStorage, loads saved data)
-            await this.restoreFromApiStorage();
+            // Restore from backup (clears working data, loads backup)
+            await this.restoreFromBackup();
             
             // Reset initialization flag so component reloads data for this save
             this.StateCache.isInitialized = false;
         });
 
-        // Update save name when game is saved
+        // Update save name when game is saved and backup data
         this.api.hooks.onGameSaved(async (saveName) => {
             const oldSaveName = this.StateCache.currentSaveName;
             
-            // If save name changed, migrate the localStorage data
+            // If save name changed, migrate the data
             if (oldSaveName && oldSaveName !== saveName) {
-                // Copy data from old key to new save key
-                const oldPrefix = `aa-${oldSaveName}-`;
-                const newPrefix = `aa-${saveName}-`;
+                const storage = this.getStorage();
                 
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key && key.startsWith(oldPrefix)) {
-                        const newKey = key.replace(oldPrefix, newPrefix);
-                        const value = localStorage.getItem(key);
-                        if (value) {
-                            localStorage.setItem(newKey, value);
-                        }
-                        
-                        // Only delete old key if it was a temp ID (contains timestamp)
-                        if (oldSaveName.match(/\d{13}/)) {
-                            localStorage.removeItem(key);
-                        }
+                if (storage.saves[oldSaveName]) {
+                    // Move data from old save to new save name
+                    storage.saves[saveName] = storage.saves[oldSaveName];
+                    
+                    // Only delete old save if it was a temp ID (contains timestamp)
+                    // Keep old save if it's a real save name (user might want both)
+                    if (oldSaveName.match(/\d{13}/)) {
+                        delete storage.saves[oldSaveName];
+                        console.log(`${this.CONFIG.LOG_PREFIX} Migrated data from temp save "${oldSaveName}" to: "${saveName}"`);
+                    } else {
+                        console.log(`${this.CONFIG.LOG_PREFIX} Copied data from "${oldSaveName}" to: "${saveName}" (keeping both)`);
                     }
+                    
+                    this.setStorage(storage);
                 }
             }
             
             this.StateCache.currentSaveName = saveName;
             
-            // Persist localStorage to API storage
-            await this.persistToApiStorage();
+            // Backup working data to backup
+            await this.backupToStorage();
         });
     },
 
@@ -269,14 +278,151 @@ const AdvancedAnalytics = {
         }
     },
 
-    // Safe storage wrapper (uses localStorage due to mod storage API context issues)
+    // Get comparison data for two days
+    getComparisonData(primaryDay, secondaryDay, historicalData) {
+        const primaryData = historicalData.days[primaryDay];
+        const secondaryData = historicalData.days[secondaryDay];
+        
+        if (!primaryData || !secondaryData) {
+            return null;
+        }
+
+        // Build map of secondary routes by ID for quick lookup
+        const secondaryRoutes = new Map();
+        secondaryData.routes.forEach(route => {
+            secondaryRoutes.set(route.id, route);
+        });
+
+        // Build map of primary routes by ID
+        const primaryRoutes = new Map();
+        primaryData.routes.forEach(route => {
+            primaryRoutes.set(route.id, route);
+        });
+
+        // Combine all routes
+        const allRouteIds = new Set([...primaryRoutes.keys(), ...secondaryRoutes.keys()]);
+        
+        const comparisonRows = [];
+        
+        allRouteIds.forEach(routeId => {
+            const primaryRoute = primaryRoutes.get(routeId);
+            const secondaryRoute = secondaryRoutes.get(routeId);
+            
+            // Filter out routes that don't exist in either day
+            if (!primaryRoute && !secondaryRoute) {
+                return;
+            }
+            
+            comparisonRows.push({
+                id: routeId,
+                name: (primaryRoute || secondaryRoute).name,
+                primaryRoute,
+                secondaryRoute
+            });
+        });
+        
+        return comparisonRows;
+    },
+
+    // Calculate percentage change for a metric
+    calculatePercentageChange(primaryValue, secondaryValue, metricKey) {
+        // Handle special cases
+        if (primaryValue === null || primaryValue === undefined || 
+            secondaryValue === null || secondaryValue === undefined) {
+            return { type: 'missing', value: 0 };
+        }
+
+        // Route exists in primary but not secondary = NEW
+        if (secondaryValue === 0 && primaryValue > 0) {
+            return { type: 'new', value: 0 };
+        }
+
+        // Route exists in secondary but not primary = DELETED
+        if (primaryValue === 0 && secondaryValue > 0) {
+            return { type: 'deleted', value: 0 };
+        }
+
+        // Both zero
+        if (primaryValue === 0 && secondaryValue === 0) {
+            return { type: 'zero', value: 0 };
+        }
+
+        // Calculate percentage
+        const percentage = ((primaryValue - secondaryValue) / secondaryValue) * 100;
+        
+        // Determine if positive change is good or bad
+        const isGoodWhenHigh = this.isMetricGoodWhenHigh(metricKey);
+        
+        return {
+            type: 'normal',
+            value: percentage,
+            isImprovement: isGoodWhenHigh ? percentage > 0 : percentage < 0
+        };
+    },
+
+    // Determine if a metric is good when high (vs good when low like costs)
+    isMetricGoodWhenHigh(metricKey) {
+        const goodWhenLow = ['dailyCost', 'costPerPassenger'];
+        return !goodWhenLow.includes(metricKey);
+    },
+
+    // Storage key
+    STORAGE_KEY: 'AdvancedAnalytics',
+
+    // Get the entire storage object
+    getStorage() {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            return stored ? JSON.parse(stored) : { ui: {}, saves: {} };
+        } catch (error) {
+            console.error(`${this.CONFIG.LOG_PREFIX} Failed to parse storage:`, error);
+            return { ui: {}, saves: {} };
+        }
+    },
+
+    // Save the entire storage object
+    setStorage(data) {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+        } catch (error) {
+            console.error(`${this.CONFIG.LOG_PREFIX} Failed to save storage:`, error);
+        }
+    },
+
+    // Get UI state (shared across saves)
+    async safeStorageGetUI(key, defaultValue) {
+        try {
+            const storage = this.getStorage();
+            return storage.ui[key] !== undefined ? storage.ui[key] : defaultValue;
+        } catch (error) {
+            console.error(`${this.CONFIG.LOG_PREFIX} localStorage UI get failed for '${key}':`, error);
+            return defaultValue;
+        }
+    },
+
+    async safeStorageSetUI(key, value) {
+        try {
+            const storage = this.getStorage();
+            storage.ui[key] = value;
+            this.setStorage(storage);
+        } catch (error) {
+            console.error(`${this.CONFIG.LOG_PREFIX} localStorage UI set failed for '${key}':`, error);
+        }
+    },
+
+    // Get save-specific data (working copy)
     async safeStorageGet(key, defaultValue) {
-        // Use localStorage with save-specific prefix
         try {
             const savePrefix = this.StateCache.currentSaveName || 'default';
-            const storageKey = `aa-${savePrefix}-${key}`;
-            const stored = localStorage.getItem(storageKey);
-            return stored ? JSON.parse(stored) : defaultValue;
+            const storage = this.getStorage();
+            
+            if (!storage.saves[savePrefix]) {
+                return defaultValue;
+            }
+            
+            const saveData = storage.saves[savePrefix];
+            const workingData = saveData.working || {};
+            return workingData[key] !== undefined ? workingData[key] : defaultValue;
         } catch (error) {
             console.error(`${this.CONFIG.LOG_PREFIX} localStorage get failed for '${key}':`, error);
             return defaultValue;
@@ -284,79 +430,62 @@ const AdvancedAnalytics = {
     },
 
     async safeStorageSet(key, value) {
-        // Use localStorage with save-specific prefix
         try {
             const savePrefix = this.StateCache.currentSaveName || 'default';
-            const storageKey = `aa-${savePrefix}-${key}`;
-            localStorage.setItem(storageKey, JSON.stringify(value));
+            const storage = this.getStorage();
+            
+            if (!storage.saves[savePrefix]) {
+                storage.saves[savePrefix] = { working: {}, backup: {} };
+            }
+            
+            if (!storage.saves[savePrefix].working) {
+                storage.saves[savePrefix].working = {};
+            }
+            
+            storage.saves[savePrefix].working[key] = value;
+            this.setStorage(storage);
         } catch (error) {
             console.error(`${this.CONFIG.LOG_PREFIX} localStorage set failed for '${key}':`, error);
         }
     },
 
-    async persistToApiStorage() {
-        // Persist all localStorage data to API storage (called on game save)
+    // Backup working data to backup (called on game save)
+    async backupToStorage() {
         try {
             const savePrefix = this.StateCache.currentSaveName || 'default';
+            console.log(`${this.CONFIG.LOG_PREFIX} [BACKUP] Saving working data to backup for: "${savePrefix}"`);
             
-            // Get all aa- prefixed keys for this save
-            const prefix = `aa-${savePrefix}-`;
-            const keysToSave = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith(prefix)) {
-                    keysToSave.push(key);
-                }
+            const storage = this.getStorage();
+            
+            if (storage.saves[savePrefix] && storage.saves[savePrefix].working) {
+                // Copy working to backup
+                storage.saves[savePrefix].backup = JSON.parse(JSON.stringify(storage.saves[savePrefix].working));
+                this.setStorage(storage);
+                console.log(`${this.CONFIG.LOG_PREFIX} [BACKUP] Backed up data for save: ${savePrefix}`);
             }
-            
-            // Build data object
-            const dataToSave = {};
-            keysToSave.forEach(fullKey => {
-                const shortKey = fullKey.replace(prefix, '');
-                const value = localStorage.getItem(fullKey);
-                if (value) {
-                    dataToSave[shortKey] = JSON.parse(value);
-                }
-            });
-            
-            // Save to API storage
-            await this.api.storage.set(`save-${savePrefix}`, dataToSave);
-            console.log(`${this.CONFIG.LOG_PREFIX} Persisted ${keysToSave.length} keys to save storage`);
         } catch (error) {
-            console.error(`${this.CONFIG.LOG_PREFIX} Failed to persist to API storage:`, error);
+            console.error(`${this.CONFIG.LOG_PREFIX} [BACKUP] Failed:`, error);
         }
     },
 
-    async restoreFromApiStorage() {
-        // Restore data from API storage to localStorage (called on game load)
+    // Restore backup data to working (called on game load)
+    async restoreFromBackup() {
         try {
             const savePrefix = this.StateCache.currentSaveName || 'default';
+            console.log(`${this.CONFIG.LOG_PREFIX} [RESTORE] Restoring backup for: "${savePrefix}"`);
             
-            // Clear all aa- prefixed localStorage keys
-            const keysToDelete = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('aa-')) {
-                    keysToDelete.push(key);
-                }
-            }
+            const storage = this.getStorage();
             
-            keysToDelete.forEach(key => localStorage.removeItem(key));
-            
-            // Load from API storage
-            const savedData = await this.api.storage.get(`save-${savePrefix}`);
-            if (savedData) {
-                // Restore to localStorage
-                const prefix = `aa-${savePrefix}-`;
-                Object.entries(savedData).forEach(([shortKey, value]) => {
-                    const fullKey = `${prefix}${shortKey}`;
-                    localStorage.setItem(fullKey, JSON.stringify(value));
-                });
-                
-                console.log(`${this.CONFIG.LOG_PREFIX} Restored ${Object.keys(savedData).length} items from save storage`);
+            if (storage.saves[savePrefix] && storage.saves[savePrefix].backup) {
+                // Copy backup to working
+                storage.saves[savePrefix].working = JSON.parse(JSON.stringify(storage.saves[savePrefix].backup));
+                this.setStorage(storage);
+                console.log(`${this.CONFIG.LOG_PREFIX} [RESTORE] Restored data for save: ${savePrefix}`);
+            } else {
+                console.log(`${this.CONFIG.LOG_PREFIX} [RESTORE] No backup found for: ${savePrefix}`);
             }
         } catch (error) {
-            console.error(`${this.CONFIG.LOG_PREFIX} Failed to restore from API storage:`, error);
+            console.error(`${this.CONFIG.LOG_PREFIX} [RESTORE] Failed:`, error);
         }
     },
 
@@ -425,27 +554,55 @@ const AdvancedAnalytics = {
             const [historicalData, setHistoricalData] = React.useState(
                 self.StateCache.historicalData || { days: {} }
             );
+            const [compareMode, setCompareMode] = React.useState(
+                self.StateCache.compareMode || false
+            );
+            const [comparePrimaryDay, setComparePrimaryDay] = React.useState(
+                self.StateCache.comparePrimaryDay || null
+            );
+            const [compareSecondaryDay, setCompareSecondaryDay] = React.useState(
+                self.StateCache.compareSecondaryDay || null
+            );
 
             // Load from storage ONCE per page load
             React.useEffect(() => {
                 const initState = async () => {
                     if (!self.StateCache.isInitialized) {
                         try {
-                            const storedSort = await self.safeStorageGet('sortState', self.initialSortState);
-                            const storedGroup = await self.safeStorageGet('groupState', self.initialGroupState);
-                            const storedTimeframe = await self.safeStorageGet('timeframeState', self.initialTimeframeState);
+                            const storedSort = await self.safeStorageGetUI('sortState', self.initialSortState);
+                            const storedGroup = await self.safeStorageGetUI('groupState', self.initialGroupState);
+                            const storedTimeframe = await self.safeStorageGetUI('timeframeState', self.initialTimeframeState);
                             const storedHistorical = await self.loadHistoricalData();
+                            const storedCompareMode = await self.safeStorageGetUI('compareMode', false);
+                            const storedComparePrimaryDay = await self.safeStorageGetUI('comparePrimaryDay', null);
+                            const storedCompareSecondaryDay = await self.safeStorageGetUI('compareSecondaryDay', null);
                             
                             self.StateCache.sortState = storedSort;
                             self.StateCache.groupState = storedGroup;
                             self.StateCache.timeframeState = storedTimeframe;
                             self.StateCache.historicalData = storedHistorical;
+                            self.StateCache.compareMode = storedCompareMode;
+                            self.StateCache.comparePrimaryDay = storedComparePrimaryDay;
+                            self.StateCache.compareSecondaryDay = storedCompareSecondaryDay;
                             self.StateCache.isInitialized = true;
+                            
+                            // Validate compare days (secondary < primary)
+                            if (storedCompareMode && storedComparePrimaryDay && storedCompareSecondaryDay) {
+                                if (storedCompareSecondaryDay >= storedComparePrimaryDay) {
+                                    // Invalid - auto-adjust
+                                    const adjustedSecondary = storedComparePrimaryDay - 1;
+                                    self.StateCache.compareSecondaryDay = adjustedSecondary;
+                                    await self.safeStorageSetUI('compareSecondaryDay', adjustedSecondary);
+                                }
+                            }
                             
                             setSortState(storedSort);
                             setGroupState(storedGroup);
                             setTimeframeState(storedTimeframe);
                             setHistoricalData(storedHistorical);
+                            setCompareMode(self.StateCache.compareMode);
+                            setComparePrimaryDay(self.StateCache.comparePrimaryDay);
+                            setCompareSecondaryDay(self.StateCache.compareSecondaryDay);
                         } catch (error) {
                             console.error(`${self.CONFIG.LOG_PREFIX} Failed to load state:`, error);
                         }
@@ -493,8 +650,98 @@ const AdvancedAnalytics = {
                 const updateData = () => {
                     let processedData = [];
 
+                    // Handle compare mode
+                    if (compareMode && comparePrimaryDay && compareSecondaryDay) {
+                        console.log(`${self.CONFIG.LOG_PREFIX} [COMPARE] Primary: ${comparePrimaryDay}, Secondary: ${compareSecondaryDay}`);
+                        console.log(`${self.CONFIG.LOG_PREFIX} [COMPARE] Available days:`, Object.keys(historicalData.days));
+                        
+                        const comparisonRows = self.getComparisonData(comparePrimaryDay, compareSecondaryDay, historicalData);
+                        
+                        console.log(`${self.CONFIG.LOG_PREFIX} [COMPARE] Comparison rows:`, comparisonRows);
+                        
+                        if (comparisonRows) {
+                            processedData = comparisonRows.map(row => {
+                                const { primaryRoute, secondaryRoute } = row;
+                                
+                                // NEW route (exists in primary but not secondary)
+                                if (primaryRoute && !secondaryRoute) {
+                                    return {
+                                        id: row.id,
+                                        name: row.name,
+                                        ridership: 'NEW',
+                                        capacity: 'NEW',
+                                        utilization: 'NEW',
+                                        stations: 'NEW',
+                                        trainSchedule: 'NEW',
+                                        dailyCost: 'NEW',
+                                        dailyRevenue: 'NEW',
+                                        dailyProfit: 'NEW',
+                                        costPerPassenger: 'NEW',
+                                        deleted: false,
+                                        isNew: true
+                                    };
+                                }
+                                
+                                // DELETED route (exists in secondary but not primary)
+                                if (!primaryRoute && secondaryRoute) {
+                                    return {
+                                        id: row.id,
+                                        name: row.name,
+                                        ridership: 'DELETED',
+                                        capacity: 'DELETED',
+                                        utilization: 'DELETED',
+                                        stations: 'DELETED',
+                                        trainSchedule: 'DELETED',
+                                        dailyCost: 'DELETED',
+                                        dailyRevenue: 'DELETED',
+                                        dailyProfit: 'DELETED',
+                                        costPerPassenger: 'DELETED',
+                                        deleted: true,
+                                        isDeleted: true
+                                    };
+                                }
+                                
+                                // Normal comparison - calculate percentages
+                                const ridershipCalc = self.calculatePercentageChange(primaryRoute.ridership, secondaryRoute.ridership, 'ridership');
+                                
+                                const metrics = {
+                                    ridership: ridershipCalc,
+                                    capacity: self.calculatePercentageChange(primaryRoute.capacity, secondaryRoute.capacity, 'capacity'),
+                                    utilization: self.calculatePercentageChange(primaryRoute.utilization, secondaryRoute.utilization, 'utilization'),
+                                    stations: self.calculatePercentageChange(primaryRoute.stations, secondaryRoute.stations, 'stations'),
+                                    trainSchedule: self.calculatePercentageChange(
+                                        primaryRoute.trainsHigh + primaryRoute.trainsMedium + primaryRoute.trainsLow,
+                                        secondaryRoute.trainsHigh + secondaryRoute.trainsMedium + secondaryRoute.trainsLow,
+                                        'trainSchedule'
+                                    ),
+                                    dailyCost: self.calculatePercentageChange(primaryRoute.dailyCost, secondaryRoute.dailyCost, 'dailyCost'),
+                                    dailyRevenue: self.calculatePercentageChange(primaryRoute.dailyRevenue, secondaryRoute.dailyRevenue, 'dailyRevenue'),
+                                    dailyProfit: self.calculatePercentageChange(primaryRoute.dailyProfit, secondaryRoute.dailyProfit, 'dailyProfit'),
+                                    costPerPassenger: self.calculatePercentageChange(primaryRoute.costPerPassenger, secondaryRoute.costPerPassenger, 'costPerPassenger')
+                                };
+                                
+                                
+                                return {
+                                    id: row.id,
+                                    name: row.name,
+                                    ridership: metrics.ridership,
+                                    capacity: metrics.capacity,
+                                    utilization: metrics.utilization,
+                                    stations: metrics.stations,
+                                    trainSchedule: metrics.trainSchedule,
+                                    dailyCost: metrics.dailyCost,
+                                    dailyRevenue: metrics.dailyRevenue,
+                                    dailyProfit: metrics.dailyProfit,
+                                    costPerPassenger: metrics.costPerPassenger,
+                                    deleted: false,
+                                    isComparison: true
+                                };
+                            });
+                            
+                        }
+                    }
                     // Handle historical data selection
-                    if (timeframeState !== 'last24h') {
+                    else if (timeframeState !== 'last24h') {
                         const dayData = historicalData.days[timeframeState];
                         if (dayData && dayData.routes) {
                             // Use historical data
@@ -559,6 +806,9 @@ const AdvancedAnalytics = {
                         });
                     }
 
+                    if (processedData.length > 0) {
+                    }
+                    
                     const sortedData = [...processedData].sort((a, b) => {
                         const aVal = a[sortState.column];
                         const bVal = b[sortState.column];
@@ -569,8 +819,20 @@ const AdvancedAnalytics = {
                                 : aVal.localeCompare(bVal);
                         }
                         
+                        // Handle comparison mode (values are objects with .value property)
+                        if (a.isComparison) {
+                            // Extract numeric value from comparison object
+                            const aNum = typeof aVal === 'object' && aVal !== null ? (aVal.value || 0) : 0;
+                            const bNum = typeof bVal === 'object' && bVal !== null ? (bVal.value || 0) : 0;
+                            return sortState.order === 'desc' ? bNum - aNum : aNum - bNum;
+                        }
+                        
+                        // Normal mode (values are numbers)
                         return sortState.order === 'desc' ? bVal - aVal : aVal - bVal;
                     });
+
+                    if (sortedData.length > 0) {
+                    }
 
                     setTableData(sortedData);
                 };
@@ -582,7 +844,7 @@ const AdvancedAnalytics = {
                     const interval = setInterval(updateData, self.CONFIG.REFRESH_INTERVAL);
                     return () => clearInterval(interval);
                 }
-            }, [sortState, timeframeState, historicalData]); // Depend on timeframe and historical data
+            }, [sortState, timeframeState, historicalData, compareMode, comparePrimaryDay, compareSecondaryDay]); // Depend on timeframe, historical data, and compare state
 
             // Custom state updater for sortState (syncs to cache + storage)
             const updateSortState = React.useCallback((column) => {
@@ -598,7 +860,7 @@ const AdvancedAnalytics = {
                 setSortState(newState);
                 
                 // Persist to storage (async, fire-and-forget)
-                self.safeStorageSet('sortState', newState).catch(err => {
+                self.safeStorageSetUI('sortState', newState).catch(err => {
                     console.error(`${self.CONFIG.LOG_PREFIX} Failed to save sortState:`, err);
                 });
             }, [sortState]);
@@ -617,7 +879,7 @@ const AdvancedAnalytics = {
                 setGroupState(newState);
                 
                 // Persist to storage
-                self.safeStorageSet('groupState', newState).catch(err => {
+                self.safeStorageSetUI('groupState', newState).catch(err => {
                     console.error(`${self.CONFIG.LOG_PREFIX} Failed to save groupState:`, err);
                 });
             }, [groupState]);
@@ -631,7 +893,7 @@ const AdvancedAnalytics = {
                 setTimeframeState(newTimeframe);
                 
                 // Persist to storage
-                self.safeStorageSet('timeframeState', newTimeframe).catch(err => {
+                self.safeStorageSetUI('timeframeState', newTimeframe).catch(err => {
                     console.error(`${self.CONFIG.LOG_PREFIX} Failed to save timeframeState:`, err);
                 });
             }, []);
@@ -683,69 +945,179 @@ const AdvancedAnalytics = {
                         ])
                     ]),
                     
-                    // Middle - Timeframe selection
+                    // Middle - Timeframe selection / Compare mode
                     h('div', { key: 'timeframe', className: 'flex items-center gap-1.5' }, [
                         h('span', { key: 'label', className: 'text-xs font-medium text-muted-foreground mr-1' }, 'Timeframe:'),
                         
-                        // Last 24h button
-                        h('button', {
-                            key: 'last24h',
-                            className: `${btnBaseClasses} ${timeframeState === 'last24h' ? btnActiveClasses : btnClasses}`,
-                            onClick: () => updateTimeframeState('last24h'),
-                            title: 'Show data from last 24 hours'
+                        // Compare checkbox
+                        h('label', {
+                            key: 'compareLabel',
+                            className: 'flex items-center gap-1.5 cursor-pointer'
                         }, [
-                            h(api.utils.icons.Clock, { key: 'icon', size: 14 }),
-                            h('span', { key: 'text' }, 'Last 24h')
-                        ]),
-                        
-                        // Yesterday button
-                        (() => {
-                            const currentDay = api.gameState.getCurrentDay();
-                            const yesterdayDay = currentDay - 1;
-                            const hasYesterdayData = historicalData.days[yesterdayDay] !== undefined;
-                            
-                            return h('button', {
-                                key: 'yesterday',
-                                className: `${btnBaseClasses} ${timeframeState === String(yesterdayDay) ? btnActiveClasses : btnClasses}`,
-                                onClick: hasYesterdayData ? () => updateTimeframeState(String(yesterdayDay)) : undefined,
-                                disabled: !hasYesterdayData,
-                                title: hasYesterdayData ? `Show data from Day ${yesterdayDay}` : 'No data available for yesterday'
-                            }, [
-                                h(api.utils.icons.Calendar, { key: 'icon', size: 14 }),
-                                h('span', { key: 'text' }, 'Yesterday')
-                            ]);
-                        })(),
-                        
-                        // Day dropdown
-                        (() => {
-                            const currentDay = api.gameState.getCurrentDay();
-                            const allDays = Object.keys(historicalData.days).map(Number);
-                            const availableDays = allDays
-                                .sort((a, b) => b - a)  // Descending order (newest first)
-                                .filter(day => day < currentDay - 1);  // Exclude today and yesterday
-                            
-                            const hasOtherDays = availableDays.length > 0;
-                            
-                            return h('select', {
-                                key: 'daySelect',
-                                className: `${btnBaseClasses} ${btnClasses} ${!hasOtherDays ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`,
-                                disabled: !hasOtherDays,
-                                value: availableDays.includes(Number(timeframeState)) ? timeframeState : '',
-                                onChange: (e) => {
-                                    if (e.target.value) {
-                                        updateTimeframeState(e.target.value);
+                            h('input', {
+                                key: 'compareCheckbox',
+                                type: 'checkbox',
+                                checked: compareMode,
+                                onChange: async (e) => {
+                                    const enabled = e.target.checked;
+                                    setCompareMode(enabled);
+                                    self.StateCache.compareMode = enabled;
+                                    await self.safeStorageSetUI('compareMode', enabled);
+                                    
+                                    if (enabled) {
+                                        // Set default compare days: Most recent vs day before
+                                        const allDays = Object.keys(historicalData.days).map(Number).sort((a, b) => b - a);
+                                        const mostRecentDay = allDays[0];
+                                        const dayBefore = allDays[1];
+                                        
+                                        setComparePrimaryDay(mostRecentDay);
+                                        setCompareSecondaryDay(dayBefore);
+                                        self.StateCache.comparePrimaryDay = mostRecentDay;
+                                        self.StateCache.compareSecondaryDay = dayBefore;
+                                        await self.safeStorageSetUI('comparePrimaryDay', mostRecentDay);
+                                        await self.safeStorageSetUI('compareSecondaryDay', dayBefore);
                                     }
                                 },
-                                title: hasOtherDays ? 'Select a day to view' : 'No historical data available'
+                                className: 'cursor-pointer'
+                            }),
+                            h('span', { key: 'text', className: 'text-xs' }, 'Compare')
+                        ]),
+                        
+                        // Conditional rendering: Normal buttons OR Compare dropdowns
+                        !compareMode ? [
+                            // Last 24h button
+                            h('button', {
+                                key: 'last24h',
+                                className: `${btnBaseClasses} ${timeframeState === 'last24h' ? btnActiveClasses : btnClasses}`,
+                                onClick: () => updateTimeframeState('last24h'),
+                                title: 'Show data from last 24 hours'
                             }, [
-                                h('option', { key: 'placeholder', value: '', disabled: true }, 'Select Day'),
-                                ...availableDays.map(day => {
-                                    const yesterdayDay = currentDay - 1;
-                                    const label = day === yesterdayDay ? `${day} (yesterday)` : `Day ${day}`;
-                                    return h('option', { key: day, value: String(day) }, label);
-                                })
-                            ]);
-                        })()
+                                h(api.utils.icons.Clock, { key: 'icon', size: 14 }),
+                                h('span', { key: 'text' }, 'Last 24h')
+                            ]),
+                            
+                            // Yesterday button
+                            (() => {
+                                const allDays = Object.keys(historicalData.days).map(Number).sort((a, b) => b - a);
+                                const mostRecentDay = allDays[0]; // Most recent day with data
+                                const hasYesterdayData = mostRecentDay !== undefined;
+                                
+                                return h('button', {
+                                    key: 'yesterday',
+                                    className: `${btnBaseClasses} ${timeframeState === String(mostRecentDay) ? btnActiveClasses : btnClasses}`,
+                                    onClick: hasYesterdayData ? () => updateTimeframeState(String(mostRecentDay)) : undefined,
+                                    disabled: !hasYesterdayData,
+                                    title: hasYesterdayData ? `Show data from Day ${mostRecentDay}` : 'No data available for yesterday'
+                                }, [
+                                    h(api.utils.icons.Calendar, { key: 'icon', size: 14 }),
+                                    h('span', { key: 'text' }, 'Yesterday')
+                                ]);
+                            })(),
+                            
+                            // Day dropdown
+                            (() => {
+                                const allDays = Object.keys(historicalData.days).map(Number);
+                                const mostRecentDay = Math.max(...allDays);
+                                const availableDays = allDays
+                                    .sort((a, b) => b - a)  // Descending order (newest first)
+                                    .filter(day => day < mostRecentDay);  // Exclude most recent (that's "yesterday" button)
+                                
+                                const hasOtherDays = availableDays.length > 0;
+                                
+                                return h('select', {
+                                    key: 'daySelect',
+                                    className: `${btnBaseClasses} ${btnClasses} ${!hasOtherDays ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`,
+                                    disabled: !hasOtherDays,
+                                    value: availableDays.includes(Number(timeframeState)) ? timeframeState : '',
+                                    onChange: (e) => {
+                                        if (e.target.value) {
+                                            updateTimeframeState(e.target.value);
+                                        }
+                                    },
+                                    title: hasOtherDays ? 'Select a day to view' : 'No historical data available'
+                                }, [
+                                    h('option', { key: 'placeholder', value: '', disabled: true }, 'Select Day'),
+                                    ...availableDays.map(day => {
+                                        const label = `Day ${day}`;
+                                        return h('option', { key: day, value: String(day) }, label);
+                                    })
+                                ]);
+                            })()
+                        ] : [
+                            // Compare mode: Two dropdowns
+                            // First dropdown (Primary - newer day)
+                            (() => {
+                                const allDays = Object.keys(historicalData.days).map(Number).sort((a, b) => b - a);
+                                const mostRecentDay = allDays[0]; // Most recent day with data
+                                
+                                // Filter: Only show days that have at least one older day available
+                                const availablePrimaryDays = allDays.filter(day => {
+                                    const olderDays = allDays.filter(d => d < day);
+                                    return olderDays.length > 0;
+                                });
+                                
+                                return h('select', {
+                                    key: 'primaryDaySelect',
+                                    className: `${btnBaseClasses} ${btnClasses} cursor-pointer`,
+                                    value: comparePrimaryDay || '',
+                                    onChange: async (e) => {
+                                        const newPrimary = Number(e.target.value);
+                                        setComparePrimaryDay(newPrimary);
+                                        self.StateCache.comparePrimaryDay = newPrimary;
+                                        await self.safeStorageSetUI('comparePrimaryDay', newPrimary);
+                                        
+                                        // Auto-adjust secondary if now invalid
+                                        if (compareSecondaryDay >= newPrimary) {
+                                            const adjusted = newPrimary - 1;
+                                            setCompareSecondaryDay(adjusted);
+                                            self.StateCache.compareSecondaryDay = adjusted;
+                                            await self.safeStorageSetUI('compareSecondaryDay', adjusted);
+                                        }
+                                    }
+                                }, [
+                                    h('option', { key: 'placeholder', value: '', disabled: true }, 'Select Primary Day'),
+                                    ...availablePrimaryDays.map(day => {
+                                        const label = day === mostRecentDay ? `Day ${day} (Yesterday)` : `Day ${day}`;
+                                        return h('option', { key: day, value: day }, label);
+                                    })
+                                ]);
+                            })(),
+                            
+                            // "vs" label
+                            h('span', { key: 'vs', className: 'text-xs font-medium text-muted-foreground' }, 'vs'),
+                            
+                            // Second dropdown (Secondary - older day)
+                            (() => {
+                                const allDays = Object.keys(historicalData.days).map(Number).sort((a, b) => b - a);
+                                
+                                // Filter: Only show days older than primary
+                                const availableSecondaryDays = comparePrimaryDay 
+                                    ? allDays.filter(day => day < comparePrimaryDay)
+                                    : [];
+                                
+                                const mostRecentDay = allDays[0];
+                                
+                                return h('select', {
+                                    key: 'secondaryDaySelect',
+                                    className: `${btnBaseClasses} ${btnClasses} ${availableSecondaryDays.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`,
+                                    disabled: availableSecondaryDays.length === 0,
+                                    value: compareSecondaryDay || '',
+                                    onChange: async (e) => {
+                                        const newSecondary = Number(e.target.value);
+                                        setCompareSecondaryDay(newSecondary);
+                                        self.StateCache.compareSecondaryDay = newSecondary;
+                                        await self.safeStorageSetUI('compareSecondaryDay', newSecondary);
+                                    },
+                                    title: availableSecondaryDays.length === 0 ? 'No older days available' : 'Select comparison day'
+                                }, [
+                                    h('option', { key: 'placeholder', value: '', disabled: true }, 'Compare To'),
+                                    ...availableSecondaryDays.map(day => {
+                                        const label = `Day ${day}`;
+                                        return h('option', { key: day, value: day }, label);
+                                    })
+                                ]);
+                            })()
+                        ]
                     ]),
                     
                     // Right side - Update indicator
@@ -816,86 +1188,59 @@ const AdvancedAnalytics = {
                     ])
                 );
 
-                const ridershipCell = self.createReactMetricCell(
-                    'ridership',
-                    row.ridership.toLocaleString(undefined, {maximumFractionDigits: 0}),
-                    sortState,
-                    groupState,
-                    'performance'
-                );
+                const ridershipCell = row.isComparison 
+                    ? self.createReactComparisonCell('ridership', row.ridership, sortState, groupState, 'performance')
+                    : self.createReactMetricCell('ridership', row.ridership.toLocaleString(undefined, {maximumFractionDigits: 0}), sortState, groupState, 'performance');
 
-                const capacityCell = self.createReactMetricCell(
-                    'capacity',
-                    row.capacity.toLocaleString(undefined, {maximumFractionDigits: 0}),
-                    sortState,
-                    groupState,
-                    'trains'
-                );
+                const capacityCell = row.isComparison 
+                    ? self.createReactComparisonCell('capacity', row.capacity, sortState, groupState, 'trains')
+                    : self.createReactMetricCell('capacity', row.capacity.toLocaleString(undefined, {maximumFractionDigits: 0}), sortState, groupState, 'trains');
 
-                const utilizationClasses = self.getUtilizationClasses(row.utilization);
-                const utilizationCell = h('td', {
-                    key: 'utilization',
-                    className: `px-3 py-2 align-middle text-right font-mono ${utilizationClasses} ${self.getCellClasses('utilization', sortState, groupState, 'performance')}`
-                }, `${row.utilization}%`);
+                const utilizationCell = row.isComparison 
+                    ? self.createReactComparisonCell('utilization', row.utilization, sortState, groupState, 'performance')
+                    : h('td', {
+                        key: 'utilization',
+                        className: `px-3 py-2 align-middle text-right font-mono ${self.getUtilizationClasses(row.utilization)} ${self.getCellClasses('utilization', sortState, groupState, 'performance')}`
+                    }, `${row.utilization}%`);
 
-                const stationsCell = self.createReactMetricCell(
-                    'stations',
-                    row.stations.toString(),
-                    sortState,
-                    groupState,
-                    'trains'
-                );
+                const stationsCell = row.isComparison 
+                    ? self.createReactComparisonCell('stations', row.stations, sortState, groupState, 'trains')
+                    : self.createReactMetricCell('stations', row.stations.toString(), sortState, groupState, 'trains');
 
-                const trainColors = self.CONFIG.COLORS.TRAINS;
-                const trainScheduleCell = h('td', {
-                    key: 'trainSchedule',
-                    className: `px-3 py-2 align-middle text-right font-mono ${self.getCellClasses('trainSchedule', sortState, groupState, 'trains')}`
-                },
-                    // h('span', { hey: 'tot'}, row.trainsHigh + row.trainsMedium + row.trainsLow),
-                    // h('small', {hey: 'details'}, ' (' + row.trainsHigh + '-' + row.trainsMedium + '-' + row.trainsLow + ')')
-                    h('span', { className: `font-bold` }, (row.trainsHigh + row.trainsMedium + row.trainsLow)),
-                    ' (',
-                    h('small', {hey: 'details'},
-                        h('span', { className: `${trainColors.HIGH}` }, row.trainsHigh), '-',
-                        h('span', { className: `${trainColors.MEDIUM}` }, row.trainsMedium), '-',
-                        h('span', { className: `${trainColors.LOW}` }, row.trainsLow),
-                    ),
-                    ')',
-                );
+                const trainScheduleCell = row.isComparison 
+                    ? self.createReactComparisonCell('trainSchedule', row.trainSchedule, sortState, groupState, 'trains')
+                    : (() => {
+                        const trainColors = self.CONFIG.COLORS.TRAINS;
+                        return h('td', {
+                            key: 'trainSchedule',
+                            className: `px-3 py-2 align-middle text-right font-mono ${self.getCellClasses('trainSchedule', sortState, groupState, 'trains')}`
+                        },
+                            h('span', { className: `font-bold` }, (row.trainsHigh + row.trainsMedium + row.trainsLow)),
+                            ' (',
+                            h('small', {hey: 'details'},
+                                h('span', { className: `${trainColors.HIGH}` }, row.trainsHigh), '-',
+                                h('span', { className: `${trainColors.MEDIUM}` }, row.trainsMedium), '-',
+                                h('span', { className: `${trainColors.LOW}` }, row.trainsLow),
+                            ),
+                            ')',
+                        );
+                    })();
 
-                const dailyCostCell = self.createReactCostCell(
-                    'dailyCost',
-                    `$${row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`,
-                    sortState,
-                    groupState,
-                    'finance'
-                );
+                const dailyCostCell = row.isComparison 
+                    ? self.createReactComparisonCell('dailyCost', row.dailyCost, sortState, groupState, 'finance')
+                    : self.createReactCostCell('dailyCost', `$${row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`, sortState, groupState, 'finance');
 
-                const dailyRevenueCell = self.createReactRevenueCell(
-                    'dailyRevenue',
-                    `$${row.dailyRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}`,
-                    sortState,
-                    groupState,
-                    'finance'
-                );
+                const dailyRevenueCell = row.isComparison 
+                    ? self.createReactComparisonCell('dailyRevenue', row.dailyRevenue, sortState, groupState, 'finance')
+                    : self.createReactRevenueCell('dailyRevenue', `$${row.dailyRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}`, sortState, groupState, 'finance');
 
-                const dailyProfitCell = self.createReactProfitCell(
-                    'dailyProfit',
-                    row.dailyProfit,
-                    sortState,
-                    groupState,
-                    'finance'
-                );
+                const dailyProfitCell = row.isComparison 
+                    ? self.createReactComparisonCell('dailyProfit', row.dailyProfit, sortState, groupState, 'finance')
+                    : self.createReactProfitCell('dailyProfit', row.dailyProfit, sortState, groupState, 'finance');
 
-                const costPerPassengerCell = self.createReactMetricCell(
-                    'costPerPassenger',
-                    row.costPerPassenger > 0 
-                        ? `$${row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-                        : '$0.00',
-                    sortState,
-                    groupState,
-                    'performance'
-                );
+                const costPerPassengerCell = row.isComparison 
+                    ? self.createReactComparisonCell('costPerPassenger', row.costPerPassenger, sortState, groupState, 'performance')
+                    : self.createReactMetricCell('costPerPassenger', row.costPerPassenger > 0 ? `$${row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '$0.00', sortState, groupState, 'performance');
 
                 return h('tr', {
                     key: row.id,
@@ -974,6 +1319,66 @@ const AdvancedAnalytics = {
         return this.createReactMetricCell(columnKey, formattedValue, sortState, groupState, group, {
             valueColorClass
         });
+    },
+
+    // Create comparison cell (shows percentage change with color/arrow)
+    createReactComparisonCell(columnKey, comparisonData, sortState, groupState, group) {
+        const h = this.h;
+        
+        // Handle special cases
+        if (comparisonData === 'NEW') {
+            return h('td', {
+                key: columnKey,
+                className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, groupState, group)}`
+            }, h('span', { className: this.CONFIG.COLORS.COMPARE.NEW }, 'NEW'));
+        }
+        
+        if (comparisonData === 'DELETED') {
+            return h('td', {
+                key: columnKey,
+                className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, groupState, group)}`
+            }, h('span', { className: this.CONFIG.COLORS.COMPARE.DELETED }, '(Deleted)'));
+        }
+        
+        // Handle percentage change
+        if (comparisonData && typeof comparisonData === 'object') {
+            const { type, value, isImprovement } = comparisonData;
+            
+            if (type === 'zero') {
+                return h('td', {
+                    key: columnKey,
+                    className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, groupState, group)}`
+                }, h('span', { className: this.CONFIG.COLORS.COMPARE.NEUTRAL }, `0% ${this.CONFIG.ARROWS.NEUTRAL}`));
+            }
+            
+            // Normal percentage
+            const colorClass = value === 0 
+                ? this.CONFIG.COLORS.COMPARE.NEUTRAL
+                : (isImprovement ? this.CONFIG.COLORS.COMPARE.POSITIVE : this.CONFIG.COLORS.COMPARE.NEGATIVE);
+            const arrow = value > 0 ? this.CONFIG.ARROWS.UP : (value < 0 ? this.CONFIG.ARROWS.DOWN : this.CONFIG.ARROWS.NEUTRAL);
+            const formattedValue = `${value > 0 ? '+' : ''}${value.toFixed(1)}% ${arrow}`;
+            
+            return h('td', {
+                key: columnKey,
+                className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, groupState, group)}`
+            }, h('span', { className: colorClass }, formattedValue));
+        }
+        
+        // Fallback
+        return h('td', {
+            key: columnKey,
+            className: `px-3 py-2 align-middle text-right font-mono ${this.getCellClasses(columnKey, sortState, groupState, group)}`
+        }, '-');
+    },
+
+    // Helper: Render cell based on whether it's comparison data or regular data
+    renderDataCell(columnKey, value, isComparison, sortState, groupState, group, formatFn) {
+        if (isComparison) {
+            return this.createReactComparisonCell(columnKey, value, sortState, groupState, group);
+        } else {
+            const formattedValue = formatFn ? formatFn(value) : value;
+            return this.createReactMetricCell(columnKey, formattedValue, sortState, groupState, group);
+        }
     },
 
     calculateRouteMetrics(route, trainType, ridership, dailyRevenue) {
@@ -1071,14 +1476,6 @@ const AdvancedAnalytics = {
             return colors.WARNING;
         }
         return colors.GOOD;
-    },
-
-    calculatePercentageChange(currentValue, baselineValue) {
-        if (baselineValue === 0) return null;
-        if (baselineValue < 0) {
-            return ((currentValue - baselineValue) / Math.abs(baselineValue)) * 100;
-        }
-        return ((currentValue - baselineValue) / baselineValue) * 100;
     },
 
     getHeaderClasses(column, sortState, groupState, group) {
