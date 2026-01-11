@@ -1,9 +1,10 @@
-// Advanced Analytics Mod for Subway Builder v4.2.1
+// Advanced Analytics Mod for Subway Builder v4.3.0
 // Phase 4: Route Status Tracking System - properly detect NEW/DELETED routes using lifecycle hooks
 // Status lifecycle: 'new' (created) → 'ongoing' (after day change) → 'deleted' (if deleted)
 // v4.1.0: Code cleanup - removed debug logs, added utility functions and section comments
 // v4.2.0: Method extraction - buildComparisonRow (~160 lines), renderDayDropdown, JSDoc comments
 // v4.2.1: Fix - added $ currency formatting to finance columns in absolute comparison mode
+// v4.3.0: Cell consolidation - formatCurrency utility, removed Cost/Revenue wrappers, added JSDoc
 
 const AdvancedAnalytics = {
     // API References (cached on init)
@@ -169,6 +170,23 @@ const AdvancedAnalytics = {
                 return h('option', { key: day, value: day }, label);
             })
         ]);
+    },
+
+    /**
+     * Format a number as currency with proper decimals
+     * 
+     * @param {number} value - The value to format
+     * @param {number} decimals - Number of decimal places (default: 0)
+     * @returns {string} Formatted currency string (e.g., "$1,234" or "$1.23")
+     */
+    formatCurrency(value, decimals = 0) {
+        const absValue = Math.abs(value);
+        const formatted = absValue.toLocaleString(undefined, {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        });
+        const sign = value < 0 ? '-' : '';
+        return `${sign}$${formatted}`;
     },
 
     // Check if route was new on a specific day
@@ -1596,11 +1614,11 @@ const AdvancedAnalytics = {
 
                 const dailyCostCell = row.isComparison 
                     ? self.createReactComparisonCell('dailyCost', row.dailyCost, row.primaryValues?.dailyCost, row.secondaryValues?.dailyCost, compareShowPercentages, sortState, groupState, 'finance')
-                    : self.createReactCostCell('dailyCost', `$${row.dailyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`, sortState, groupState, 'finance');
+                    : self.createReactMetricCell('dailyCost', self.formatCurrency(row.dailyCost), sortState, groupState, 'finance');
 
                 const dailyRevenueCell = row.isComparison 
                     ? self.createReactComparisonCell('dailyRevenue', row.dailyRevenue, row.primaryValues?.dailyRevenue, row.secondaryValues?.dailyRevenue, compareShowPercentages, sortState, groupState, 'finance')
-                    : self.createReactRevenueCell('dailyRevenue', `$${row.dailyRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}`, sortState, groupState, 'finance');
+                    : self.createReactMetricCell('dailyRevenue', self.formatCurrency(row.dailyRevenue), sortState, groupState, 'finance');
 
                 const dailyProfitCell = row.isComparison 
                     ? self.createReactComparisonCell('dailyProfit', row.dailyProfit, row.primaryValues?.dailyProfit, row.secondaryValues?.dailyProfit, compareShowPercentages, sortState, groupState, 'finance')
@@ -1608,7 +1626,7 @@ const AdvancedAnalytics = {
 
                 const costPerPassengerCell = row.isComparison 
                     ? self.createReactComparisonCell('costPerPassenger', row.costPerPassenger, row.primaryValues?.costPerPassenger, row.secondaryValues?.costPerPassenger, compareShowPercentages, sortState, groupState, 'performance')
-                    : self.createReactMetricCell('costPerPassenger', row.costPerPassenger > 0 ? `$${row.costPerPassenger.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '$0.00', sortState, groupState, 'performance');
+                    : self.createReactMetricCell('costPerPassenger', self.formatCurrency(row.costPerPassenger, 2), sortState, groupState, 'performance');
 
                 return h('tr', {
                     key: row.id,
@@ -1653,6 +1671,21 @@ const AdvancedAnalytics = {
         return h(AnalyticsPanel);
     },
 
+    // ============================================================================
+    // CELL RENDERING METHODS
+    // ============================================================================
+
+    /**
+     * Create a standard metric cell
+     * 
+     * @param {string} columnKey - Column identifier
+     * @param {string} content - Formatted content to display
+     * @param {Object} sortState - Current sort state
+     * @param {Object} groupState - Current group visibility state
+     * @param {string} group - Group this column belongs to ('performance', 'trains', 'finance')
+     * @param {Object} options - Optional styling options (e.g., valueColorClass)
+     * @returns {ReactElement} Table cell element
+     */
     createReactMetricCell(columnKey, content, sortState, groupState, group, options = {}) {
         const h = this.h;
         const {
@@ -1667,24 +1700,21 @@ const AdvancedAnalytics = {
         );
     },
 
-    createReactCostCell(columnKey, content, sortState, groupState, group) {
-        return this.createReactMetricCell(columnKey, content, sortState, groupState, group);
-    },
-
-    createReactRevenueCell(columnKey, content, sortState, groupState, group) {
-        return this.createReactMetricCell(columnKey, content, sortState, groupState, group);
-    },
-
+    /**
+     * Create a profit cell with red color for negative values
+     * 
+     * @param {string} columnKey - Column identifier
+     * @param {number} profitValue - Profit value (can be negative)
+     * @param {Object} sortState - Current sort state
+     * @param {Object} groupState - Current group visibility state
+     * @param {string} group - Group this column belongs to
+     * @returns {ReactElement} Table cell element
+     */
     createReactProfitCell(columnKey, profitValue, sortState, groupState, group) {
         const isNegative = profitValue < 0;
-        const absValue = Math.abs(profitValue);
-        const formattedValue = isNegative 
-            ? `-$${absValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`
-            : `$${absValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-
         const valueColorClass = isNegative ? this.CONFIG.COLORS.VALUE.NEGATIVE : this.CONFIG.COLORS.VALUE.DEFAULT;
 
-        return this.createReactMetricCell(columnKey, formattedValue, sortState, groupState, group, {
+        return this.createReactMetricCell(columnKey, this.formatCurrency(profitValue), sortState, groupState, group, {
             valueColorClass
         });
     },
