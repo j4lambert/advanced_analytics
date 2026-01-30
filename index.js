@@ -10,7 +10,8 @@
 // v4.4.3-debug: Debug version with comprehensive console logging for NEW route filtering
 // v4.4.4-debug: Fix - filter routes with zero ridership in EITHER comparison day (incomplete data)
 // v4.5.0: Fix - properly filter routes that were 'new' in either comparison day
-// v4.5.1: Fix - remove debug logs, minor ui fixes, added disabled button workaround 
+// v4.5.1: Fix - remove debug logs, minor ui fixes, added disabled button workaround
+// v4.5.2: Fix - transfer calculation workaround for API bug (routeIds always returns 1 route)
 
 const AdvancedAnalytics = {
     // API References (cached on init)
@@ -64,6 +65,7 @@ const AdvancedAnalytics = {
             medium: 9,   // 5am-6am (1h) + 9am-4pm (7h) + 7pm-8pm (1h)
             high: 6      // 6am-9am (3h) + 4pm-7pm (3h)
         },
+        TRANSFER_WALKING_TIME_THRESHOLD: 100,  // meters (API bug, it's labelled as time metric while it should be distance)
         COLORS: {
             // Train Schedule Colors (Labels only)
             TRAINS: {
@@ -214,10 +216,19 @@ const AdvancedAnalytics = {
      * Calculate transfer connections between routes using station routeIds
      * Returns a map of route IDs to transfer data including count, connected routes, and station IDs
      * 
+     * ORIGINAL VERSION - CURRENTLY COMMENTED OUT DUE TO API BUG
+     * Calculate transfer connections between routes using station routeIds
+     * Returns a map of route IDs to transfer data including count, connected routes, and station IDs
+     * 
+     * BUG: station.routeIds always returns single route ID even for transfer stations
+     * Will re-enable when API is fixed
+     * 
+     * 
      * @param {Array} routes - Array of route objects
      * @returns {Object} Map of routeId -> { count, routes, stationIds }
      */
-    calculateTransfers(routes) {
+
+    /*calculateTransfers(routes) {
         const api = this.api;
         const stations = api.gameState.getStations();
         
@@ -274,6 +285,93 @@ const AdvancedAnalytics = {
                 count: totalCount,
                 routes: connectedRouteData.map(r => r.routeName),
                 stationIds: [...new Set(allStationIds)] // Remove duplicates
+            };
+        });
+        
+        return transferMap;
+    },*/
+
+    /**
+     * Calculate transfer connections using nearbyStations with walkingTime
+     * WORKAROUND for API bug where routeIds always returns single ID
+     * 
+     * A station is considered a transfer if:
+     * - It has nearbyStations with walkingTime < 100 seconds
+     * - The nearby station belongs to a different route
+     * 
+     * @param {Array} routes - Array of route objects
+     * @returns {Object} Map of routeId -> { count, routes, stationIds }
+     */
+    calculateTransfers(routes) {
+        const api = this.api;
+        const stations = api.gameState.getStations();
+        const WALKING_TIME_THRESHOLD = this.CONFIG.TRANSFER_WALKING_TIME_THRESHOLD;
+        
+        // Build transfer map for each route
+        const transferMap = {};
+        
+        routes.forEach(route => {
+            // Map of otherRouteId -> Set of transfer station IDs
+            const transfersByRoute = new Map();
+            
+            // Find all stations that belong to this route
+            stations.forEach(station => {
+                // Check if this station belongs to the current route
+                if (!station.routeIds || !station.routeIds.includes(route.id)) return;
+                if (!station.nearbyStations || station.nearbyStations.length === 0) return;
+                
+                // Check nearby stations for transfers
+                station.nearbyStations.forEach(nearby => {
+                    // Filter by walking time threshold
+                    if (nearby.walkingTime >= WALKING_TIME_THRESHOLD) return;
+                    
+                    // Find the nearby station to get its route
+                    const nearbyStation = stations.find(s => s.id === nearby.stationId);
+                    if (!nearbyStation || !nearbyStation.routeIds) return;
+                    
+                    // Check if nearby station belongs to a different route
+                    nearbyStation.routeIds.forEach(otherRouteId => {
+                        // Skip if it's the same route (no self-transfers)
+                        if (otherRouteId === route.id) return;
+                        
+                        // Found a transfer!
+                        if (!transfersByRoute.has(otherRouteId)) {
+                            transfersByRoute.set(otherRouteId, new Set());
+                        }
+                        transfersByRoute.get(otherRouteId).add(station.id);
+                    });
+                });
+            });
+            
+            // Build the result
+            let totalCount = 0;
+            const connectedRouteData = [];
+            const allStationIds = [];
+            
+            transfersByRoute.forEach((stationIdsSet, otherRouteId) => {
+                const otherRoute = routes.find(r => r.id === otherRouteId);
+                const stationIds = Array.from(stationIdsSet);
+                totalCount += stationIds.length;
+                connectedRouteData.push({
+                    routeId: otherRouteId,
+                    routeName: otherRoute ? (otherRoute.name || otherRoute.bullet) : otherRouteId,
+                    sharedCount: stationIds.length
+                });
+                allStationIds.push(...stationIds);
+            });
+            
+            // Sort by shared count (descending), then alphabetically
+            connectedRouteData.sort((a, b) => {
+                if (b.sharedCount !== a.sharedCount) {
+                    return b.sharedCount - a.sharedCount;
+                }
+                return a.routeName.localeCompare(b.routeName);
+            });
+            
+            transferMap[route.id] = {
+                count: totalCount,
+                routes: connectedRouteData.map(r => r.routeName),
+                stationIds: allStationIds  // Already unique due to Set usage
             };
         });
         
