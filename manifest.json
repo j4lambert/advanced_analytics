@@ -2,7 +2,7 @@
     "id": "com.stefanorigano.advanced_analytics",
     "name": "Advanced Analytics",
     "description": "Adds cool stuff",
-    "version": "0.10.3",
+    "version": "5.0.0-alpha",
     "author": { "name": "Steno" },
-    "main": "index.js"
+    "main": "dist/index.js"
 }
