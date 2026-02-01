@@ -22,7 +22,7 @@ export function Toolbar({
     onCompareShowPercentagesChange,
     historicalData
 }) {
-    const btnBaseClasses = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border';
+    const btnBaseClasses = 'whitespace-nowrap inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border';
     const btnClasses = 'bg-background hover:bg-accent hover:text-accent-foreground border-input';
     const btnActiveClasses = 'bg-primary text-primary-foreground border-primary hover:bg-primary/90';
     
@@ -146,20 +146,22 @@ export function Toolbar({
                     </>
                 )}
                 
-                <span className="border-primary border-r ml-2 mr-1 mr-2 opacity-40 py-2" />
-                
                 {/* Compare checkbox */}
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                    {availableDays.length > 0 && (
-                        <input
-                            type="checkbox"
-                            checked={compareMode}
-                            onChange={(e) => onCompareModeChange(e.target.checked)}
-                            className="cursor-pointer"
-                        />
-                    )}
-                    <span className="text-xs">Compare</span>
-                </label>
+                {availableDays.length > 0 && (
+                    <>
+                        <span className="border-primary border-r ml-2 mr-1 mr-2 opacity-40 py-2" />
+                        
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={compareMode}
+                                    onChange={(e) => onCompareModeChange(e.target.checked)}
+                                    className="cursor-pointer"
+                                />
+                            <span className="text-xs">Compare</span>
+                        </label>
+                    </>
+                )}
             </div>
             
             {/* Right side - Status indicator */}
