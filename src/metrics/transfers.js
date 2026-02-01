@@ -83,7 +83,8 @@ export function calculateTransfers(routes, api) {
         transferMap[route.id] = {
             count: totalCount,
             routes: connectedRouteData.map(r => r.routeName),
-            stationIds: allStationIds  // Already unique due to Set usage
+            routeIds: connectedRouteData.map(r => r.routeId),
+            stationIds: allStationIds
         };
     });
     

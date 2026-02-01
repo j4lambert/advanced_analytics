@@ -168,11 +168,19 @@ export function TableRow({ row, sortState, groupState, compareShowPercentages = 
                     group="trains"
                 />
             ) : (
-                <td className={`px-3 py-2 align-middle text-right font-mono text-xs ${getCellClasses('transfers', sortState, groupState, 'trains')}`}>
-                    {row.transfers?.count === 0 
-                        ? '0' 
-                        : `${row.transfers.count} (${row.transfers.routes.join(', ')})`
-                    }
+                <td className={`px-3 py-2 align-middle text-right ${getCellClasses('transfers', sortState, groupState, 'trains')}`}>
+                    {row.transfers?.count === 0 ? (
+                        <span className="font-mono text-xs">0</span>
+                    ) : (
+                        <div className="flex items-center justify-end gap-1.5">
+                            <span className="font-mono text-xs">{row.transfers.count}</span>
+                            <div className="flex items-center gap-0.5">
+                                {row.transfers.routeIds?.map((routeId) => (
+                                    <RouteBadge key={routeId} routeId={routeId} size="1rem" />
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </td>
             )}
             
