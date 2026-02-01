@@ -2,6 +2,7 @@
 // Renders a single table row with all cells
 
 import { CONFIG } from '../config.js';
+import { RouteBadge } from './route-badge.jsx';
 import { formatCurrency, calculateTotalTrains } from '../utils/formatting.js';
 import { getCellClasses } from '../utils/sorting.js';
 import { getUtilizationClasses, getComparisonColorClass, getComparisonArrow } from '../utils/colors.js';
@@ -39,8 +40,8 @@ export function TableRow({ row, sortState, groupState, compareShowPercentages = 
                 className={`px-3 py-2 align-middle text-left ${isDeleted ? 'opacity-50' : 'cursor-pointer hover:text-primary'} transition-colors ${getCellClasses('name', sortState, groupState)}`}
                 onClick={handleNameClick}
             >
-                <div className="font-medium">
-                    {row.name}
+                <div className="font-medium text-right">
+                    <RouteBadge routeId={row.id} size="1.4rem" />
                     {isDeleted && <span className="ml-2 text-xs text-muted-foreground">(Deleted)</span>}
                 </div>
             </td>
