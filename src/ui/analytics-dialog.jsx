@@ -52,7 +52,7 @@ export function AnalyticsDialog() {
             isOpen={isOpen}
             onClose={() => handleOpenChange(false)}
         >
-            <section class="rounded-lg border bg-card text-card-foreground shadow-sm mb-6">
+            <section class="overflow-hidden pb-4 rounded-lg border backdrop-blur-sm text-card-foreground mb-6">
                 <AnalyticsPanel />
             </section>
         </Dialog>

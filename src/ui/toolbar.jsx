@@ -32,7 +32,7 @@ export function Toolbar({
     const hasOtherDays = availableDays.length > 0;
     
     return (
-        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
+        <div className="bg-primary-foreground flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
             {/* Left side - Filter buttons */}
             <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium text-muted-foreground mr-1">Metrics:</span>
