@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { initLifecycleHooks } from './core/lifecycle.js';
 import { injectStyles } from './ui/styles.js';
 import { AnalyticsDialog } from './ui/analytics-dialog.jsx';
+import { AnalyticsPanel } from './ui/analytics-panel.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
@@ -29,7 +30,7 @@ const AdvancedAnalytics = {
         }
         
         console.log(`${CONFIG.LOG_PREFIX} Architecture: Modular (17 files)`);
-        console.log(`${CONFIG.LOG_PREFIX} UI: Dialog-based with JSX`);
+        console.log(`${CONFIG.LOG_PREFIX} UI: Dialog-based with JSX + Lite toolbar panel`);
         
         // Initialize lifecycle hooks first
         initLifecycleHooks(api);
@@ -39,13 +40,12 @@ const AdvancedAnalytics = {
             injectStyles();
             
             // Register dialog component in top-bar (hidden, just for mounting)
-            // We'll control visibility via the Dialog component's isOpen state
             api.ui.registerComponent('top-bar', {
                 id: 'aa-dialog-mount',
                 component: AnalyticsDialog
             });
             
-            // Add bottom bar button
+            // Add bottom bar button for full dialog
             api.ui.addButton('bottom-bar', {
                 id: 'advanced-analytics-btn',
                 label: 'Advanced Analytics',
@@ -57,8 +57,18 @@ const AdvancedAnalytics = {
                 }
             });
             
+            // Add toolbar panel for lite version
+            api.ui.addToolbarPanel({
+                id: 'advanced-analytics-lite',
+                title: 'Route Performance',
+                icon: 'TrendingUp',
+                width: 640,
+                render: AnalyticsPanel
+            });
+            
             console.log(`${CONFIG.LOG_PREFIX} ✓ Dialog component registered`);
             console.log(`${CONFIG.LOG_PREFIX} ✓ Bottom bar button registered`);
+            console.log(`${CONFIG.LOG_PREFIX} ✓ Lite toolbar panel registered`);
         });
         
         this.initialized = true;

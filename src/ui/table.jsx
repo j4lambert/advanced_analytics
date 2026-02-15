@@ -1,5 +1,6 @@
 // Sortable table component
 // Renders table with sortable headers and rows
+// Add liteMode and liteHeaders props to the function signature
 
 import { CONFIG } from '../config.js';
 import { TableRow } from './table-row.jsx';
@@ -13,7 +14,9 @@ export function SortableTable({
     sortState, 
     onSortChange, 
     groupState,
-    compareShowPercentages 
+    compareShowPercentages,
+    liteMode = false,
+    liteHeaders = null
 }) {
     const handleSort = (column) => {
         const newState = {
@@ -23,11 +26,14 @@ export function SortableTable({
         onSortChange(newState);
     };
     
+    // Use lite headers if in lite mode, otherwise use full headers
+    const headers = liteMode && liteHeaders ? liteHeaders : CONFIG.TABLE_HEADERS;
+    
     return (
         <table className="w-full border-collapse text-sm">
             <thead>
                 <tr className="border-b border-border">
-                    {CONFIG.TABLE_HEADERS.map(header => {
+                    {headers.map(header => {
                         const alignClass = header.align === 'right' ? 'text-right' : 
                                          header.align === 'center' ? 'text-center' : 'text-left';
                         const isActiveSort = sortState.column === header.key;
