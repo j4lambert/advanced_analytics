@@ -31,6 +31,10 @@ export function injectStyles() {
             left: 0;
         }
 
+        .aa-dropdown-menu {
+            min-width: 100%;
+        }
+
         /* ===== Specific ===== */
         /* Toolbar checkbox styling */
         .aa-toolbar-checkbox {
