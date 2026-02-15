@@ -21,6 +21,9 @@ export async function captureHistoricalData(day, api, storage) {
         const lineMetrics = api.gameState.getLineMetrics();
         const timeWindowHours = api.gameState.getRidershipStats().timeWindowHours;
 
+        // Get current city code
+        const cityCode = api.utils.getCityCode?.() || null;
+
         // Calculate transfers for all routes
         const transfersMap = calculateTransfers(routes, api);
 
@@ -72,16 +75,17 @@ export async function captureHistoricalData(day, api, storage) {
         // Load existing historical data
         const historicalData = await storage.get('historicalData', { days: {} });
         
-        // Store snapshot for this day
+        // Store snapshot for this day (including city code)
         historicalData.days[day] = {
             timestamp: Date.now(),
+            cityCode: cityCode,  // Store city code for reference
             routes: processedData
         };
 
         // Save to storage
         await storage.set('historicalData', historicalData);
         
-        console.log(`${CONFIG.LOG_PREFIX} Captured data for Day ${day}: ${processedData.length} routes`);
+        console.log(`${CONFIG.LOG_PREFIX} Captured data for Day ${day}: ${processedData.length} routes (City: ${cityCode})`);
     } catch (error) {
         console.error(`${CONFIG.LOG_PREFIX} Failed to capture historical data:`, error);
     }

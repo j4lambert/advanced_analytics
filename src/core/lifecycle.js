@@ -7,6 +7,10 @@ import { captureHistoricalData } from '../metrics/historical-data.js';
 
 let storage = null;
 
+// Global variable to track current save name
+// Updated on game load/save events
+let currentSaveName = null;
+
 /**
  * Initialize the storage instance
  * @param {string} saveName - Current save name
@@ -17,7 +21,16 @@ function initStorage(saveName) {
     } else {
         storage.setSaveName(saveName);
     }
+    currentSaveName = saveName;
     return storage;
+}
+
+/**
+ * Get current save name (for use by UI components)
+ * @returns {string|null} Current save name or null if not set
+ */
+export function getCurrentSaveName() {
+    return currentSaveName;
 }
 
 /**
@@ -82,6 +95,7 @@ export function initLifecycleHooks(api) {
         }
         
         storage.setSaveName(saveName);
+        currentSaveName = saveName;
         
         // Backup working data
         await storage.backup();
