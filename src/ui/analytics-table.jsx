@@ -127,7 +127,7 @@ export function AnalyticsTable({ groups = ['trains', 'finance', 'performance'] }
                         historicalData={historicalData}
                     />
                 </div>
-                <div className="max-w-full overflow-hidden rounded-lg border border-foreground/20 backdrop-blur-sm text-card-foreground mb-6">
+                <div className="max-w-full rounded-lg border border-foreground/20 backdrop-blur-sm text-card-foreground mb-6">
                     <div className="flex-1 overflow-auto">
                         <SortableTable
                             data={tableData}

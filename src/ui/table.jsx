@@ -7,6 +7,7 @@ import { getSortIndicator, getHeaderClasses } from '../utils/sorting.js';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
+const { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } = api.utils.components;
 
 export function SortableTable({ 
     data, 
@@ -36,32 +37,51 @@ export function SortableTable({
     return (
         <table className="aa-table w-full border-collapse text-sm">
             <thead>
-                <tr className="border-b border-border">
+                <tr className="border-b border-border z-10">
                     {visibleHeaders.map(header => {
                         const alignClass = header.align === 'right' ? 'text-right' : 
                                          header.align === 'center' ? 'text-center' : 'text-left';
                         const isActiveSort = sortState.column === header.key;
                         
+                        // Header content
+                        const headerContent = (
+                            <div className={`flex ${header.align === 'center' ? 'justify-center' : 'justify-end'} items-center gap-0.5 whitespace-nowrap`}>
+                                <span className={isActiveSort ? 'inline-block' : 'inline-block opacity-0'}>
+                                    {getSortIndicator(header.key, sortState)}
+                                </span>
+                                <div className="whitespace-nowrap">
+                                    <span className="font-medium text-xs">{header.label}</span>
+                                    {header.small && (
+                                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                                            {header.small}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                        
                         return (
                             <th 
                                 key={header.key}
                                 className={`px-3 py-2 ${alignClass} cursor-pointer select-none transition-colors ${getHeaderClasses(header.key, sortState, groupState, header.group)}`}
-                                title={header.description ? header.description : ''}
                                 onClick={() => handleSort(header.key)}
                             >
-                                <div className={`flex ${header.align === 'center' ? 'justify-center' : 'justify-end'} items-center gap-0.5 whitespace-nowrap ${header.description ? 'cursor-help' : ''}`}>
-                                    <span className={isActiveSort ? 'inline-block' : 'inline-block opacity-0'}>
-                                        {getSortIndicator(header.key, sortState)}
-                                    </span>
-                                    <div className="whitespace-nowrap">
-                                        <span className="font-medium text-xs">{header.label}</span>
-                                        {header.small && (
-                                            <span className="text-[10px] text-muted-foreground font-normal ml-1">
-                                                {header.small}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
+                                {header.description ? (
+                                    <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="cursor-help">
+                                                    {headerContent}
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p className="text-xs">{header.description}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                ) : (
+                                    headerContent
+                                )}
                             </th>
                         );
                     })}

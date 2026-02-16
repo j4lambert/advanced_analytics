@@ -18,6 +18,47 @@ export function formatCurrency(value, decimals = 0) {
 }
 
 /**
+ * Format a number as compact currency (millions) when >= 100,000
+ * @param {number} value - The value to format
+ * @param {number} decimals - Number of decimal places for standard format (default: 0)
+ * @returns {string} Compact currency string (e.g., "14.78M" or "$1,234")
+ */
+export function formatCurrencyCompact(value, decimals = 0) {
+    const absValue = Math.abs(value);
+    const sign = value < 0 ? '-' : '';
+    
+    // Use millions format for values >= 100k
+    if (absValue >= 100000) {
+        const millions = absValue / 1000000;
+        return `${sign}${millions.toFixed(2)}M`;
+    }
+    
+    // Standard formatting for < 100k
+    const formatted = absValue.toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+    return `${sign}$${formatted}`;
+}
+
+/**
+ * Format a number as full currency (always with $ prefix)
+ * Used for tooltips to show exact values
+ * @param {number} value - The value to format
+ * @param {number} decimals - Number of decimal places (default: 0)
+ * @returns {string} Full currency string (e.g., "$14,782,500.00")
+ */
+export function formatCurrencyFull(value, decimals = 0) {
+    const absValue = Math.abs(value);
+    const formatted = absValue.toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+    const sign = value < 0 ? '-' : '';
+    return `${sign}$${formatted}`;
+}
+
+/**
  * Format day label with "Yesterday" indicator
  * @param {number} day - Day number
  * @param {number} mostRecentDay - Most recent day in history

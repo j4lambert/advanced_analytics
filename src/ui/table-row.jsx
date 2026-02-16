@@ -3,12 +3,13 @@
 
 import { CONFIG } from '../config.js';
 import { RouteBadge } from './route-badge.jsx';
-import { formatCurrency, calculateTotalTrains } from '../utils/formatting.js';
+import { formatCurrency, formatCurrencyCompact, formatCurrencyFull, calculateTotalTrains } from '../utils/formatting.js';
 import { getCellClasses } from '../utils/sorting.js';
 import { getUtilizationClasses, getComparisonColorClass, getComparisonArrow } from '../utils/colors.js';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
+const { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } = api.utils.components;
 
 export function TableRow({ row, sortState, groups = ['trains', 'finance', 'performance'], groupState, compareShowPercentages = true }) {
     const isDeleted = row.deleted === true;
@@ -98,7 +99,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         group="performance"
                     />
                 ) : (
-                    <td className={`px-3 py-2 align-middle text-right font-mono ${getUtilizationClasses(row.utilization)} ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getUtilizationClasses(row.utilization)} ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
                         {row.utilization}%
                     </td>
                 )
@@ -133,7 +134,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         
                         return (
                             <span className="whitespace-nowrap flex items-center justify-end gap-1.5" title={trainTypeInfo.description}>
-                                <span>{trainTypeInfo.name}</span>
+                                <span class="text-xs">{trainTypeInfo.name}</span>
                                 <span 
                                     className="aspect-square inline-block rounded-full w-2" 
                                     style={{ background: trainTypeInfo.color }}
@@ -158,17 +159,29 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         group="trains"
                     />
                 ) : (
-                    <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses('trainSchedule', sortState, groupState, 'trains')}`}>
-                        <span className="font-bold">{calculateTotalTrains(row)}</span>
-                        {' ('}
-                        <small>
-                            <span className={CONFIG.COLORS.TRAINS.HIGH}>{row.trainsHigh}</span>
-                            {'-'}
-                            <span className={CONFIG.COLORS.TRAINS.MEDIUM}>{row.trainsMedium}</span>
-                            {'-'}
-                            <span className={CONFIG.COLORS.TRAINS.LOW}>{row.trainsLow}</span>
-                        </small>
-                        {')'}
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses('trainSchedule', sortState, groupState, 'trains')}`}>
+                        <TooltipProvider delayDuration={200} skipDelayDuration={1000}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="font-bold cursor-help">
+                                        {calculateTotalTrains(row)}
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                    <div className="space-y-1">
+                                        <div>
+                                            <span className={CONFIG.COLORS.TRAINS.HIGH}>High Demand</span>: {row.trainsHigh}
+                                        </div>
+                                        <div>
+                                            <span className={CONFIG.COLORS.TRAINS.MEDIUM}>Medium Demand</span>: {row.trainsMedium}
+                                        </div>
+                                        <div>
+                                            <span className={CONFIG.COLORS.TRAINS.LOW}>Low Demand</span>: {row.trainsLow}
+                                        </div>
+                                    </div>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </td>
                 )
             )}
@@ -191,14 +204,22 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         {row.transfers?.count === 0 ? (
                             <span className="font-mono text-xs">0</span>
                         ) : (
-                            <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-mono text-xs">{row.transfers.count}</span>
-                                <div className="flex items-center gap-0.5">
-                                    {row.transfers.routeIds?.map((routeId) => (
-                                        <RouteBadge key={routeId} routeId={routeId} size="1rem" />
-                                    ))}
-                                </div>
-                            </div>
+                            <TooltipProvider delayDuration={200} skipDelayDuration={1000}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="font-bold font-mono cursor-help">
+                                            {row.transfers.count}
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">
+                                        <div className="flex items-center gap-1">
+                                            {row.transfers.routeIds?.map((routeId) => (
+                                                <RouteBadge key={routeId} routeId={routeId} size="1.4rem" />
+                                            ))}
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
                     </td>
                 )
@@ -216,7 +237,8 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     sortState={sortState}
                     groupState={groupState}
                     group="finance"
-                    formatter={formatCurrency}
+                    formatter={formatCurrencyCompact}
+                    useCompactTooltip={true}
                 />
             )}
             
@@ -232,7 +254,8 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     sortState={sortState}
                     groupState={groupState}
                     group="finance"
-                    formatter={formatCurrency}
+                    formatter={formatCurrencyCompact}
+                    useCompactTooltip={true}
                 />
             )}
             
@@ -248,6 +271,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     sortState={sortState}
                     groupState={groupState}
                     group="finance"
+                    useCompactTooltip={true}
                 />
             )}
             
@@ -264,6 +288,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     groupState={groupState}
                     group="performance"
                     decimals={2}
+                    useCompactTooltip={false}
                 />
             )}
             
@@ -280,6 +305,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     groupState={groupState}
                     group="performance"
                     decimals={2}
+                    useCompactTooltip={true}
                 />
             )}
         </tr>
@@ -287,7 +313,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
 }
 
 // Generic metric cell component
-function MetricCell({ columnKey, value, isComparison, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, formatter }) {
+function MetricCell({ columnKey, value, isComparison, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, formatter, useCompactTooltip = false }) {
     if (isComparison) {
         return (
             <ComparisonCell
@@ -300,21 +326,40 @@ function MetricCell({ columnKey, value, isComparison, primaryValue, secondaryVal
                 groupState={groupState}
                 group={group}
                 formatter={formatter}
+                useCompactTooltip={useCompactTooltip}
             />
         );
     }
     
     const displayValue = formatter ? formatter(value) : value;
     
+    // Show tooltip for large currency values
+    if (useCompactTooltip && Math.abs(value) >= 100000) {
+        return (
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="cursor-help">{displayValue}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                            <p className="text-xs font-mono">{formatCurrencyFull(value, 0)}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </td>
+        );
+    }
+    
     return (
-        <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
             {displayValue}
         </td>
     );
 }
 
 // Profit cell (shows negative in red)
-function ProfitCell({ columnKey, value, isComparison, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, decimals = 0 }) {
+function ProfitCell({ columnKey, value, isComparison, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, decimals = 0, useCompactTooltip = false }) {
     if (isComparison) {
         return (
             <ComparisonCell
@@ -326,27 +371,47 @@ function ProfitCell({ columnKey, value, isComparison, primaryValue, secondaryVal
                 sortState={sortState}
                 groupState={groupState}
                 group={group}
-                formatter={(v) => formatCurrency(v, decimals)}
+                formatter={(v) => formatCurrencyCompact(v, decimals)}
+                useCompactTooltip={useCompactTooltip}
             />
         );
     }
     
     const isNegative = value < 0;
     const colorClass = isNegative ? CONFIG.COLORS.VALUE.NEGATIVE : CONFIG.COLORS.VALUE.DEFAULT;
+    const displayValue = formatCurrencyCompact(value, decimals);
+    
+    // Show tooltip for large currency values
+    if (useCompactTooltip && Math.abs(value) >= 100000) {
+        return (
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className={`${colorClass} cursor-help`}>{displayValue}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                            <p className="text-xs font-mono">{formatCurrencyFull(value, decimals)}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </td>
+        );
+    }
     
     return (
-        <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
-            <div className={colorClass}>{formatCurrency(value, decimals)}</div>
+        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <div className={colorClass}>{displayValue}</div>
         </td>
     );
 }
 
 // Comparison cell component
-function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, formatter }) {
+function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, formatter, useCompactTooltip = false }) {
     // Handle special cases
     if (value === 'NEW') {
         return (
-            <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                 <span className={CONFIG.COLORS.COMPARE.NEW}>NEW</span>
             </td>
         );
@@ -354,7 +419,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
     
     if (value === 'DELETED') {
         return (
-            <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                 <span className={CONFIG.COLORS.COMPARE.DELETED}>(Deleted)</span>
             </td>
         );
@@ -366,7 +431,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
         
         if (type === 'new') {
             return (
-                <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                     <span className={CONFIG.COLORS.COMPARE.NEW}>NEW</span>
                 </td>
             );
@@ -374,7 +439,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
         
         if (type === 'zero' || percentValue === 0) {
             return (
-                <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                     <span className={CONFIG.COLORS.COMPARE.NEUTRAL}>=</span>
                 </td>
             );
@@ -391,19 +456,60 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
             
             // Check if this is a finance column (needs $ prefix)
             const isFinanceColumn = ['dailyCost', 'dailyRevenue', 'dailyProfit', 'profitPerPassenger', 'profitPerTrain'].includes(columnKey);
-            const currencyPrefix = isFinanceColumn ? ' $' : '';
             
-            // Format with proper decimal places
+            if (isFinanceColumn) {
+                // Use compact format for deltas >= 100k
+                let displayValue;
+                if (absDelta >= 100000) {
+                    const millions = absDelta / 1000000;
+                    displayValue = `${prefix}${millions.toFixed(2)}M ${arrow}`;
+                } else {
+                    const decimals = ['profitPerPassenger', 'profitPerTrain'].includes(columnKey) ? 2 : 0;
+                    const formattedDelta = absDelta.toLocaleString(undefined, {
+                        minimumFractionDigits: decimals,
+                        maximumFractionDigits: decimals
+                    });
+                    displayValue = `${prefix}$${formattedDelta} ${arrow}`;
+                }
+                
+                // Show tooltip for large deltas
+                if (useCompactTooltip && absDelta >= 100000) {
+                    const decimals = ['profitPerPassenger', 'profitPerTrain'].includes(columnKey) ? 2 : 0;
+                    const fullDelta = formatCurrencyFull(delta, decimals);
+                    
+                    return (
+                        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                            <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className={`${colorClass} cursor-help`}>{displayValue}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">
+                                        <p className="text-xs font-mono">{fullDelta}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </td>
+                    );
+                }
+                
+                return (
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                        <span className={colorClass}>{displayValue}</span>
+                    </td>
+                );
+            }
+            
+            // Non-finance columns (no compact format needed)
             const decimals = ['profitPerPassenger', 'profitPerTrain'].includes(columnKey) ? 2 : 0;
             const formattedDelta = absDelta.toLocaleString(undefined, {
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals
             });
-            
-            const displayValue = `${prefix}${currencyPrefix}${formattedDelta} ${arrow}`;
+            const displayValue = `${prefix}${formattedDelta} ${arrow}`;
             
             return (
-                <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                     <span className={colorClass}>{displayValue}</span>
                 </td>
             );
@@ -413,7 +519,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
         const displayValue = `${percentValue > 0 ? '+' : ''}${percentValue.toFixed(1)}% ${arrow}`;
         
         return (
-            <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                 <span className={colorClass}>{displayValue}</span>
             </td>
         );
@@ -421,7 +527,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
     
     // Fallback
     return (
-        <td className={`px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
             -
         </td>
     );

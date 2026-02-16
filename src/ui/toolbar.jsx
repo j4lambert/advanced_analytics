@@ -9,6 +9,7 @@ import { ButtonsGroup, ButtonsGroupItem } from './buttons-group.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
+const { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } = api.utils.components;
 
 export function Toolbar({
     groupState,
@@ -49,168 +50,260 @@ export function Toolbar({
             <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium mr-1">Metrics:</span>
                 
-                <button
-                    className={`${btnBaseClasses} ${groupState.trains ? btnActiveClasses : btnClasses}`}
-                    onClick={() => onGroupChange('trains')}
-                    title="Toggle Train Metrics"
-                >
-                    <icons.Train size={14} />
-                    <span>Trains</span>
-                </button>
+                <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                className={`${btnBaseClasses} ${groupState.trains ? btnActiveClasses : btnClasses}`}
+                                onClick={() => onGroupChange('trains')}
+                            >
+                                <icons.Train size={14} />
+                                <span>Trains</span>
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                            Show/hide train-related metrics
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 
-                <button
-                    className={`${btnBaseClasses} ${groupState.finance ? btnActiveClasses : btnClasses}`}
-                    onClick={() => onGroupChange('finance')}
-                    title="Toggle Finance Metrics"
-                >
-                    <icons.DollarSign size={14} />
-                    <span>Finance</span>
-                </button>
+                <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                className={`${btnBaseClasses} ${groupState.finance ? btnActiveClasses : btnClasses}`}
+                                onClick={() => onGroupChange('finance')}
+                            >
+                                <icons.DollarSign size={14} />
+                                <span>Finance</span>
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                            Show/hide financial metrics
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
             
-            {/* Middle - ButtonsGroup for Show/Compare mode, then timeframe selection */}
+            {/* Middle - ButtonsGroup for Show/Compare mode */}
             <div className="flex items-center">
-                {/* Show/Compare toggle using ButtonsGroup */}
-
-                    <ButtonsGroup
-                        value={viewMode}
-                        onChange={handleViewModeChange}
-                    >
-                        <ButtonsGroupItem value="show" text="Show" />
-                        <ButtonsGroupItem value="compare" text="Compare" disabled={availableDays.length == 0}/>
-                    </ButtonsGroup>
-
+                <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="mx-auto">
+                                <ButtonsGroup
+                                    value={viewMode}
+                                    onChange={handleViewModeChange}
+                                >
+                                    <ButtonsGroupItem value="show" text="Show" />
+                                    <ButtonsGroupItem value="compare" text="Compare" disabled={availableDays.length == 0}/>
+                                </ButtonsGroup>
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                            {availableDays.length > 0 
+                                ? 'Switch between showing data and comparing two days'
+                                : 'Compare mode requires at least 2 days of historical data'}
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
 
-            {/* Right side - Status indicator */}
+            {/* Right side - Timeframe controls */}
             <div className="flex items-center gap-2 justify-end">
                 
                 {/* Timeframe controls - conditional based on compareMode */}
                 {!compareMode ? (
                     <>
                         {/* Last 24h button */}
-                        <button
-                            className={`${btnBaseClasses} ${timeframeState === 'last24h' ? btnActiveClasses : btnClasses}`}
-                            onClick={() => onTimeframeChange('last24h')}
-                            title="Show data from last 24 hours"
-                        >
-                            <icons.Clock size={14} />
-                            <span>Last 24h</span>
-                        </button>
+                        <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className={`${btnBaseClasses} ${timeframeState === 'last24h' ? btnActiveClasses : btnClasses}`}
+                                        onClick={() => onTimeframeChange('last24h')}
+                                    >
+                                        <icons.Clock size={14} />
+                                        <span>Last 24h</span>
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    Show live data from the last 24 hours
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         
                         {/* Yesterday button */}
-                        <button
-                            className={`${btnBaseClasses} ${!mostRecentDay ? 'opacity-50 cursor-not-allowed' : ''} ${timeframeState === String(mostRecentDay) ? btnActiveClasses : btnClasses}`}
-                            onClick={mostRecentDay ? () => onTimeframeChange(String(mostRecentDay)) : undefined}
-                            disabled={!mostRecentDay}
-                            title={mostRecentDay ? `Show data from Day ${mostRecentDay}` : 'No data available'}
-                        >
-                            <icons.Calendar size={14} />
-                            <span>{mostRecentDay ? `Yesterday (Day ${mostRecentDay})` : 'Yesterday'}</span>
-                        </button>
+                        <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className={`${btnBaseClasses} ${!mostRecentDay ? 'opacity-50 cursor-not-allowed' : ''} ${timeframeState === String(mostRecentDay) ? btnActiveClasses : btnClasses}`}
+                                        onClick={mostRecentDay ? () => onTimeframeChange(String(mostRecentDay)) : undefined}
+                                        disabled={!mostRecentDay}
+                                    >
+                                        <icons.Calendar size={14} />
+                                        <span>{mostRecentDay ? `Yesterday (Day ${mostRecentDay})` : 'Yesterday'}</span>
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    {mostRecentDay 
+                                        ? `Show historical data from Day ${mostRecentDay}` 
+                                        : 'No historical data available yet'}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         
-                        {/* Day dropdown - REPLACED with Dropdown component */}
+                        {/* Day dropdown */}
                         {hasOtherDays && (
-                            <Dropdown
-                                togglerIcon={icons.Calendar}
-                                togglerText={
-                                    availableDays.includes(Number(timeframeState))
-                                        ? `Day ${timeframeState}` 
-                                        : 'Select Day'
-                                }
-                                togglerClasses={`${btnTogglerClasses} ${!hasOtherDays ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${availableDays.includes(Number(timeframeState)) ? btnActiveClasses : '' }` }
-                                togglerTitle={hasOtherDays ? 'Select a day to view' : 'No historical data available'}
-                                multiselect={false}
-                                value={availableDays.includes(Number(timeframeState)) ? timeframeState : ''}
-                                onChange={(value) => value && onTimeframeChange(value)}
-                            >
-                                {availableDays.map(day => (
-                                    <DropdownItem 
-                                        key={day} 
-                                        value={String(day)} 
-                                        text={`Day ${day}`} 
-                                    />
-                                ))}
-                            </Dropdown>
+                            <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div>
+                                            <Dropdown
+                                                togglerIcon={icons.Calendar}
+                                                togglerText={
+                                                    availableDays.includes(Number(timeframeState))
+                                                        ? `Day ${timeframeState}` 
+                                                        : 'Select Day'
+                                                }
+                                                togglerClasses={`${btnTogglerClasses} ${!hasOtherDays ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${availableDays.includes(Number(timeframeState)) ? btnActiveClasses : '' }` }
+                                                multiselect={false}
+                                                value={availableDays.includes(Number(timeframeState)) ? timeframeState : ''}
+                                                onChange={(value) => value && onTimeframeChange(value)}
+                                            >
+                                                {availableDays.map(day => (
+                                                    <DropdownItem 
+                                                        key={day} 
+                                                        value={String(day)} 
+                                                        text={`Day ${day}`} 
+                                                    />
+                                                ))}
+                                            </Dropdown>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">
+                                        Select a specific day to view historical data
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
                         
                         {/* Placeholder when no other days */}
                         {!hasOtherDays && (
-                            <button
-                                className={`${btnBaseClasses} ${btnClasses} opacity-50 cursor-not-allowed`}
-                                disabled={true}
-                                title="No historical data available"
-                            >
-                                <icons.Calendar size={14} />
-                                <span>Select Day</span>
-                            </button>
+                            <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            className={`${btnBaseClasses} ${btnClasses} opacity-50 cursor-not-allowed`}
+                                            disabled={true}
+                                        >
+                                            <icons.Calendar size={14} />
+                                            <span>Select Day</span>
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">
+                                        No additional historical data available
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
                     </>
                 ) : (
                     <>
-                        {/* Compare mode dropdowns - REPLACED with Dropdown components */}
-                        <Dropdown
-                            togglerIcon={icons.Calendar}
-                            togglerText={comparePrimaryDay ? formatDayLabel(comparePrimaryDay, mostRecentDay) : 'Select Primary Day'}
-                            togglerTitle="Select primary comparison day"
-                            togglerClasses={`${btnTogglerClasses} ${btnActiveClasses}`}
-                            multiselect={false}
-                            value={comparePrimaryDay ? String(comparePrimaryDay) : ''}
-                            onChange={(value) => value && onComparePrimaryDayChange(value)}
-                        >
-                            {allDays
-                                .filter(day => {
-                                    const olderDays = allDays.filter(d => d < day);
-                                    return olderDays.length > 0;
-                                })
-                                .map(day => (
-                                    <DropdownItem
-                                        key={day}
-                                        value={String(day)}
-                                        text={formatDayLabel(day, mostRecentDay)}
-                                    />
-                                ))
-                            }
-                        </Dropdown>
+                        {/* Compare mode dropdowns */}
+                        <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div>
+                                        <Dropdown
+                                            togglerIcon={icons.Calendar}
+                                            togglerText={comparePrimaryDay ? formatDayLabel(comparePrimaryDay, mostRecentDay) : 'Select Primary Day'}
+                                            togglerClasses={`${btnTogglerClasses} ${btnActiveClasses}`}
+                                            multiselect={false}
+                                            value={comparePrimaryDay ? String(comparePrimaryDay) : ''}
+                                            onChange={(value) => value && onComparePrimaryDayChange(value)}
+                                        >
+                                            {allDays
+                                                .filter(day => {
+                                                    const olderDays = allDays.filter(d => d < day);
+                                                    return olderDays.length > 0;
+                                                })
+                                                .map(day => (
+                                                    <DropdownItem
+                                                        key={day}
+                                                        value={String(day)}
+                                                        text={formatDayLabel(day, mostRecentDay)}
+                                                    />
+                                                ))
+                                            }
+                                        </Dropdown>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    Select the newer day to compare (primary)
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         
                         <span className="text-xs font-medium">vs</span>
                         
-                        <Dropdown
-                            togglerIcon={icons.Calendar}
-                            togglerText={compareSecondaryDay ? formatDayLabel(compareSecondaryDay, mostRecentDay) : 'Compare To'}
-                            togglerTitle="Select secondary comparison day"
-                            togglerClasses={`${btnTogglerClasses} ${btnActiveClasses}`}
-                            multiselect={false}
-                            value={compareSecondaryDay ? String(compareSecondaryDay) : ''}
-                            onChange={(value) => value && onCompareSecondaryDayChange(value)}
-                        >
-                            {comparePrimaryDay && allDays
-                                .filter(day => day < comparePrimaryDay)
-                                .map(day => (
-                                    <DropdownItem
-                                        key={day}
-                                        value={String(day)}
-                                        text={formatDayLabel(day, mostRecentDay)}
-                                    />
-                                ))
-                            }
-                            {!comparePrimaryDay && (
-                                <DropdownItem
-                                    value=""
-                                    text="Select primary day first"
-                                    disabled={true}
-                                />
-                            )}
-                        </Dropdown>
+                        <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div>
+                                        <Dropdown
+                                            togglerIcon={icons.Calendar}
+                                            togglerText={compareSecondaryDay ? formatDayLabel(compareSecondaryDay, mostRecentDay) : 'Compare To'}
+                                            togglerClasses={`${btnTogglerClasses} ${btnActiveClasses}`}
+                                            multiselect={false}
+                                            value={compareSecondaryDay ? String(compareSecondaryDay) : ''}
+                                            onChange={(value) => value && onCompareSecondaryDayChange(value)}
+                                        >
+                                            {comparePrimaryDay && allDays
+                                                .filter(day => day < comparePrimaryDay)
+                                                .map(day => (
+                                                    <DropdownItem
+                                                        key={day}
+                                                        value={String(day)}
+                                                        text={formatDayLabel(day, mostRecentDay)}
+                                                    />
+                                                ))
+                                            }
+                                            {!comparePrimaryDay && (
+                                                <DropdownItem
+                                                    value=""
+                                                    text="Select primary day first"
+                                                    disabled={true}
+                                                />
+                                            )}
+                                        </Dropdown>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    Select the older day to compare against (secondary)
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         
                         {/* Percentage toggle */}
-                        <button
-                            className={`${btnBaseClasses} ${compareShowPercentages ? btnActiveClasses : btnClasses}`}
-                            onClick={onCompareShowPercentagesChange}
-                            title="Toggle percentage display"
-                        >
-                            <icons.Percent size={14} />
-                        </button>
+                        <TooltipProvider delayDuration={300} skipDelayDuration={1000}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className={`${btnBaseClasses} ${compareShowPercentages ? btnActiveClasses : btnClasses}`}
+                                        onClick={onCompareShowPercentagesChange}
+                                    >
+                                        <icons.Percent size={14} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    {compareShowPercentages 
+                                        ? 'Showing percentage changes - click to show absolute deltas' 
+                                        : 'Showing absolute deltas - click to show percentage changes'}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </>
                 )}
             </div>
