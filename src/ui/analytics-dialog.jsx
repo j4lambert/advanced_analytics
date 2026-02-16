@@ -4,12 +4,33 @@
 import { Dialog } from './dialog.jsx';
 import { AnalyticsSetting } from './analytics-setting.jsx';
 import { AnalyticsTable } from './analytics-table.jsx';
+import { AnalyticsChart } from './analytics-chart.jsx';
+import { getStorage } from '../core/lifecycle.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
 export function AnalyticsDialog() {
     const [isOpen, setIsOpen] = React.useState(false);
+    const [historicalData, setHistoricalData] = React.useState({ days: {} });
+    
+    const storage = getStorage();
+    
+    // Load historical data when dialog opens
+    React.useEffect(() => {
+        if (!isOpen || !storage) return;
+        
+        const loadData = async () => {
+            const data = await storage.get('historicalData', { days: {} });
+            setHistoricalData(data);
+        };
+        
+        loadData();
+        
+        // Poll for updates while dialog is open
+        const interval = setInterval(loadData, 2000);
+        return () => clearInterval(interval);
+    }, [isOpen, storage]);
     
     // Expose global functions to control dialog
     React.useEffect(() => {
@@ -54,7 +75,17 @@ export function AnalyticsDialog() {
                     <AnalyticsSetting/>
                 </div>
             </section>
+            
+            {/* Table Section */}
             <AnalyticsTable groups={['trains', 'finance', 'performance']} />
+            
+            {/* Chart Section */}
+            <section className="mt-8">
+                <div className="py-5">
+                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Historical Trends</h3>
+                </div>
+                <AnalyticsChart historicalData={historicalData} />
+            </section>
         </Dialog>
     );
 }
