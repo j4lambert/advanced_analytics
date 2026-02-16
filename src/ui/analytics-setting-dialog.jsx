@@ -57,15 +57,14 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                 const historicalData = workingData.historicalData || { days: {} };
                 const dayCount = Object.keys(historicalData.days).length;
                 
-                // Get last day for route count and city code
+                // Get last day for route count
                 const days = Object.keys(historicalData.days).map(Number).sort((a, b) => b - a);
                 const lastDay = days[0];
                 const lastDayData = lastDay && historicalData.days[lastDay];
                 const routeCount = lastDayData ? lastDayData.routes.length : 0;
                 
-                // Get city code from last day's data
-                // We store it in each day's snapshot for reference
-                const cityCode = lastDayData?.cityCode || null;
+                // Get metadata from save level
+                const cityCode = saveData.cityCode || null;
                 
                 // Estimate size
                 const saveSize = new Blob([JSON.stringify(saveData)]).size;
@@ -257,6 +256,31 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
         }
     };
     
+    // Find potential matches for import conflict detection
+    const findPotentialMatches = (importSaveName, importSaveData, existingSaves) => {
+        const matches = [];
+        
+        const importMetadata = {
+            cityCode: importSaveData.cityCode,
+            routeCount: importSaveData.routeCount,
+            day: importSaveData.day,
+            stationCount: importSaveData.stationCount
+        };
+        
+        for (const [existingName, existingData] of Object.entries(existingSaves)) {
+            // Check if ALL criteria match
+            if (existingName === importSaveName &&
+                existingData.cityCode === importMetadata.cityCode &&
+                existingData.routeCount === importMetadata.routeCount &&
+                existingData.day === importMetadata.day &&
+                existingData.stationCount === importMetadata.stationCount) {
+                matches.push(existingName);
+            }
+        }
+        
+        return matches;
+    };
+    
     // Handle import saves
     const handleImport = () => {
         const input = document.createElement('input');
@@ -280,13 +304,60 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                 const stored = localStorage.getItem('AdvancedAnalytics');
                 const storageData = stored ? JSON.parse(stored) : { saves: {} };
                 
-                // Check for conflicts
-                const conflicts = Object.keys(importData.saves).filter(
-                    name => storageData.saves[name]
-                );
+                // Check for conflicts and ambiguities
+                const conflictInfo = [];
                 
-                if (conflicts.length > 0) {
-                    const message = `The following saves already exist and will be overwritten:\n\n${conflicts.join('\n')}\n\nContinue?`;
+                for (const [importName, importSave] of Object.entries(importData.saves)) {
+                    const matches = findPotentialMatches(importName, importSave, storageData.saves);
+                    
+                    if (matches.length > 1) {
+                        // Ambiguous - multiple matches
+                        conflictInfo.push({
+                            name: importName,
+                            type: 'ambiguous',
+                            matches: matches
+                        });
+                    } else if (matches.length === 1) {
+                        // Single match - will overwrite
+                        conflictInfo.push({
+                            name: importName,
+                            type: 'overwrite',
+                            matches: matches
+                        });
+                    }
+                    // No matches - will create new
+                }
+                
+                // Handle conflicts
+                if (conflictInfo.length > 0) {
+                    let message = 'Import conflicts detected:\n\n';
+                    
+                    const overwrites = conflictInfo.filter(c => c.type === 'overwrite');
+                    const ambiguous = conflictInfo.filter(c => c.type === 'ambiguous');
+                    
+                    if (overwrites.length > 0) {
+                        message += 'The following saves will be OVERWRITTEN:\n';
+                        overwrites.forEach(c => {
+                            message += `  • ${c.name}\n`;
+                        });
+                        message += '\n';
+                    }
+                    
+                    if (ambiguous.length > 0) {
+                        message += '⚠️ AMBIGUOUS MATCHES (multiple saves match criteria):\n';
+                        ambiguous.forEach(c => {
+                            message += `  • ${c.name} matches: ${c.matches.join(', ')}\n`;
+                        });
+                        message += '\n';
+                        message += 'Import cannot proceed with ambiguous matches.\n';
+                        message += 'Please rename or delete conflicting saves first.';
+                        
+                        alert(message);
+                        return;
+                    }
+                    
+                    message += 'Continue with import?';
+                    
                     if (!window.confirm(message)) return;
                 }
                 

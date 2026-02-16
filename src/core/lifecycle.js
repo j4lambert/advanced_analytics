@@ -18,10 +18,6 @@ let lastTrainConfig = {};
 // Track last hour to detect hour changes
 let lastHour = null;
 
-// Throttle config writes to prevent localStorage spam
-let pendingConfigWrites = {};
-let configWriteTimeout = null;
-
 /**
  * Initialize the storage instance
  * @param {string} saveName - Current save name
@@ -42,6 +38,48 @@ function initStorage(saveName) {
  */
 export function getCurrentSaveName() {
     return currentSaveName;
+}
+
+/**
+ * Find matching save in localStorage based on game state
+ * Uses strict matching: name + cityCode + routeCount + day + stationCount must ALL match
+ * 
+ * @param {string} saveName - Save name from game
+ * @param {Object} api - SubwayBuilderAPI instance
+ * @returns {string|null} Matching save key or null if not found
+ */
+function findMatchingSave(saveName, api) {
+    const storageData = storage.getStorage();
+    const saves = storageData.saves || {};
+    
+    // Get current game state metadata
+    const cityCode = api.utils.getCityCode?.() || null;
+    const routes = api.gameState.getRoutes();
+    const stations = api.gameState.getStations();
+    const day = api.gameState.getCurrentDay();
+    
+    const gameMetadata = {
+        cityCode: cityCode,
+        routeCount: routes.length,
+        day: day,
+        stationCount: stations.length
+    };
+    
+    // Find exact match
+    for (const [key, saveData] of Object.entries(saves)) {
+        // Check if name matches
+        if (key !== saveName) continue;
+        
+        // Check if all metadata matches
+        if (saveData.cityCode === gameMetadata.cityCode &&
+            saveData.routeCount === gameMetadata.routeCount &&
+            saveData.day === gameMetadata.day &&
+            saveData.stationCount === gameMetadata.stationCount) {
+            return key;
+        }
+    }
+    
+    return null;
 }
 
 /**
@@ -110,14 +148,26 @@ export function initLifecycleHooks(api) {
         await transitionNewRoutesToOngoing(storage);
     });
     
-    // Game loaded - restore from backup
+    // Game loaded - restore from saved
     api.hooks.onGameLoaded(async (saveName) => {
         console.log(`${CONFIG.LOG_PREFIX} Game loaded: ${saveName}`);
         
         // Initialize/update storage with current save name
         storage = initStorage(saveName);
         
-        // Restore from backup
+        // Try to find matching save in localStorage
+        const matchingKey = findMatchingSave(saveName, api);
+        
+        if (matchingKey) {
+            console.log(`${CONFIG.LOG_PREFIX} Found matching save: ${matchingKey}`);
+            storage.setSaveName(matchingKey);
+            currentSaveName = matchingKey;
+        } else {
+            console.log(`${CONFIG.LOG_PREFIX} No matching save found, using: ${saveName}`);
+            currentSaveName = saveName;
+        }
+        
+        // Restore from saved
         await storage.restore();
         
         // Reset tracking
@@ -158,8 +208,8 @@ export function initLifecycleHooks(api) {
         storage.setSaveName(saveName);
         currentSaveName = saveName;
         
-        // Backup working data
-        await storage.backup();
+        // Backup working data and update metadata
+        await storage.backup(api);
     });
     
     // Route created - mark as new and capture creation time
@@ -215,7 +265,7 @@ async function setRouteStatus(routeId, status, day, storage, creationTime = null
         statuses[routeId] = {
             status: 'new',
             createdDay: day,
-            creationTime: creationTime,  // Store creation timestamp for real-time tracking
+            creationTime: creationTime,
             deletedDay: null
         };
     } else if (status === 'ongoing') {
@@ -251,64 +301,6 @@ async function transitionNewRoutesToOngoing(storage) {
     if (updated) {
         await storage.set('routeStatuses', statuses);
     }
-}
-
-/**
- * Record a config change (batched with throttling)
- * Accumulates changes and writes them in batches to reduce localStorage overhead
- */
-function queueConfigChange(routeId, hour, minute, config, api, storage) {
-    const currentDay = api.gameState.getCurrentDay();
-    const timestamp = hour * 60 + minute;
-    
-    if (!pendingConfigWrites[currentDay]) {
-        pendingConfigWrites[currentDay] = {};
-    }
-    if (!pendingConfigWrites[currentDay][routeId]) {
-        pendingConfigWrites[currentDay][routeId] = [];
-    }
-    
-    pendingConfigWrites[currentDay][routeId].push({
-        timestamp,
-        hour,
-        minute,
-        high: config.high,
-        medium: config.medium,
-        low: config.low
-    });
-    
-    // Clear existing timeout
-    if (configWriteTimeout) {
-        clearTimeout(configWriteTimeout);
-    }
-    
-    // Batch writes every 2 seconds
-    configWriteTimeout = setTimeout(async () => {
-        try {
-            const configCache = await storage.get('configCache', {});
-            
-            // Merge pending writes
-            Object.keys(pendingConfigWrites).forEach(day => {
-                if (!configCache[day]) {
-                    configCache[day] = {};
-                }
-                Object.keys(pendingConfigWrites[day]).forEach(rId => {
-                    if (!configCache[day][rId]) {
-                        configCache[day][rId] = [];
-                    }
-                    configCache[day][rId].push(...pendingConfigWrites[day][rId]);
-                });
-            });
-            
-            await storage.set('configCache', configCache);
-            console.log(`${CONFIG.LOG_PREFIX} Wrote ${Object.keys(pendingConfigWrites).length} config changes to storage`);
-            
-            // Clear pending writes
-            pendingConfigWrites = {};
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to write config changes:`, error);
-        }
-    }, 2000);
 }
 
 /**

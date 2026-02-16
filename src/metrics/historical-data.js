@@ -24,9 +24,6 @@ export async function captureHistoricalData(day, api, storage) {
         const lineMetrics = api.gameState.getLineMetrics();
         const timeWindowHours = api.gameState.getRidershipStats().timeWindowHours;
 
-        // Get current city code
-        const cityCode = api.utils.getCityCode?.() || null;
-
         // Get config timeline for accurate cost calculation
         const configCache = await storage.get('configCache', {});
         const configTimeline = configCache[day] || {};
@@ -101,8 +98,8 @@ export async function captureHistoricalData(day, api, storage) {
                 dailyRevenue,
                 transfers: transfersMap[route.id] || { count: 0, routes: [], stationIds: [] },
                 ...calculatedMetrics,
-                dailyCost,      // Override with timeline-based cost
-                dailyProfit,    // Recalculated with accurate cost
+                dailyCost,
+                dailyProfit,
                 profitPerPassenger,
                 profitPerTrain
             });
@@ -111,10 +108,9 @@ export async function captureHistoricalData(day, api, storage) {
         // Load existing historical data
         const historicalData = await storage.get('historicalData', { days: {} });
         
-        // Store snapshot for this day (including city code)
+        // Store snapshot for this day
         historicalData.days[day] = {
             timestamp: Date.now(),
-            cityCode: cityCode,  // Store city code for reference
             routes: processedData
         };
 
@@ -125,7 +121,7 @@ export async function captureHistoricalData(day, api, storage) {
         delete configCache[day];
         await storage.set('configCache', configCache);
         
-        console.log(`${CONFIG.LOG_PREFIX} Captured data for Day ${day}: ${processedData.length} routes (City: ${cityCode})`);
+        console.log(`${CONFIG.LOG_PREFIX} Captured data for Day ${day}: ${processedData.length} routes`);
     } catch (error) {
         console.error(`${CONFIG.LOG_PREFIX} Failed to capture historical data:`, error);
     }

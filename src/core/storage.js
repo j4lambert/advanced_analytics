@@ -7,12 +7,12 @@
 // game save/load cycles. Think of it like a database transaction:
 //
 // - WORKING COPY: Current session data (volatile, changes during gameplay)
-// - BACKUP COPY: Last committed state (persistent, only updates on save)
+// - SAVED COPY: Last committed state (persistent, only updates on save)
 //
 // LIFECYCLE:
-// 1. Game loads → restore() copies backup → working (rollback to saved state)
+// 1. Game loads → restore() copies saved → working (rollback to saved state)
 // 2. Play game → data accumulates in working copy
-// 3. Game saves → backup() copies working → backup (commit transaction)
+// 3. Game saves → backup() copies working → saved (commit transaction)
 //
 // CRITICAL SCENARIO THIS PREVENTS:
 // - Load save at Day 10
@@ -33,8 +33,12 @@ const STORAGE_KEY = 'AdvancedAnalytics';
  * {
  *   saves: {
  *     "SaveName1": {
- *       working: { historicalData: {...}, routeStatuses: {...} },  // Current session
- *       backup: { historicalData: {...}, routeStatuses: {...} }    // Last saved state
+ *       cityCode: "NYC",
+ *       routeCount: 3,
+ *       day: 6,
+ *       stationCount: 25,
+ *       working: { historicalData: {...}, routeStatuses: {...}, configCache: {...} },
+ *       saved: { historicalData: {...}, routeStatuses: {...}, configCache: {...} }
  *     },
  *     "SaveName2": { ... }
  *   }
@@ -111,7 +115,14 @@ export class Storage {
         const savePrefix = this.saveName || 'default';
         
         if (!storage.saves[savePrefix]) {
-            storage.saves[savePrefix] = { working: {}, backup: {} };
+            storage.saves[savePrefix] = { 
+                cityCode: null,
+                routeCount: 0,
+                day: 0,
+                stationCount: 0,
+                working: {}, 
+                saved: {} 
+            };
         }
         
         if (!storage.saves[savePrefix].working) {
@@ -138,40 +149,55 @@ export class Storage {
     }
 
     /**
-     * COMMIT TRANSACTION: Backup working data to backup slot
+     * COMMIT TRANSACTION: Backup working data to saved slot
      * 
      * Called by onGameSaved() hook when the game is saved to disk.
      * This "commits" the current session data, making it persistent.
+     * Also updates metadata for save matching.
      * 
      * Flow:
      * 1. Deep clone working copy
-     * 2. Save as backup copy
-     * 3. Backup is now the "source of truth" for this save
+     * 2. Save as saved copy
+     * 3. Update metadata (cityCode, routeCount, day, stationCount)
+     * 4. Saved is now the "source of truth" for this save
      * 
+     * @param {Object} api - SubwayBuilderAPI instance
      * @returns {Promise<void>}
      */
-    async backup() {
+    async backup(api) {
         const storage = this.getStorage();
         const savePrefix = this.saveName || 'default';
         
         if (storage.saves[savePrefix] && storage.saves[savePrefix].working) {
             // Deep clone to prevent reference sharing
-            storage.saves[savePrefix].backup = JSON.parse(
+            storage.saves[savePrefix].saved = JSON.parse(
                 JSON.stringify(storage.saves[savePrefix].working)
             );
+            
+            // Update metadata
+            const cityCode = api.utils.getCityCode?.() || null;
+            const routes = api.gameState.getRoutes();
+            const stations = api.gameState.getStations();
+            const day = api.gameState.getCurrentDay();
+            
+            storage.saves[savePrefix].cityCode = cityCode;
+            storage.saves[savePrefix].routeCount = routes.length;
+            storage.saves[savePrefix].day = day;
+            storage.saves[savePrefix].stationCount = stations.length;
+            
             this.setStorage(storage);
             console.log(`${CONFIG.LOG_PREFIX} ✓ Transaction committed for save: ${savePrefix}`);
         }
     }
 
     /**
-     * ROLLBACK TRANSACTION: Restore backup data to working slot
+     * ROLLBACK TRANSACTION: Restore saved data to working slot
      * 
      * Called by onGameLoaded() hook when a save is loaded from disk.
      * This "rolls back" working data to match the last saved state.
      * 
      * Flow:
-     * 1. Load backup copy (last committed state)
+     * 1. Load saved copy (last committed state)
      * 2. Deep clone it
      * 3. Overwrite working copy
      * 4. Working copy now matches the save file on disk
@@ -185,10 +211,10 @@ export class Storage {
         const storage = this.getStorage();
         const savePrefix = this.saveName || 'default';
         
-        if (storage.saves[savePrefix] && storage.saves[savePrefix].backup) {
+        if (storage.saves[savePrefix] && storage.saves[savePrefix].saved) {
             // Deep clone to prevent reference sharing
             storage.saves[savePrefix].working = JSON.parse(
-                JSON.stringify(storage.saves[savePrefix].backup)
+                JSON.stringify(storage.saves[savePrefix].saved)
             );
             this.setStorage(storage);
             console.log(`${CONFIG.LOG_PREFIX} ✓ Rolled back to saved state for: ${savePrefix}`);
