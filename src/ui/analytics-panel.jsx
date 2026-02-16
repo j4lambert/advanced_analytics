@@ -12,45 +12,61 @@ export function AnalyticsPanel() {
     // Local state only - no persistence, resets on each render
     const [sortState, setSortState] = React.useState(INITIAL_STATE.sort);
     
-    // =========================================================================
+    // Memoize empty historical data to prevent re-renders
+    const emptyHistoricalData = React.useMemo(() => ({ days: {} }), []);
+    
+    // Track if component is mounted
+    const isMountedRef = React.useRef(true);
+    
     // USE CUSTOM HOOK - Same data fetching logic as analytics-table!
-    // =========================================================================
     // Only live data mode for the lite panel (no historical/comparison)
     const { tableData } = useRouteMetrics({
         sortState,
         timeframeState: 'last24h',  // Always live data
         compareMode: false,          // No comparison mode
-        historicalData: { days: {} } // Not needed for live data
+        historicalData: emptyHistoricalData // Memoized empty object
     });
 
-    // Setup wrapper classes on mount
+    // Setup wrapper classes on mount - FIXED VERSION
     React.useEffect(() => {
-        const ourContent = document.getElementById('aa-panel');
-        if (!ourContent) return;
+        if (!isMountedRef.current) return;
         
-        const wrapper = ourContent.parentElement;
-        if (wrapper && !wrapper.id) {
-            wrapper.id = 'sb-aa-panel-wrapper';
-            wrapper.classList.remove('p-2');
-            wrapper.classList.add('max-h-[80vh]');
-            wrapper.classList.add('overflow-auto');
-        }
-
-        const mainPanel = ourContent.closest('.fixed.z-50 ');
-        if (mainPanel) {
-            mainPanel.id = 'sb-aa-panel-wrapper-main';
-            const maxWidth = mainPanel.style.width;
-            if (maxWidth) {
-                mainPanel.style.width = '';
-                mainPanel.style.maxWidth = maxWidth;
+        // Use RAF to defer DOM manipulation
+        const rafId = requestAnimationFrame(() => {
+            const ourContent = document.getElementById('aa-panel');
+            if (!ourContent) return;
+            
+            const wrapper = ourContent.parentElement;
+            if (wrapper && !wrapper.id) {
+                wrapper.id = 'sb-aa-panel-wrapper';
+                wrapper.classList.remove('p-2');
+                wrapper.classList.add('max-h-[80vh]');
+                wrapper.classList.add('overflow-auto');
             }
-        }
-    }, []);
+
+            const mainPanel = ourContent.closest('.fixed.z-50');
+            if (mainPanel && !mainPanel.id) {
+                mainPanel.id = 'sb-aa-panel-wrapper-main';
+                const maxWidth = mainPanel.style.width;
+                if (maxWidth) {
+                    mainPanel.style.width = '';
+                    mainPanel.style.maxWidth = maxWidth;
+                }
+            }
+        });
+        
+        return () => {
+            cancelAnimationFrame(rafId);
+            isMountedRef.current = false;
+        };
+    }, []); // Runs only once on mount
     
     // Handle sort changes (no persistence)
-    const handleSortChange = (newState) => {
-        setSortState(newState);
-    };
+    const handleSortChange = React.useCallback((newState) => {
+        if (isMountedRef.current) {
+            setSortState(newState);
+        }
+    }, []);
     
     return (
         <div id="aa-panel" className="flex flex-col h-full">

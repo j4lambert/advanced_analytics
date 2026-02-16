@@ -4,10 +4,13 @@
 import { CONFIG } from '../config.js';
 import { calculateRouteMetrics, validateRouteData, getEmptyMetrics } from './route-metrics.js';
 import { calculateTransfers } from './transfers.js';
+import { calculateDailyCostFromTimeline } from './train-config-tracking.js';
 
 /**
  * Capture current route data as historical snapshot
  * Called at end of each day
+ * 
+ * Uses timeline-based cost calculation for accuracy
  * 
  * @param {number} day - Day number that just ended
  * @param {Object} api - SubwayBuilderAPI instance
@@ -23,6 +26,10 @@ export async function captureHistoricalData(day, api, storage) {
 
         // Get current city code
         const cityCode = api.utils.getCityCode?.() || null;
+
+        // Get config timeline for accurate cost calculation
+        const configCache = await storage.get('configCache', {});
+        const configTimeline = configCache[day] || {};
 
         // Calculate transfers for all routes
         const transfersMap = calculateTransfers(routes, api);
@@ -60,7 +67,32 @@ export async function captureHistoricalData(day, api, storage) {
                 return;
             }
 
+            // Get cars per train
+            const carsPerTrain = route.carsPerTrain !== undefined 
+                ? route.carsPerTrain 
+                : trainType.stats.carsPerCarSet;
+
+            // Calculate metrics using standard calculation (capacity, stations, etc.)
             const calculatedMetrics = calculateRouteMetrics(route, trainType, ridership, dailyRevenue);
+            
+            // Override dailyCost with timeline-based calculation
+            const routeTimeline = configTimeline[route.id];
+            let dailyCost = calculatedMetrics.dailyCost; // Fallback to standard calculation
+            
+            if (routeTimeline && routeTimeline.length > 0) {
+                const timelineCost = calculateDailyCostFromTimeline(route.id, routeTimeline, trainType, carsPerTrain);
+                if (timelineCost !== null) {
+                    dailyCost = timelineCost;
+                }
+            }
+            
+            // Recalculate profit with accurate cost
+            const dailyProfit = dailyRevenue - dailyCost;
+            const profitPerPassenger = ridership > 0 ? dailyProfit / ridership : 0;
+            const totalTrains = (route.trainSchedule?.highDemand || 0) + 
+                              (route.trainSchedule?.mediumDemand || 0) + 
+                              (route.trainSchedule?.lowDemand || 0);
+            const profitPerTrain = totalTrains > 0 ? dailyProfit / totalTrains : 0;
             
             processedData.push({
                 id: route.id,
@@ -68,7 +100,11 @@ export async function captureHistoricalData(day, api, storage) {
                 ridership,
                 dailyRevenue,
                 transfers: transfersMap[route.id] || { count: 0, routes: [], stationIds: [] },
-                ...calculatedMetrics
+                ...calculatedMetrics,
+                dailyCost,      // Override with timeline-based cost
+                dailyProfit,    // Recalculated with accurate cost
+                profitPerPassenger,
+                profitPerTrain
             });
         });
 
@@ -84,6 +120,10 @@ export async function captureHistoricalData(day, api, storage) {
 
         // Save to storage
         await storage.set('historicalData', historicalData);
+        
+        // Clean up config cache for this day
+        delete configCache[day];
+        await storage.set('configCache', configCache);
         
         console.log(`${CONFIG.LOG_PREFIX} Captured data for Day ${day}: ${processedData.length} routes (City: ${cityCode})`);
     } catch (error) {

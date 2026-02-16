@@ -21,6 +21,18 @@ export const CONFIG = {
         high: 6      // 6am-9am (3h) + 4pm-7pm (3h)
     },
     
+    // Demand phases with precise hour boundaries
+    // Used for accurate cost calculation based on when trains actually ran
+    DEMAND_PHASES: [
+        { type: 'low', startHour: 0, endHour: 5 },      // midnight-5am (5h)
+        { type: 'medium', startHour: 5, endHour: 6 },   // 5am-6am (1h)
+        { type: 'high', startHour: 6, endHour: 9 },     // 6am-9am (3h)
+        { type: 'medium', startHour: 9, endHour: 16 },  // 9am-4pm (7h)
+        { type: 'high', startHour: 16, endHour: 19 },   // 4pm-7pm (3h)
+        { type: 'medium', startHour: 19, endHour: 20 }, // 7pm-8pm (1h)
+        { type: 'low', startHour: 20, endHour: 24 }     // 8pm-midnight (4h)
+    ],
+    
     TRANSFER_WALKING_TIME_THRESHOLD: 100,  // seconds
     
     COLORS: {

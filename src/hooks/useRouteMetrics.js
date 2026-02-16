@@ -14,6 +14,7 @@
 import { CONFIG } from '../config.js';
 import { calculateTransfers } from '../metrics/transfers.js';
 import { calculateRouteMetrics, validateRouteData, getEmptyMetrics } from '../metrics/route-metrics.js';
+import { calculateRealTimeMetrics } from '../metrics/realtime-metrics.js';
 import { buildComparisonRow, getComparisonData } from '../metrics/comparison.js';
 import { sortTableData } from '../utils/sorting.js';
 import { getStorage } from '../core/lifecycle.js';
@@ -24,10 +25,11 @@ const { React } = api.utils;
 /**
  * Hook for fetching and processing route metrics data
  * 
- * Handles three data modes:
+ * Handles four data modes:
  * 1. LIVE DATA (timeframe === 'last24h'): Current game state
- * 2. HISTORICAL DATA (timeframe === specific day): Past snapshot
- * 3. COMPARISON MODE: Compare two days with percentage changes
+ * 2. LIVE DATA + REAL-TIME (new routes today): Accurate costs for newly created routes
+ * 3. HISTORICAL DATA (timeframe === specific day): Past snapshot
+ * 4. COMPARISON MODE: Compare two days with percentage changes
  * 
  * @param {Object} options - Configuration options
  * @param {Object} options.sortState - Sort configuration {column, order}
@@ -48,6 +50,8 @@ export function useRouteMetrics({
 }) {
     const [tableData, setTableData] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true);
+    
+    // Get storage directly - no need for ref
     const storage = getStorage();
     
     React.useEffect(() => {
@@ -62,9 +66,7 @@ export function useRouteMetrics({
             let processedData = [];
             
             try {
-                // =========================================================================
-                // MODE 1: COMPARISON MODE
-                // =========================================================================
+                // COMPARISON MODE
                 if (compareMode && comparePrimaryDay && compareSecondaryDay) {
                     const comparisonRows = getComparisonData(
                         comparePrimaryDay, 
@@ -84,8 +86,6 @@ export function useRouteMetrics({
                             )
                         );
                         
-                        // Filter out routes that were 'new' on either comparison day
-                        // This prevents confusing NEW labels for routes that existed before
                         const filteredRows = mappedRows.filter(row => {
                             const status = routeStatuses[row.id];
                             if (!status) return true;
@@ -98,30 +98,24 @@ export function useRouteMetrics({
                         processedData = filteredRows;
                     }
                 }
-                // =========================================================================
-                // MODE 2: HISTORICAL DATA
-                // =========================================================================
+                // HISTORICAL DATA
                 else if (timeframeState !== 'last24h') {
                     const dayData = historicalData.days[timeframeState];
                     
                     if (dayData && dayData.routes) {
                         const currentRoutes = api.gameState.getRoutes();
                         
-                        // Mark routes as deleted if they no longer exist
                         processedData = dayData.routes.map(route => ({
                             ...route,
                             deleted: !currentRoutes.some(r => r.id === route.id)
                         }));
                     }
                 }
-                // =========================================================================
-                // MODE 3: LIVE DATA (default)
-                // =========================================================================
+                // LIVE DATA
                 else {
-                    processedData = fetchLiveRouteData();
+                    processedData = await fetchLiveRouteData(storage);
                 }
                 
-                // Sort the data
                 const sortedData = sortTableData(processedData, sortState);
                 setTableData(sortedData);
                 
@@ -136,10 +130,15 @@ export function useRouteMetrics({
         updateData();
         
         // Only poll for live data mode
+        let interval = null;
         if (timeframeState === 'last24h' && !compareMode) {
-            const interval = setInterval(updateData, CONFIG.REFRESH_INTERVAL);
-            return () => clearInterval(interval);
+            interval = setInterval(updateData, CONFIG.REFRESH_INTERVAL);
         }
+        
+        // Cleanup
+        return () => {
+            if (interval) clearInterval(interval);
+        };
         
     }, [
         sortState, 
@@ -148,7 +147,7 @@ export function useRouteMetrics({
         compareMode, 
         comparePrimaryDay, 
         compareSecondaryDay,
-        storage
+        storage // Add storage to dependencies
     ]);
     
     return { tableData, isLoading };
@@ -160,13 +159,23 @@ export function useRouteMetrics({
  * This is the core data fetching logic that was duplicated in both
  * analytics-table.jsx and analytics-panel.jsx
  * 
+ * Now includes real-time cost calculation for newly created routes
+ * 
+ * @param {Object} storage - Storage instance
  * @returns {Array} Processed route data
  */
-function fetchLiveRouteData() {
+async function fetchLiveRouteData(storage) {
     const routes = api.gameState.getRoutes();
     const trainTypes = api.trains.getTrainTypes();
     const lineMetrics = api.gameState.getLineMetrics();
     const timeWindowHours = api.gameState.getRidershipStats().timeWindowHours;
+    const currentTime = api.gameState.getElapsedSeconds();
+    const currentDay = api.gameState.getCurrentDay();
+    
+    // Get route statuses to detect new routes
+    const routeStatuses = storage 
+        ? await storage.get('routeStatuses', {}) 
+        : {};
     
     // Calculate transfers for all routes
     const transfersMap = calculateTransfers(routes, api);
@@ -180,6 +189,12 @@ function fetchLiveRouteData() {
         const revenuePerHour = metrics ? metrics.revenuePerHour : 0;
         const dailyRevenue = revenuePerHour * 24;
         
+        // Check if route is new today
+        const status = routeStatuses[route.id];
+        const isNewToday = status && 
+                          status.status === 'new' && 
+                          status.createdDay === currentDay;
+        
         // Validate route data
         if (!validateRouteData(route)) {
             processedData.push({
@@ -188,6 +203,7 @@ function fetchLiveRouteData() {
                 ridership,
                 dailyRevenue,
                 deleted: false,
+                isNewToday: false,
                 transfers: transfersMap[route.id] || { count: 0, routes: [], stationIds: [] },
                 ...getEmptyMetrics()
             });
@@ -203,14 +219,35 @@ function fetchLiveRouteData() {
                 ridership,
                 dailyRevenue,
                 deleted: false,
+                isNewToday: false,
                 transfers: transfersMap[route.id] || { count: 0, routes: [], stationIds: [] },
                 ...getEmptyMetrics()
             });
             return;
         }
         
-        // Calculate all metrics
-        const calculatedMetrics = calculateRouteMetrics(route, trainType, ridership, dailyRevenue);
+        // Calculate metrics
+        let calculatedMetrics;
+        
+        if (isNewToday && status.creationTime !== null && status.creationTime !== undefined) {
+            // Real-time calculation for new routes
+            calculatedMetrics = calculateRealTimeMetrics(
+                route, 
+                trainType, 
+                ridership, 
+                dailyRevenue,
+                status.creationTime,
+                currentTime
+            );
+        } else {
+            // Standard 24h projection for established routes
+            calculatedMetrics = calculateRouteMetrics(
+                route, 
+                trainType, 
+                ridership, 
+                dailyRevenue
+            );
+        }
         
         processedData.push({
             id: route.id,
@@ -218,6 +255,7 @@ function fetchLiveRouteData() {
             ridership,
             dailyRevenue,
             deleted: false,
+            isNewToday: isNewToday,  // Flag for UI indicators (optional)
             transfers: transfersMap[route.id] || { count: 0, routes: [], stationIds: [] },
             ...calculatedMetrics
         });
