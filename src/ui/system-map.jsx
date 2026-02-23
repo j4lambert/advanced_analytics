@@ -13,7 +13,7 @@ import { getRouteStationsInOrder } from '../utils/route-utils.js';
 import { getStationTransferRoutes } from '../utils/transfer-utils.js';
 import { getStationGroups, isZustandAvailable } from '../core/zustand-store.js';
 import { Dropdown } from './dropdown.jsx';
-import { RouteDropdownItem } from './dropdown-item.jsx';
+import { DropdownItem } from './dropdown-item.jsx';
 import { RouteBadge } from './route-badge.jsx';
 
 const api = window.SubwayBuilderAPI;
@@ -555,7 +555,7 @@ export function SystemMap() {
                         onChange={setSelectedRoutes}
                     >
                         {allRoutes.map(route => (
-                            <RouteDropdownItem key={route.id} route={route} value={route.id} />
+                            <DropdownItem key={route.id} route={route} value={route.id} />
                         ))}
                     </Dropdown>
                 </div>
@@ -627,7 +627,7 @@ export function SystemMap() {
                     onChange={setSelectedRoutes}
                 >
                     {allRoutes.map(route => (
-                        <RouteDropdownItem
+                        <DropdownItem
                             key={route.id}
                             route={route}
                             value={route.id}

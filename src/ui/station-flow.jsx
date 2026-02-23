@@ -1,5 +1,12 @@
 // Station Flow Component
 // Displays passenger boarding/alighting patterns for a single route using smooth area charts
+//
+// LAYOUT:
+// - Top X axis: time offsets per station, dashed reference line, bg-background labels,
+//   directional ▶ arrows every two stations
+// - Bottom X axis: station names (rotated -45°) with transfer circle indicators
+// - Transfer circles: miniature version of system-map dots with route color pips,
+//   dedicated tooltip
 
 import { CONFIG } from '../config.js';
 import { Dropdown } from './dropdown.jsx';
@@ -11,74 +18,74 @@ import { getStationTransferRoutes } from '../utils/transfer-utils.js';
 const api = window.SubwayBuilderAPI;
 const { React, icons, charts } = api.utils;
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatOffset(seconds) {
+    const totalSeconds = Math.round(seconds);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    if (m === 0) return `${s}s`;
+    return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function StationFlow() {
     const [selectedRoute, setSelectedRoute] = React.useState(null);
-    const [flowData, setFlowData] = React.useState([]);
+    const [flowData, setFlowData]           = React.useState([]);
+    const [transferTooltip, setTransferTooltip] = React.useState(null); // { stationId, x, y }
 
-    // Get available routes from current game state
     const routes = api.gameState.getRoutes();
 
-    // Auto-select first route on mount
     React.useEffect(() => {
         if (!selectedRoute && routes.length > 0) {
             setSelectedRoute(routes[0].id);
         }
     }, [routes, selectedRoute]);
 
-    // Fetch and process station flow data
     React.useEffect(() => {
-        if (!selectedRoute) {
-            setFlowData([]);
-            return;
-        }
+        if (!selectedRoute) { setFlowData([]); return; }
 
         const updateData = () => {
             try {
-                // Get ridership data for selected route
                 const ridershipData = api.gameState.getRouteRidership(selectedRoute);
+                if (!ridershipData?.byStation) { setFlowData([]); return; }
 
-                if (!ridershipData || !ridershipData.byStation) {
-                    setFlowData([]);
-                    return;
-                }
-
-                // Get stations in timetable order
                 const orderedStations = getRouteStationsInOrder(selectedRoute, api);
+                if (orderedStations.length === 0) { setFlowData([]); return; }
 
-                if (orderedStations.length === 0) {
-                    setFlowData([]);
-                    return;
-                }
-
-                // Build a map of station ID -> ridership data
                 const ridershipMap = new Map();
-                ridershipData.byStation.forEach(stationData => {
-                    ridershipMap.set(stationData.stationId, {
-                        popCount: stationData.popCount,
-                        percent:  stationData.percent
-                    });
+                ridershipData.byStation.forEach(d => {
+                    ridershipMap.set(d.stationId, { popCount: d.popCount, percent: d.percent });
                 });
 
-                // Process stations in timetable order, enriched with transfer info.
-                // Deduplication of the loop-closure terminus is handled inside
-                // getRouteStationsInOrder (route-utils.js).
+                const midTimes = orderedStations.map(station => {
+                    const arr = station.arrivalTime;
+                    const dep = station.departureTime;
+                    if (arr != null && dep != null) return (arr + dep) / 2;
+                    return arr ?? dep ?? 0;
+                });
+                const t0 = midTimes[0];
+
                 const processed = orderedStations.map((station, index) => {
                     const data      = ridershipMap.get(station.id);
                     const ridership = data?.popCount ?? 0;
                     const percent   = data?.percent != null ? parseFloat(data.percent.toFixed(2)) : null;
-
-                    // Resolve transfers for this station
                     const transferRoutes = getStationTransferRoutes(station.id, selectedRoute, api);
 
                     return {
                         index,
-                        name:           station.name,
-                        stationId:      station.id,
+                        name:          station.name,
+                        stationId:     station.id,
                         ridership,
                         percent,
-                        transferRoutes, // Array<{ routeId, routeName, bullet }>
-                        hasTransfers:   transferRoutes.length > 0,
+                        transferRoutes,
+                        hasTransfers:  transferRoutes.length > 0,
+                        timeOffset:    midTimes[index] - t0,
                     };
                 });
 
@@ -94,22 +101,33 @@ export function StationFlow() {
         return () => clearInterval(interval);
     }, [selectedRoute, routes]);
 
+    const routeColor = React.useMemo(() => {
+        if (!selectedRoute) return '#22c55e';
+        const route = routes.find(r => r.id === selectedRoute);
+        return route?.color || '#22c55e';
+    }, [selectedRoute, routes]);
+
+    // Resolve transfer tooltip data
+    const tooltipData = React.useMemo(() => {
+        if (!transferTooltip) return null;
+        const point = flowData.find(d => d.stationId === transferTooltip.stationId);
+        return point ? { ...transferTooltip, transferRoutes: point.transferRoutes, name: point.name } : null;
+    }, [transferTooltip, flowData]);
+
     return (
         <div className="aa-chart space-y-4">
             {/* Controls */}
             <div className="flex items-center justify-between gap-4">
-                {/* Left: Route selection */}
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-medium">Route:</span>
                     <Dropdown
-                        togglerIcon={icons.Route}
-                        togglerText={
+                        togglerContent={
                             selectedRoute
-                                ? (routes.find(r => r.id === selectedRoute)?.name ||
-                                   routes.find(r => r.id === selectedRoute)?.bullet ||
-                                   'Select route')
-                                : 'Select route'
+                                ? React.createElement(RouteBadge, { routeId: selectedRoute, size: '1.4rem' })
+                                : null
                         }
+                        togglerIcon={selectedRoute ? null : icons.Route}
+                        togglerText={selectedRoute ? null : 'Select route'}
                         togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
                         menuClasses="min-w-[200px] max-h-[300px] overflow-y-auto"
                         multiselect={false}
@@ -119,8 +137,10 @@ export function StationFlow() {
                         {routes.map(route => (
                             <DropdownItem
                                 key={route.id}
-                                value={route.id}
-                                text={route.name || route.bullet}
+                                route={route}
+                                active={selectedRoute === route.id}
+                                multiselect={false}
+                                onClick={() => setSelectedRoute(route.id)}
                             />
                         ))}
                     </Dropdown>
@@ -129,35 +149,44 @@ export function StationFlow() {
                 {/* Legend */}
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm" style={{ background: '#22c55e', opacity: 0.6 }} />
+                        <div className="w-3 h-3 rounded-sm" style={{ background: routeColor }} />
                         <span>Ridership</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="w-6 h-0.5" style={{ background: '#f59e0b' }} />
+                        <div className="w-6 h-0.5" style={{ background: 'var(--aa-chart-secondary-metric)' }} />
                         <span>% choosing metro</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <span className="text-base leading-none" style={{ color: 'var(--aa-transfer-color)' }}>⊕</span>
+                        <TransferDotPreview />
                         <span>Transfer</span>
                     </div>
                 </div>
             </div>
 
             {/* Chart */}
-            <div className="rounded-lg border border-border bg-background/50 p-4">
+            <div className="rounded-lg border border-border bg-background/50 p-4" style={{ position: 'relative' }}>
                 {flowData.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                         <icons.TrendingUp size={48} className="text-muted-foreground mb-4" />
                         <div className="text-sm text-muted-foreground">
-                            {!selectedRoute ? (
-                                <p>Select a route to display station flow</p>
-                            ) : (
-                                <p>No ridership data available for this route</p>
-                            )}
+                            {!selectedRoute
+                                ? <p>Select a route to display station flow</p>
+                                : <p>No ridership data available for this route</p>
+                            }
                         </div>
                     </div>
                 ) : (
-                    <FlowChart data={flowData} selectedRouteId={selectedRoute} />
+                    <FlowChart
+                        data={flowData}
+                        routeColor={routeColor}
+                        onTransferHover={setTransferTooltip}
+                        onTransferLeave={() => setTransferTooltip(null)}
+                    />
+                )}
+
+                {/* Transfer tooltip */}
+                {tooltipData && (
+                    <TransferTooltip data={tooltipData} />
                 )}
             </div>
         </div>
@@ -165,224 +194,389 @@ export function StationFlow() {
 }
 
 // ---------------------------------------------------------------------------
-// Custom XAxis tick factory
-//
-// Returns a tick component closed over `flowData` so it can look up transfer
-// info per station. We use a factory (not inline) to keep the function
-// reference stable across renders and avoid Recharts remounting every tick.
-//
-// Renders: station name rotated -45deg, and ⊕ below it for transfer stations.
+// Transfer dot preview (legend)
 // ---------------------------------------------------------------------------
-function makeCustomXAxisTick(flowData) {
-    return function CustomXAxisTick(props) {
+function TransferDotPreview() {
+    const h = React.createElement;
+    const size = 12;
+    const r    = size / 2;
+    return h('svg', { width: size, height: size, viewBox: `0 0 ${size} ${size}` },
+        h('circle', {
+            cx: r, cy: r, r: r - 1,
+            fill:        'hsla(var(--background))',
+            stroke:      'var(--aa-transfer-color)',
+            strokeWidth: 1.5,
+        })
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Transfer tooltip
+// ---------------------------------------------------------------------------
+function TransferTooltip({ data }) {
+    const allRoutes = api.gameState.getRoutes();
+    return (
+        <div
+            className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg"
+            style={{
+                position:  'fixed',
+                left:      data.x,
+                top:       data.y,
+                transform: 'translate(-50%, -110%)',
+                pointerEvents: 'none',
+                zIndex:    9999,
+                minWidth:  '120px',
+            }}
+        >
+            <div className="text-xs font-medium mb-2">{data.name}</div>
+            <div className="flex flex-col gap-1">
+                {data.transferRoutes.map(tr => {
+                    const route = allRoutes.find(r => r.id === tr.routeId);
+                    return (
+                        <div key={tr.routeId} className="flex items-center gap-1.5">
+                            <RouteBadge routeId={tr.routeId} size="1.2rem" />
+                            <span className="text-[10px] text-muted-foreground">
+                                {route?.name || route?.bullet || tr.routeId}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Custom top axis tick — time offset labels with bg-background
+// Renders directional ▶ arrow after every station except the last,
+// positioned at exactly half the tick spacing (measured via ResizeObserver).
+// ---------------------------------------------------------------------------
+function makeTopAxisTick(flowData, tickSpacing) {
+    return function TopAxisTick(props) {
         const { x, y, payload } = props;
         const h = React.createElement;
 
-        const MAX_LEN = 14;
-        const label = payload.value && payload.value.length > MAX_LEN
-            ? payload.value.slice(0, MAX_LEN - 1) + '…'
-            : (payload.value || '');
+        const dataPoint = flowData.find(d => d.name === payload.value);
+        if (!dataPoint) return null;
 
-        const dataPoint    = flowData && flowData.find(d => d.name === payload.value);
-        const hasTransfers = dataPoint?.hasTransfers ?? false;
+        const offsetLabel = dataPoint.index === 0
+            ? '0s'
+            : `${formatOffset(dataPoint.timeOffset)}`;
 
         return h('g', { transform: `translate(${x},${y})` }, [
-            // Station name, rotated -45deg
+            // Time offset text
             h('text', {
                 key:        'label',
                 x:          0,
                 y:          0,
-                dy:         10,
-                textAnchor: 'end',
-                fill:       'hsl(var(--muted-foreground)',
-                fontSize:   12,
-                transform:  'rotate(-45)',
-            }, label),
-
-            // ⊕ transfer indicator — upright, centred below the tick point
-            hasTransfers && h('text', {
-                key:        'transfer',
-                x:          0,
-                y:          0,
-                dy:         43,         // below the rotated label's vertical extent
+                dy:         -8,
                 textAnchor: 'middle',
-                fill:       'var(--aa-transfer-color)',
-                fontSize:   20,
-            }, '⊕'),
+                fill:       'var(--aa-chart-secondary-metric)',
+                fontSize:   12,
+                fontFamily: 'Monospace',
+            }, offsetLabel),
         ].filter(Boolean));
     };
 }
 
 // ---------------------------------------------------------------------------
-// Flow chart display component
+// Custom bottom axis tick — station name + optional transfer circle
 // ---------------------------------------------------------------------------
-function FlowChart({ data, selectedRouteId }) {
-    const h = React.createElement;
+function makeBottomAxisTick(flowData, onTransferHover, onTransferLeave) {
+    return function BottomAxisTick(props) {
+        const { x, y, payload } = props;
+        const h = React.createElement;
 
-    // Format left Y-axis (ridership counts)
-    const formatYAxisLeft = (value) => {
-        if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-        return value.toLocaleString();
+        const MAX_LEN  = 14;
+        const label    = payload.value && payload.value.length > MAX_LEN
+            ? payload.value.slice(0, MAX_LEN - 1) + '…'
+            : (payload.value || '');
+
+        const dataPoint    = flowData.find(d => d.name === payload.value);
+        const hasTransfers = dataPoint?.hasTransfers ?? false;
+        const stationId    = dataPoint?.stationId;
+        const transferRoutes = dataPoint?.transferRoutes ?? [];
+
+        // Transfer circle dimensions
+        const CR   = 6;   // circle radius
+        const CY   = 14;  // y offset from tick baseline
+
+        return h('g', { transform: `translate(${x},${y})` }, [
+            // Transfer circle (if applicable)
+            hasTransfers && h('g', {
+                key:          'transfer-circle',
+                style:        { cursor: 'pointer' },
+                onMouseEnter: (e) => onTransferHover?.({ stationId, x: e.clientX, y: e.clientY }),
+                onMouseMove:  (e) => onTransferHover?.({ stationId, x: e.clientX, y: e.clientY }),
+                onMouseLeave: () => onTransferLeave?.(),
+            }, [
+                // Invisible larger hit area
+                h('circle', { key: 'hit', cx: 0, cy: CY, r: CR + 4, fill: 'transparent' }),
+
+                // Outer circle
+                h('circle', {
+                    key:         'outer',
+                    cx:          0,
+                    cy:          CY,
+                    r:           CR,
+                    fill:        'hsl(var(--background))',
+                    stroke:      'var(--aa-transfer-color)',
+                    strokeWidth: 1.5,
+                }),
+
+                // Color pips for each transfer route
+                ...transferRoutes.map((tr, i) => {
+                    const total = transferRoutes.length;
+                    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
+                    const pipRadius = total > 2 ? 3 : 2;
+                    const pipR = total > 2 ? 1.5 : 1.8;
+                    const route = api.gameState.getRoutes().find(r => r.id === tr.routeId);
+                    const color = route?.color || '#888';
+                    return h('circle', {
+                        key: tr.routeId,
+                        cx:  Math.cos(angle) * pipRadius,
+                        cy:  CY + Math.sin(angle) * pipRadius,
+                        r:   pipR,
+                        fill: color,
+                    });
+                }),
+            ]),
+
+            // Station name rotated -45°
+            h('text', {
+                key:        'label',
+                x:          0,
+                y:          0,
+                dy:         hasTransfers ? CY * 2 + 4 : 10,
+                textAnchor: 'end',
+                fill:       'hsl(var(--muted-foreground))',
+                fontSize:   12,
+                transform:  'rotate(-45)',
+            }, label),
+        ].filter(Boolean));
     };
+}
 
-    // Format right Y-axis (percentage)
-    const formatYAxisRight = (value) => `${value}%`;
-
-    // Custom tooltip
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (!active || !payload || payload.length === 0) return null;
+// ---------------------------------------------------------------------------
+// Custom tooltip for chart hover
+// ---------------------------------------------------------------------------
+function makeChartTooltip(data, routeColor) {
+    return function ChartTooltip({ active, payload, label }) {
+        if (!active || !payload?.length) return null;
+        const h = React.createElement;
 
         const ridershipEntry = payload.find(p => p.dataKey === 'ridership');
         const percentEntry   = payload.find(p => p.dataKey === 'percent');
-
-        // Find data point to get transfer info
-        const dataPoint    = data.find(d => d.name === label);
-        const hasTransfers = dataPoint?.transferRoutes?.length > 0;
+        const dataPoint      = data.find(d => d.name === label);
 
         return h('div', {
             className: 'bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg min-w-[160px]'
         }, [
-            // Station name header
             h('div', {
-                key:       'label',
-                className: 'text-xs font-medium mb-2'
-            }, label),
+                key: 'header',
+                className:'flex items-center justify-between gap-6 mb-3'
+            }, [
+                h('div', { key: 'title', className: 'font-medium'}, dataPoint?.name || label),
+                dataPoint?.timeOffset != null && h('div', {
+                    key:       'offset',
+                    className: 'text-xs font-mono',
+                }, dataPoint.index === 0 ? '0s' : `+${formatOffset(dataPoint.timeOffset)}`),
+            ]),
 
-            // Ridership metric
             ridershipEntry && h('div', {
                 key:       'ridership',
+                className: 'flex items-center justify-between gap-6 text-xs mb-2'
+            }, [
+                h('div', { key: 'left', className: 'flex items-center gap-1.5' }, [
+                    h('div', { key: 'dot', className: 'w-3 h-3 mr-1 rounded-sm', style: { background: routeColor } }),
+                    h('span', { key: 'lbl', className: 'text-muted-foreground' }, 'Ridership'),
+                ]),
+                h('span', { key: 'val', className: 'font-mono font-medium' },
+                    (ridershipEntry.value ?? 0).toLocaleString()),
+            ]),
+
+            percentEntry?.value != null && h('div', {
+                key:       'percent',
                 className: 'flex items-center justify-between gap-6 text-xs'
             }, [
                 h('div', { key: 'left', className: 'flex items-center gap-1.5' }, [
-                    h('div', { key: 'dot', className: 'w-2 h-2 rounded-sm', style: { background: '#22c55e' } }),
-                    h('span', { key: 'lbl', className: 'text-muted-foreground' }, 'Ridership')
+                    h('div', { key: 'dot', className: 'w-3 h-0.5', style: { background: 'var(--aa-chart-secondary-metric)' } }),
+                    h('span', { key: 'lbl', className: 'text-muted-foreground' }, '% choosing metro'),
                 ]),
-                h('span', {
-                    key:       'val',
-                    className: 'font-mono font-medium'
-                }, (ridershipEntry.value ?? 0).toLocaleString())
+                h('span', { key: 'val', className: 'font-mono font-medium' },
+                    `${percentEntry.value.toFixed(2)}%`),
             ]),
-
-            // % choosing metro metric
-            percentEntry && percentEntry.value != null && h('div', {
-                key:       'percent',
-                className: 'flex items-center justify-between gap-6 text-xs mt-1'
-            }, [
-                h('div', { key: 'left', className: 'flex items-center gap-1.5' }, [
-                    h('div', { key: 'dot', className: 'w-2 h-0.5', style: { background: '#f59e0b' } }),
-                    h('span', { key: 'lbl', className: 'text-muted-foreground' }, '% choosing metro')
-                ]),
-                h('span', {
-                    key:       'val',
-                    className: 'font-mono font-medium'
-                }, `${percentEntry.value.toFixed(2)}%`)
-            ]),
-
-            // Transfer section — separator + badges
-            hasTransfers && h('div', {
-                key:       'transfers-section',
-                className: 'mt-2 pt-2 border-t border-border'
-            }, [
-                h('div', {className: 'mb-2'}, [
-                    h('span', {
-                        key:       'transfers-label',
-                        className: 'text-xs font-medium'
-                    }, 'Transfers'),
-                ]),
-                h('div', {
-                    key:       'badges',
-                    className: 'flex items-center flex-wrap gap-1'
-                },
-                    dataPoint.transferRoutes.map(tr =>
-                        h(RouteBadge, {
-                            key:     tr.routeId,
-                            routeId: tr.routeId,
-                            size:    '1.4rem'
-                        })
-                    )
-                )
-            ])
         ].filter(Boolean));
     };
+}
+
+// ---------------------------------------------------------------------------
+// Y-axis formatters
+// ---------------------------------------------------------------------------
+function formatYAxisLeft(value) {
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+    return value.toLocaleString();
+}
+function formatYAxisRight(value) { return `${value}%`; }
+
+// ---------------------------------------------------------------------------
+// FlowChart
+// ---------------------------------------------------------------------------
+function FlowChart({ data, routeColor, onTransferHover, onTransferLeave }) {
+    const h = React.createElement;
+
+    // Measure container width to compute exact tick spacing for arrow placement
+    const containerRef  = React.useRef(null);
+    const [tickSpacing, setTickSpacing] = React.useState(null);
+
+    React.useLayoutEffect(() => {
+        if (!containerRef.current || data.length < 2) return;
+
+        const measure = () => {
+            // Recharts renders tick <text> elements inside .recharts-cartesian-axis-tick
+            // We pick the top-axis ticks (first XAxis in the SVG) and read their x transforms
+            const svg = containerRef.current.querySelector('svg.recharts-surface');
+            if (!svg) return;
+
+            // All tick groups for XAxis orientation=top live inside the first
+            // .recharts-xAxis group that has "xaxis-top" referenced somewhere.
+            // Simpler: grab all top-axis tick groups by reading their g[transform] x values.
+            const topAxisGroups = svg.querySelectorAll('.recharts-xAxis .recharts-cartesian-axis-tick');
+            if (topAxisGroups.length < 2) return;
+
+            const xs = Array.from(topAxisGroups).map(g => {
+                const t = g.getAttribute('transform') || '';
+                const m = t.match(/translate\(([^,)]+)/);
+                return m ? parseFloat(m[1]) : null;
+            }).filter(v => v !== null).sort((a, b) => a - b);
+
+            if (xs.length < 2) return;
+
+            const spacing = xs[1] - xs[0];
+            setTickSpacing(spacing);
+        };
+
+        // Measure after first paint and on resize
+        const id = setTimeout(measure, 50);
+        const ro = new ResizeObserver(measure);
+        ro.observe(containerRef.current);
+        return () => { clearTimeout(id); ro.disconnect(); };
+    }, [data]);
+
+    const TopTick    = React.useMemo(
+        () => makeTopAxisTick(data, tickSpacing),
+        [data, tickSpacing]
+    );
+    const BottomTick = React.useMemo(
+        () => makeBottomAxisTick(data, onTransferHover, onTransferLeave),
+        [data, onTransferHover, onTransferLeave]
+    );
+    const ChartTooltip = React.useMemo(
+        () => makeChartTooltip(data, routeColor),
+        [data, routeColor]
+    );
+
+    // Determine bottom axis height: taller when transfers present (circle needs room)
+    const hasAnyTransfer   = data.some(d => d.hasTransfers);
+    const bottomAxisHeight = hasAnyTransfer ? 105 : 90;
 
     return h('div', {
+        ref:       containerRef,
         className: 'w-full',
-        style:     { height: '400px' }
+        style:     { height: '420px', position: 'relative' },
     },
-        h(charts.ResponsiveContainer, {
-            key:    'chart',
-            width:  '100%',
-            height: '100%'
+        // Dashed time-axis reference line — y=43 confirmed in browser.
+        // x1/x2 clamped to first/last tick centres so it doesn't overflow.
+        // No zIndex so it stays behind the chart content.
+        h('svg', {
+            key:   'time-axis-line',
+            style: {
+                position:      'absolute',
+                top:           0,
+                left:          0,
+                width:         '100%',
+                height:        '100%',
+                pointerEvents: 'none',
+                overflow:      'visible',
+            }
         },
+        ),
+        h(charts.ResponsiveContainer, { width: '100%', height: '100%' },
             h(charts.ComposedChart, {
-                data:   data,
-                margin: { top: 30, right: 20, left: 0, bottom: 10 }
+                data,
+                margin: { top: 28, right: 0, left: 0, bottom: 10 },
             }, [
                 h(charts.CartesianGrid, {
-                    key:             'grid',
-                    strokeDasharray: '3 3',
-                    stroke:          '#374151',
-                    opacity:         0.3
+                    key: 'grid', strokeDasharray: '3 3', stroke: '#374151', opacity: 0.3,
                 }),
 
-                // X axis — custom tick renders station name + ⊕ for transfers
+                // ── Top X axis — time offsets ────────────────────────────────
                 h(charts.XAxis, {
-                    key:      'xaxis',
-                    dataKey:  'name',
-                    stroke:   '#9ca3af',
-                    interval: 0,
-                    height:   80,
-                    tick:     makeCustomXAxisTick(data),
+                    key:          'xaxis-top',
+                    xAxisId:      'top',
+                    dataKey:      'name',
+                    orientation:  'top',
+                    interval:     0,
+                    height:       28,
+                    tick:         TopTick,
+                    tickLine:     false,
+                    axisLine:     false,
                 }),
 
-                // Left Y axis — ridership
+                // ── Bottom X axis — station names + transfer circles ─────────
+                h(charts.XAxis, {
+                    key:         'xaxis-bottom',
+                    xAxisId:     'bottom',
+                    dataKey:     'name',
+                    orientation: 'bottom',
+                    stroke:      '#9ca3af',
+                    interval:    0,
+                    height:      bottomAxisHeight,
+                    tick:        BottomTick,
+                    tickLine:    false,
+                    axisLine:    false,
+                }),
+
                 h(charts.YAxis, {
-                    key:           'yaxis-left',
-                    yAxisId:       'left',
-                    stroke:        '#9ca3af',
-                    fontSize:      12,
-                    tickFormatter: formatYAxisLeft
+                    key: 'yaxis-left', yAxisId: 'left', stroke: "#9ca3af",
+                    fontSize: 12, tickFormatter: formatYAxisLeft,
+                    tickLine: false, axisLine: false,
                 }),
-
-                // Right Y axis — percentage
                 h(charts.YAxis, {
-                    key:           'yaxis-right',
-                    yAxisId:       'right',
-                    orientation:   'right',
-                    stroke:        '#f59e0b',
-                    fontSize:      12,
-                    tickFormatter: formatYAxisRight,
-                    domain:        [0, 100]
+                    key: 'yaxis-right', yAxisId: 'right', orientation: 'right',
+                    stroke: '#9ca3af', fontSize: 12,
+                    tickFormatter: formatYAxisRight, domain: [0, 100],
+                    tickLine: false, axisLine: false,
                 }),
 
-                h(charts.Tooltip, {
-                    key:     'tooltip',
-                    content: CustomTooltip
-                }),
+                h(charts.Tooltip, { key: 'tooltip', content: ChartTooltip }),
 
-                // Ridership area (left axis)
-                h(charts.Area, {
+                h(charts.Bar, {
                     key:         'ridership',
+                    xAxisId:     'bottom',
                     yAxisId:     'left',
-                    type:        'monotone',
                     dataKey:     'ridership',
-                    stroke:      '#22c55e',
+                    stroke:      routeColor,
                     strokeWidth: 2,
-                    fill:        '#22c55e',
-                    fillOpacity: 0.3
+                    fill:        routeColor,
+                    fillOpacity: 0.3,
+                    radius:      [2, 2, 0, 0],
+                    activeBar:   { fillOpacity: 1 },
                 }),
 
-                // Percentage line (right axis)
                 h(charts.Line, {
-                    key:          'percent',
-                    yAxisId:      'right',
-                    type:         'monotone',
-                    dataKey:      'percent',
-                    stroke:       '#f59e0b',
-                    strokeWidth:  2,
-                    dot:          { r: 3, fill: '#f59e0b' },
-                    activeDot:    { r: 5 },
-                    connectNulls: false
+                    key:               'percent',
+                    xAxisId:           'bottom',
+                    yAxisId:           'right',
+                    type:              'monotoneX',
+                    dataKey:           'percent',
+                    stroke:            'var(--aa-chart-secondary-metric)',
+                    strokeWidth:       2,
+                    dot:               false,
+                    activeDot:         { r: 3, fill: 'var(--aa-chart-secondary-metric)'},
+                    connectNulls:      false,
+                    strokeOpacity:     0.5,
+                    animationDuration: 500,
                 }),
             ])
         )

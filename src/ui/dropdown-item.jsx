@@ -3,6 +3,7 @@
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
+import { RouteBadge } from './route-badge.jsx';
 
 /**
  * DropdownItem Component
@@ -17,6 +18,7 @@ const { React, icons } = api.utils;
  */
 export function DropdownItem({
     value,
+    route,
     text,
     active = false,
     multiselect = false,
@@ -36,11 +38,14 @@ export function DropdownItem({
         tabIndex: '-1',
         onClick: handleClick
     }, [
+        // Route Badge
+        route && React.createElement(RouteBadge, { key: 'badge', routeId: route.id, size: '1.4rem' }),
+        
         // Text
-        React.createElement('span', { key: 'text' }, text),
+        text && React.createElement('span', { key: 'text' }, text),
         
         // Checkbox (only show in multiselect or when active in single-select)
-        (multiselect || active) && React.createElement(icons.Check, {
+        React.createElement(icons.Check, {
             key: 'check',
             className: `w-4 h-4 ml-2 ${active ? 'opacity-100' : 'opacity-0'}`
         })

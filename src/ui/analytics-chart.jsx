@@ -65,29 +65,6 @@ function buildTodayPoint(liveRouteData, metricKey) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-// ── RouteDropdownItem ────────────────────────────────────────────────────────
-// Custom dropdown item for the Routes selector: badge + name + check indicator.
-// Used instead of generic DropdownItem so we can embed RouteBadge.
-
-function RouteDropdownItem({ route, active, onClick, onHover, onLeave }) {
-    return React.createElement('div', {
-        role:         'menuitem',
-        className:    `relative cursor-pointer select-none rounded-sm px-2 py-1.5 text-sm outline-none
-                       transition-colors hover:bg-accent hover:text-accent-foreground
-                       flex items-center justify-between gap-2 ${active ? 'bg-accent/50' : ''}`,
-        tabIndex:     '-1',
-        onClick,
-        onMouseEnter: () => onHover?.(route.id),
-        onMouseLeave: () => onLeave?.(),
-    }, [
-        React.createElement(RouteBadge, { key: 'badge', routeId: route.id, size: '1.4rem' }),
-        active && React.createElement(icons.Check, {
-            key:       'check',
-            className: 'w-4 h-4 opacity-80 flex-shrink-0'
-        }),
-    ]);
-}
-
 export function AnalyticsChart({ historicalData, liveRouteData = [] }) {
     const [chartType,       setChartType]       = React.useState('line');
     const [selectedRoutes,  setSelectedRoutes]  = React.useState([]);

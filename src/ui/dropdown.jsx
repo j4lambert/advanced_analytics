@@ -44,16 +44,7 @@ export function Dropdown({
     const handleDismiss = () => {
         setIsOpen(false);
     };
-    
-    const handleBackdropClick = (e) => {
-        if (e.target === e.currentTarget) {
-            // Only dismiss on backdrop click for single-select
-            if (!multiselect) {
-                handleDismiss();
-            }
-        }
-    };
-    
+
     const handleItemClick = (itemValue) => {
         if (multiselect) {
             // Multiselect: toggle item in array
@@ -115,7 +106,7 @@ export function Dropdown({
         isOpen && React.createElement('div', {
             key: 'backdrop',
             className: 'aa-dropdown-backdrop fixed inset-0 z-40 bg-black/30',
-            onClick: handleBackdropClick,
+            onClick: handleDismiss,
             'aria-hidden': 'true'
         }),
         

@@ -10,9 +10,11 @@ export function injectStyles() {
         }
         html {
             --aa-transfer-color: #8f4eff;
+            --aa-chart-secondary-metric: #000;
         }
         html.dark {
             --aa-transfer-color: #a78bfa;
+            --aa-chart-secondary-metric: #FFF;
         }
         
         /* ===== Utility Classes ===== */
@@ -48,6 +50,8 @@ export function injectStyles() {
         #sb-aa-panel-wrapper .aa-table {
             height: 100%;
         }
+        
+        
     `;
     document.head.appendChild(style);
 }
