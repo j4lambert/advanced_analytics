@@ -1,23 +1,31 @@
 // Main analytics panel component
 // Manages state locally with no persistence - resets when unmounted
+//
+// When liveRouteData is provided by the parent (AnalyticsDialog) the component
+// uses it directly instead of running its own useRouteMetrics fetch for live
+// mode.  This avoids a duplicate API call and keeps both siblings in sync.
 
 import { CONFIG, INITIAL_STATE } from '../config.js';
 import { Toolbar } from './toolbar.jsx';
 import { SortableTable } from './table.jsx';
 import { getStorage } from '../core/lifecycle.js';
 import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
+import { sortTableData } from '../utils/sorting.js';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
 
-export function AnalyticsTable({ groups = ['trains', 'finance', 'performance'] }) {
+export function AnalyticsTable({
+    groups = ['trains', 'finance', 'performance'],
+    liveRouteData = null,   // optional — provided by AnalyticsDialog
+}) {
     // All state is local - resets when component unmounts
-    const [sortState, setSortState] = React.useState(INITIAL_STATE.sort);
-    const [groupState, setGroupState] = React.useState(INITIAL_STATE.groups);
-    const [timeframeState, setTimeframeState] = React.useState(INITIAL_STATE.timeframe);
-    const [historicalData, setHistoricalData] = React.useState({ days: {} });
-    const [compareMode, setCompareMode] = React.useState(false);
-    const [comparePrimaryDay, setComparePrimaryDay] = React.useState(null);
+    const [sortState, setSortState]                     = React.useState(INITIAL_STATE.sort);
+    const [groupState, setGroupState]                   = React.useState(INITIAL_STATE.groups);
+    const [timeframeState, setTimeframeState]           = React.useState(INITIAL_STATE.timeframe);
+    const [historicalData, setHistoricalData]           = React.useState({ days: {} });
+    const [compareMode, setCompareMode]                 = React.useState(false);
+    const [comparePrimaryDay, setComparePrimaryDay]     = React.useState(null);
     const [compareSecondaryDay, setCompareSecondaryDay] = React.useState(null);
     const [compareShowPercentages, setCompareShowPercentages] = React.useState(true);
     
@@ -46,19 +54,32 @@ export function AnalyticsTable({ groups = ['trains', 'finance', 'performance'] }
         
         return () => clearInterval(checkUpdates);
     }, [storage, historicalData]);
-    
 
-    // USE CUSTOM HOOK - All data fetching logic is now centralized
-    const { tableData } = useRouteMetrics({
+    // ── Data fetching ────────────────────────────────────────────────────────
+    // When a parent supplies liveRouteData we only need the hook for non-live
+    // modes (historical / comparison).  In those modes liveRouteData is ignored
+    // anyway, so we always call useRouteMetrics but skip its output for live.
+    const { tableData: ownLiveData } = useRouteMetrics({
         sortState,
         timeframeState,
         compareMode,
         comparePrimaryDay,
         compareSecondaryDay,
-        historicalData
+        historicalData,
     });
-    
-    // State updaters (no persistence)
+
+    // Decide which data to display:
+    // • live mode + parent supplied data  → sort the shared liveRouteData
+    // • everything else                  → use the hook's output directly
+    const tableData = React.useMemo(() => {
+        const isLive = timeframeState === 'last24h' && !compareMode;
+        if (isLive && liveRouteData !== null) {
+            return sortTableData(liveRouteData, sortState);
+        }
+        return ownLiveData;
+    }, [timeframeState, compareMode, liveRouteData, ownLiveData, sortState]);
+
+    // ── State updaters (no persistence) ─────────────────────────────────────
     const updateSortState = React.useCallback((newState) => {
         setSortState(newState);
     }, []);

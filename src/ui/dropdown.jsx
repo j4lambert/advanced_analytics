@@ -12,6 +12,8 @@ const { React } = api.utils;
  * @param {string} props.togglerTitle - Tooltip for the toggler
  * @param {React.Component} props.togglerIcon - Icon component (optional)
  * @param {string} props.togglerText - Text for the toggler (optional)
+ * @param {React.Node} props.togglerContent - Arbitrary React content for the toggler (optional).
+ *   When provided, replaces togglerIcon + togglerText (caret is still appended).
  * @param {string} props.menuClasses - CSS classes for the menu (optional)
  * @param {boolean} props.multiselect - Enable multiselect mode
  * @param {string|string[]} props.value - Current value(s) - string for single, array for multi
@@ -23,6 +25,7 @@ export function Dropdown({
     togglerTitle = '',
     togglerIcon: TogglerIcon = null,
     togglerText = '',
+    togglerContent = null,
     menuClasses = '',
     multiselect = false,
     value = null,
@@ -66,11 +69,14 @@ export function Dropdown({
         }
     };
     
-    // Clone children and inject props
+    // Clone children and inject props — only for DropdownItem children
+    // (custom children like RouteDropdownItem manage their own click handler)
     const enhancedChildren = React.Children.map(children, child => {
         if (!React.isValidElement(child)) return child;
-        
-        // Check if this item is active
+        // Only inject props when the child uses the value/active/multiselect pattern
+        // (i.e. it's a DropdownItem). Custom components pass their own onClick.
+        if (child.props.value === undefined) return child;
+
         const itemValue = child.props.value;
         const isActive = multiselect
             ? Array.isArray(value) && value.includes(itemValue)
@@ -87,6 +93,18 @@ export function Dropdown({
             }
         });
     });
+
+    // Build toggler inner content
+    const togglerInner = togglerContent
+        ? [
+            React.createElement('span', { key: 'custom' }, togglerContent),
+            React.createElement('span', { key: 'caret', className: 'opacity-70' }, '⏷'),
+          ]
+        : [
+            TogglerIcon && React.createElement(TogglerIcon, { key: 'icon', className: 'w-4 h-4' }),
+            togglerText && React.createElement('span', { key: 'text' }, togglerText),
+            React.createElement('span', { key: 'caret', className: 'opacity-70' }, '⏷'),
+          ].filter(Boolean);
     
     return React.createElement('div', {
         ref: wrapperRef,
@@ -109,19 +127,7 @@ export function Dropdown({
             'data-state': dataState,
             onClick: handleToggle,
             type: 'button'
-        }, [
-            TogglerIcon && React.createElement(TogglerIcon, {
-                key: 'icon',
-                className: 'w-4 h-4'
-            }),
-            togglerText && React.createElement('span', {
-                key: 'text'
-            }, togglerText),
-            React.createElement('span', {
-                key: 'caret',
-                className: 'opacity-70'
-            }, "⏷"),
-        ].filter(Boolean)),
+        }, togglerInner),
         
         // Menu
         isOpen && React.createElement('div', {

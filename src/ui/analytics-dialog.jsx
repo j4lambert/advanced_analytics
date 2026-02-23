@@ -1,5 +1,11 @@
 // Analytics Dialog Wrapper
 // Manages dialog state (no persistence)
+//
+// ARCHITECTURE NOTE:
+// This component owns both historicalData and liveRouteData so that
+// AnalyticsTable and AnalyticsChart can share the same live snapshot
+// without fetching it twice.  AnalyticsTable accepts liveRouteData as
+// an optional prop and skips its own fetch when it is provided.
 
 import { Dialog } from './dialog.jsx';
 import { AnalyticsSetting } from './analytics-setting.jsx';
@@ -8,6 +14,8 @@ import { AnalyticsChart } from './analytics-chart.jsx';
 import { StationFlow } from './station-flow.jsx';
 import { SystemMap } from './system-map.jsx';
 import { getStorage } from '../core/lifecycle.js';
+import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
+import { INITIAL_STATE } from '../config.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
@@ -15,9 +23,21 @@ const { React, icons } = api.utils;
 export function AnalyticsDialog() {
     const [isOpen, setIsOpen] = React.useState(false);
     const [historicalData, setHistoricalData] = React.useState({ days: {} });
-    
+
     const storage = getStorage();
-    
+
+    // ── Live data (shared between AnalyticsTable and AnalyticsChart) ──────────
+    // We use the default sort from INITIAL_STATE; the table manages its own sort
+    // internally, but for the purpose of sharing we only need the raw route data.
+    // The empty historicalData is memoised so the hook's dependency array is stable.
+    const emptyHistoricalData = React.useMemo(() => ({ days: {} }), []);
+    const { tableData: liveRouteData } = useRouteMetrics({
+        sortState:      INITIAL_STATE.sort,
+        timeframeState: 'last24h',
+        compareMode:    false,
+        historicalData: emptyHistoricalData,
+    });
+
     // Load historical data when dialog opens
     React.useEffect(() => {
         if (!isOpen || !storage) return;
@@ -77,16 +97,22 @@ export function AnalyticsDialog() {
                     <AnalyticsSetting/>
                 </div>
             </section>
-            
-            {/* Table Section */}
-            <AnalyticsTable groups={['trains', 'finance', 'performance']} />
-            
-            {/* Chart Section */}
+
+            {/* Table Section — receives pre-fetched live data */}
+            <AnalyticsTable
+                groups={['trains', 'finance', 'performance']}
+                liveRouteData={liveRouteData}
+            />
+
+            {/* Chart Section — receives both historical and live data */}
             <section className="mt-8 mb-6">
                 <div className="py-5">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Historical Trends</h3>
                 </div>
-                <AnalyticsChart historicalData={historicalData} />
+                <AnalyticsChart
+                    historicalData={historicalData}
+                    liveRouteData={liveRouteData}
+                />
             </section>
             
             {/* Station Flow Section */}
