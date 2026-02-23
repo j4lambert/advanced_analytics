@@ -6,6 +6,7 @@ import { AnalyticsSetting } from './analytics-setting.jsx';
 import { AnalyticsTable } from './analytics-table.jsx';
 import { AnalyticsChart } from './analytics-chart.jsx';
 import { StationFlow } from './station-flow.jsx';
+import { SystemMap } from './system-map.jsx';
 import { getStorage } from '../core/lifecycle.js';
 
 const api = window.SubwayBuilderAPI;
@@ -95,6 +96,15 @@ export function AnalyticsDialog() {
                     <p className="text-sm text-muted-foreground mt-1">Passenger boarding and alighting patterns (Last 24h)</p>
                 </div>
                 <StationFlow />
+            </section>
+
+            {/* System Map */}
+            <section className="mt-8 mb-6">
+                <div className="py-5">
+                    <h3 className="text-2xl font-semibold leading-none tracking-tight">System Map</h3>
+                    <p className="text-sm text-muted-foreground mt-1">Network schematic map</p>
+                </div>
+                <SystemMap />
             </section>
         </Dialog>
     );
