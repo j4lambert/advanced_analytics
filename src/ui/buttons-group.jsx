@@ -14,7 +14,7 @@ const { React } = api.utils;
  * @param {React.Node} props.children - ButtonsGroupItem components
  */
 export function ButtonsGroup({
-    groupClasses = 'bg-muted inline-block items-center justify-center mx-auto p-1 rounded-md text-muted-foreground',
+    groupClasses = 'bg-muted border inline-block items-center justify-center mx-auto p-1 rounded-md text-muted-foreground',
     value = null,
     onChange = () => {},
     children
