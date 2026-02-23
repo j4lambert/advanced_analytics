@@ -388,9 +388,9 @@ export function SystemMap() {
                 {transferDots.length > 0 && (
                     <div className="flex items-center gap-1.5">
                         <svg width="12" height="12" viewBox="0 0 12 12">
-                            <circle cx="6" cy="6" r="5" fill="#a78bfa"
-                                    stroke="#a78bfa" strokeWidth="1" />
-                            <circle cx="6" cy="6" r="4" fill="var(--background)" />
+                            <circle cx="6" cy="6" r="5" fill="var(--aa-transfer-color)"
+                                    stroke="var(--aa-transfer-color)" strokeWidth="1" />
+                            <circle cx="6" cy="6" r="4" fill="hsla(var(--background))" />
                         </svg>
                         <span className="text-[10px] text-muted-foreground">Transfer</span>
                     </div>
@@ -446,8 +446,8 @@ export function SystemMap() {
                         >
                             <circle cx={px} cy={py} r={16} fill="transparent" />
                             <circle cx={px} cy={py} r={8}
-                                    fill="var(--background,#060d1a)"
-                                    stroke="#a78bfa"
+                                    fill="hsla(var(--background))"
+                                    stroke="var(--aa-transfer-color)"
                                     strokeWidth={1.5}
                             />
                             {routeIds.map((rid, i) => {
@@ -468,8 +468,8 @@ export function SystemMap() {
                             <text
                                 x={px} y={py - 13}
                                 textAnchor="middle" fontSize={8}
-                                fill="currentColor" fillOpacity={0.4}
-                                style={{ fontFamily: 'monospace', letterSpacing: '0.06em' }}
+                                fill="hsl(var(--muted-foreground)"
+                                style={{letterSpacing: '0.06em' }}
                             >
                                 {name.length > 12 ? name.slice(0, 11) + '…' : name.toUpperCase()}
                             </text>

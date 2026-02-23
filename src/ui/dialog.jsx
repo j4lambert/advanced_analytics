@@ -33,7 +33,7 @@ export function Dialog({ id, title, children, isOpen, onClose, size }) {
                 id={`${id}-dialog`}
                 role="dialog"
                 data-state={state}
-                className="aa-dialog-dialog fixed flex flex-col left-[50%] top-[50%] z-[200]  translate-x-[-50%] translate-y-[-50%] border backdrop-blur-md bg-background/50 sm:rounded-lg select-none max-w-[95vw] max-h-[90vh] p-0"
+                className="aa-dialog-dialog fixed flex flex-col left-[50%] top-[50%] z-[200]  translate-x-[-50%] translate-y-[-50%] border backdrop-blur-md bg-background dark:bg-background/50 sm:rounded-lg select-none max-w-[95vw] max-h-[90vh] p-0"
                 tabIndex="-1"
                 style={{ pointerEvents: 'auto', width: size }}
             >

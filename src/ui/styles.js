@@ -8,6 +8,17 @@ export function injectStyles() {
         html.dark .aa-dialog-dialog, html.dark #sb-aa-panel-wrapper-main  {
             color-scheme: dark;
         }
+        html {
+            --aa-transfer-color: #8f4eff;
+        }
+        html.dark {
+            --aa-transfer-color: #a78bfa;
+        }
+        
+        /* ===== Utility Classes ===== */
+        html.dark .dark\\:bg-background\\/50 {
+            background-color: hsl(var(--background) / 0.5);
+        }
         
         /* ===== Components ===== */
         /* Table styling inside dialog */

@@ -95,7 +95,7 @@ export function StationFlow() {
     }, [selectedRoute, routes]);
 
     return (
-        <div className="space-y-4">
+        <div className="aa-chart space-y-4">
             {/* Controls */}
             <div className="flex items-center justify-between gap-4">
                 {/* Left: Route selection */}
@@ -137,7 +137,7 @@ export function StationFlow() {
                         <span>% choosing metro</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <span className="text-base leading-none" style={{ color: '#a78bfa' }}>⊕</span>
+                        <span className="text-base leading-none" style={{ color: 'var(--aa-transfer-color)' }}>⊕</span>
                         <span>Transfer</span>
                     </div>
                 </div>
@@ -194,7 +194,7 @@ function makeCustomXAxisTick(flowData) {
                 y:          0,
                 dy:         10,
                 textAnchor: 'end',
-                fill:       '#9ca3af',
+                fill:       'hsl(var(--muted-foreground)',
                 fontSize:   12,
                 transform:  'rotate(-45)',
             }, label),
@@ -206,7 +206,7 @@ function makeCustomXAxisTick(flowData) {
                 y:          0,
                 dy:         43,         // below the rotated label's vertical extent
                 textAnchor: 'middle',
-                fill:       '#a78bfa',  // purple-400
+                fill:       'var(--aa-transfer-color)',
                 fontSize:   20,
             }, '⊕'),
         ].filter(Boolean));
@@ -284,11 +284,6 @@ function FlowChart({ data, selectedRouteId }) {
                 className: 'mt-2 pt-2 border-t border-border'
             }, [
                 h('div', {className: 'mb-2'}, [
-                    h('span', {
-                        key:       'transfers-symbol',
-                        style: { color: '#a78bfa' },
-                        className: 'mr-1.5'
-                    }, '⊕'),
                     h('span', {
                         key:       'transfers-label',
                         className: 'text-xs font-medium'

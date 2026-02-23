@@ -287,7 +287,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
     };
     
     return h('div', {
-        className: 'w-full',
+        className: 'aa-chart w-full',
         style: { height: '400px' }
     }, 
         h(charts.ResponsiveContainer, { width: '100%', height: '100%' },
