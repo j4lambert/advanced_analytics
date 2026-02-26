@@ -8,6 +8,7 @@
 // an optional prop and skips its own fetch when it is provided.
 
 import { Dialog } from './dialog.jsx';
+import { AnalyticsGuide } from './analytics-guide.jsx';
 import { AnalyticsSetting } from './analytics-setting.jsx';
 import { AnalyticsTable } from './analytics-table.jsx';
 import { AnalyticsChart } from './analytics-chart.jsx';
@@ -76,7 +77,8 @@ export function AnalyticsDialog() {
             size={1280}
             onClose={() => setIsOpen(false)}
         >
-            <section class="flex gap-2 justify-end">
+            <section class="flex gap-2 justify-end border-b pb-4">
+                <AnalyticsGuide/>
                 <div className="flex items-center gap-2 whitespace-nowrap">
                     {!api.gameState.isPaused() && (
                         <>

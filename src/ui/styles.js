@@ -22,6 +22,11 @@ export function injectStyles() {
             background-color: hsl(var(--background) / 0.5);
         }
         
+        .list-disc {
+            list-style-type: disc;
+            padding-inline-start: 3em;
+        }
+        
         /* ===== Components ===== */
         /* Table styling inside dialog */
         #sb-aa-panel-wrapper-main {
