@@ -1,447 +1,280 @@
 // AnalyticsSettingDialog component
-// Dialog for managing saved analytics data with delete, export, import
+// Dialog for managing saved analytics data: delete, export, import
+// Now backed by IndexedDB via Storage static methods (no direct localStorage access)
 
 import { CONFIG } from '../config.js';
 import { Dialog } from './dialog.jsx';
 import { SettingsTable } from './settings-table.jsx';
+import { Storage } from '../core/storage.js';
 import { getCurrentSaveName } from '../core/lifecycle.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
 export function AnalyticsSettingDialog({ isOpen, onClose }) {
-    const [tableData, setTableData] = React.useState([]);
-    const [selectedIds, setSelectedIds] = React.useState([]);
-    const [currentSaveName, setCurrentSaveName] = React.useState(null);
-    const [showUnsavedWarning, setShowUnsavedWarning] = React.useState(false);
-    
-    // Load data when dialog opens
+    const [tableData,           setTableData]           = React.useState([]);
+    const [selectedIds,         setSelectedIds]         = React.useState([]);
+    const [currentSaveName,     setCurrentSaveName]     = React.useState(null);
+    const [showUnsavedWarning,  setShowUnsavedWarning]  = React.useState(false);
+    const [storageInfo,         setStorageInfo]         = React.useState(null);
+    const [isLoading,           setIsLoading]           = React.useState(false);
+
+    // ── Load on open ────────────────────────────────────────────────────────
     React.useEffect(() => {
         if (!isOpen) return;
-        
         loadStorageData();
     }, [isOpen]);
-    
-    // Get city name from city code
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
     const getCityName = (cityCode) => {
         if (!cityCode) return 'Unknown';
-        
         const cities = api.utils.getCities();
-        const city = cities.find(c => c.code === cityCode);
+        const city   = cities.find(c => c.code === cityCode);
         return city ? city.name : cityCode;
     };
-    
-    // Load and process storage data
-    const loadStorageData = () => {
+
+    // ── Load all saves from IDB ─────────────────────────────────────────────
+    const loadStorageData = async () => {
+        setIsLoading(true);
         try {
-            const stored = localStorage.getItem('AdvancedAnalytics');
-            if (!stored) {
-                setTableData([]);
-                checkUnsavedStatus();
-                return;
-            }
-            
-            const storageData = JSON.parse(stored);
-            const saves = storageData.saves || {};
-            
-            // Get current save name from lifecycle module
+            const saves  = await Storage.getAllSaves();
             const current = getCurrentSaveName();
             setCurrentSaveName(current);
-            
-            // Check if we should show unsaved warning
-            checkUnsavedStatus(current, saves);
-            
-            // Process each save
-            const processed = Object.entries(saves).map(([saveName, saveData]) => {
-                // Get historical data (check both working and shared locations)
-                const workingData = saveData.working || {};
-                const historicalData = workingData.historicalData || saveData.historicalData || { days: {} };
-                const dayCount = Object.keys(historicalData.days).length;
-                
-                // Get last day for route count
-                const days = Object.keys(historicalData.days).map(Number).sort((a, b) => b - a);
-                const lastDay = days[0];
-                const lastDayData = lastDay && historicalData.days[lastDay];
-                const routeCount = lastDayData ? lastDayData.routes.length : 0;
-                
-                // Get metadata - refresh from live game state if this is current session
-                let cityCode = saveData.cityCode;
-                let currentRouteCount = saveData.routeCount;
-                let currentDay = saveData.day;
-                let currentStationCount = saveData.stationCount;
-                
-                if (saveName === current) {
-                    // This is current session - use live data for better display
-                    cityCode = api.utils.getCityCode?.() || cityCode;
-                    currentRouteCount = api.gameState.getRoutes().length;
-                    currentDay = api.gameState.getCurrentDay();
-                    currentStationCount = api.gameState.getStations().length;
-                }
-                
-                // Estimate size
-                const saveSize = new Blob([JSON.stringify(saveData)]).size;
-                
-                // Get timestamp (use most recent day's timestamp or current time)
-                const timestamp = lastDayData?.timestamp || Date.now();
-                
-                return {
-                    id: saveName,
-                    name: saveName,
-                    city: getCityName(cityCode),
-                    cityCode: cityCode,
-                    modified: timestamp,
-                    dayCount,
-                    routeCount: currentRouteCount,
-                    size: saveSize
-                };
-            });
-            
-            setTableData(processed);
-            
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to load storage data:`, error);
+
+            // Show warning if there's no active save name OR if the active
+            // save name hasn't been committed to IDB yet (game not saved yet)
+            setShowUnsavedWarning(!current || !saves[current]);
+
+            // Build table rows
+            const rows = await Promise.all(
+                Object.entries(saves).map(async ([saveName, meta]) => {
+                    // Load historical data to get day/route counts
+                    const tempStorage = new Storage(saveName);
+                    const historical  = await tempStorage.get('historicalData', { days: {} });
+                    const dayKeys     = Object.keys(historical.days).map(Number).sort((a, b) => b - a);
+                    const lastDay     = dayKeys[0];
+                    const lastDayData = lastDay != null ? historical.days[lastDay] : null;
+                    const dayCount    = dayKeys.length;
+
+                    // For current save, prefer live game state values
+                    let cityCode     = meta.cityCode;
+                    let routeCount   = meta.routeCount;
+                    let currentDay   = meta.day;
+
+                    if (saveName === current) {
+                        cityCode   = api.utils.getCityCode?.() || cityCode;
+                        routeCount = api.gameState.getRoutes().length;
+                        currentDay = api.gameState.getCurrentDay();
+                    }
+
+                    // Estimate size by serializing historical data
+                    const sizeBytes = new Blob([JSON.stringify(historical)]).size;
+                    const timestamp = lastDayData?.timestamp || Date.now();
+
+                    return {
+                        id:         saveName,
+                        name:       saveName,
+                        city:       getCityName(cityCode),
+                        cityCode,
+                        modified:   timestamp,
+                        dayCount,
+                        routeCount,
+                        size:       sizeBytes,
+                    };
+                })
+            );
+
+            setTableData(rows);
+
+            // Storage estimate
+            const est = await Storage.estimateUsage();
+            setStorageInfo(est);
+
+        } catch (err) {
+            console.error(`${CONFIG.LOG_PREFIX} Failed to load storage data:`, err);
             setTableData([]);
-            checkUnsavedStatus();
+        } finally {
+            setIsLoading(false);
         }
     };
-    
-    // Check if we should show unsaved warning
-    const checkUnsavedStatus = (current = null, saves = {}) => {
-        const saveName = current || getCurrentSaveName();
-        
-        // If no current save name, show warning
-        if (!saveName) {
-            setShowUnsavedWarning(true);
-            return;
-        }
-        
-        // If current save exists in storage, don't show warning
-        if (saves[saveName]) {
-            setShowUnsavedWarning(false);
-            return;
-        }
-        
-        // Current save name exists but not in storage yet (new game saved)
-        setShowUnsavedWarning(false);
-    };
-    
-    // Handle delete selected saves
-    const handleDelete = () => {
+
+    // ── Delete selected ─────────────────────────────────────────────────────
+    const handleDelete = async () => {
         if (selectedIds.length === 0) return;
-        
-        // Check if current save is selected
+
         const deletingCurrent = currentSaveName && selectedIds.includes(currentSaveName);
-        
-        // Build confirmation message
         let message = `Delete ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''}?`;
         if (deletingCurrent) {
-            message += '\n\n⚠️ WARNING: You are deleting the CURRENT save!';
-            message += '\nAll data for this session will be lost.';
+            message += '\n\n⚠️ WARNING: You are deleting the CURRENT save!\nAll data for this session will be lost.';
         }
         message += '\n\nThis action cannot be undone.';
-        
-        const confirmed = window.confirm(message);
-        if (!confirmed) return;
-        
+
+        if (!window.confirm(message)) return;
+
         try {
-            const stored = localStorage.getItem('AdvancedAnalytics');
-            if (!stored) return;
-            
-            const storageData = JSON.parse(stored);
-            
-            // Delete selected saves
-            selectedIds.forEach(id => {
-                delete storageData.saves[id];
-            });
-            
-            // Save back to localStorage
-            localStorage.setItem('AdvancedAnalytics', JSON.stringify(storageData));
-            
-            // Reload table data
-            loadStorageData();
-            
-            // Clear selection
+            await Promise.all(selectedIds.map(id => Storage.deleteSave(id)));
+            await loadStorageData();
             setSelectedIds([]);
-            
-            // Show notification
-            api.ui.showNotification(
-                `Deleted ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''}`,
-                'success'
-            );
-            
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to delete saves:`, error);
+            api.ui.showNotification(`Deleted ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''}`, 'success');
+        } catch (err) {
+            console.error(`${CONFIG.LOG_PREFIX} Failed to delete saves:`, err);
             api.ui.showNotification('Failed to delete saves', 'error');
         }
     };
-    
-    // Handle delete all except current
-    const handleDeleteAllExceptCurrent = () => {
+
+    // ── Delete all except current ────────────────────────────────────────────
+    const handleDeleteAllExceptCurrent = async () => {
         if (!currentSaveName) {
             api.ui.showNotification('No current save to keep', 'error');
             return;
         }
-        
+
         const othersCount = tableData.filter(row => row.id !== currentSaveName).length;
         if (othersCount === 0) {
             api.ui.showNotification('No other saves to delete', 'info');
             return;
         }
-        
+
         const message = `Delete all ${othersCount} saves except "${currentSaveName}"?\n\nThis action cannot be undone.`;
-        const confirmed = window.confirm(message);
-        if (!confirmed) return;
-        
+        if (!window.confirm(message)) return;
+
         try {
-            const stored = localStorage.getItem('AdvancedAnalytics');
-            if (!stored) return;
-            
-            const storageData = JSON.parse(stored);
-            
-            // Keep only current save
-            const newSaves = {};
-            if (storageData.saves[currentSaveName]) {
-                newSaves[currentSaveName] = storageData.saves[currentSaveName];
-            }
-            
-            storageData.saves = newSaves;
-            
-            // Save back
-            localStorage.setItem('AdvancedAnalytics', JSON.stringify(storageData));
-            
-            // Reload
-            loadStorageData();
+            const toDelete = tableData
+                .filter(row => row.id !== currentSaveName)
+                .map(row => row.id);
+
+            await Promise.all(toDelete.map(id => Storage.deleteSave(id)));
+            await loadStorageData();
             setSelectedIds([]);
-            
             api.ui.showNotification(`Deleted ${othersCount} saves`, 'success');
-            
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to clean up saves:`, error);
+        } catch (err) {
+            console.error(`${CONFIG.LOG_PREFIX} Failed to clean up saves:`, err);
             api.ui.showNotification('Failed to clean up saves', 'error');
         }
     };
-    
-    // Handle export selected saves
-    const handleExport = () => {
+
+    // ── Export selected ─────────────────────────────────────────────────────
+    const handleExport = async () => {
         if (selectedIds.length === 0) return;
-        
+
         try {
-            const stored = localStorage.getItem('AdvancedAnalytics');
-            if (!stored) return;
-            
-            const storageData = JSON.parse(stored);
-            
-            // Build export data
-            const exportData = {
-                version: CONFIG.VERSION,
+            const saves = await Storage.getAllSaves();
+
+            const exportPayload = {
+                version:    CONFIG.VERSION,
                 exportDate: Date.now(),
-                saves: {}
+                saves:      {},
             };
-            
-            selectedIds.forEach(id => {
-                if (storageData.saves[id]) {
-                    exportData.saves[id] = storageData.saves[id];
-                }
-            });
-            
-            // Create blob and download
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { 
-                type: 'application/json' 
-            });
+
+            await Promise.all(selectedIds.map(async id => {
+                exportPayload.saves[id] = {
+                    metadata: saves[id] || {},
+                    data:     await Storage.exportSave(id),
+                };
+            }));
+
+            const blob = new Blob(
+                [JSON.stringify(exportPayload, null, 2)],
+                { type: 'application/json' }
+            );
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
+            const a   = document.createElement('a');
+            a.href     = url;
             a.download = `analytics-export-${Date.now()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            
-            api.ui.showNotification(
-                `Exported ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''}`,
-                'success'
-            );
-            
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to export saves:`, error);
+
+            api.ui.showNotification(`Exported ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''}`, 'success');
+        } catch (err) {
+            console.error(`${CONFIG.LOG_PREFIX} Failed to export saves:`, err);
             api.ui.showNotification('Failed to export saves', 'error');
         }
     };
-    
-    // Find potential matches for import conflict detection
-    const findPotentialMatches = (importSaveName, importSaveData, existingSaves) => {
-        const matches = [];
-        
-        const importMetadata = {
-            cityCode: importSaveData.cityCode,
-            routeCount: importSaveData.routeCount,
-            day: importSaveData.day,
-            stationCount: importSaveData.stationCount
-        };
-        
-        for (const [existingName, existingData] of Object.entries(existingSaves)) {
-            // Check if ALL criteria match
-            if (existingName === importSaveName &&
-                existingData.cityCode === importMetadata.cityCode &&
-                existingData.routeCount === importMetadata.routeCount &&
-                existingData.day === importMetadata.day &&
-                existingData.stationCount === importMetadata.stationCount) {
-                matches.push(existingName);
-            }
-        }
-        
-        return matches;
-    };
-    
-    // Handle import saves
+
+    // ── Import ──────────────────────────────────────────────────────────────
     const handleImport = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'application/json,.json';
-        
+        const input    = document.createElement('input');
+        input.type     = 'file';
+        input.accept   = 'application/json,.json';
+
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             try {
-                const text = await file.text();
-                const importData = JSON.parse(text);
-                
+                const text        = await file.text();
+                const importData  = JSON.parse(text);
+
                 // Validate structure
                 if (!importData.saves || typeof importData.saves !== 'object') {
                     throw new Error('Invalid export file format');
                 }
-                
-                // Get current storage
-                const stored = localStorage.getItem('AdvancedAnalytics');
-                const storageData = stored ? JSON.parse(stored) : { saves: {} };
-                
-                // Check for conflicts and ambiguities
-                const conflictInfo = [];
-                
-                for (const [importName, importSave] of Object.entries(importData.saves)) {
-                    const matches = findPotentialMatches(importName, importSave, storageData.saves);
-                    
-                    if (matches.length > 1) {
-                        // Ambiguous - multiple matches
-                        conflictInfo.push({
-                            name: importName,
-                            type: 'ambiguous',
-                            matches: matches
-                        });
-                    } else if (matches.length === 1) {
-                        // Single match - will overwrite
-                        conflictInfo.push({
-                            name: importName,
-                            type: 'overwrite',
-                            matches: matches
-                        });
+
+                const existingSaves = await Storage.getAllSaves();
+                const overwrites    = [];
+
+                for (const importName of Object.keys(importData.saves)) {
+                    if (existingSaves[importName]) {
+                        overwrites.push(importName);
                     }
-                    // No matches - will create new
                 }
-                
-                // Handle conflicts
-                if (conflictInfo.length > 0) {
-                    let message = 'Import conflicts detected:\n\n';
-                    
-                    const overwrites = conflictInfo.filter(c => c.type === 'overwrite');
-                    const ambiguous = conflictInfo.filter(c => c.type === 'ambiguous');
-                    
-                    if (overwrites.length > 0) {
-                        message += 'The following saves will be OVERWRITTEN:\n';
-                        overwrites.forEach(c => {
-                            message += `  • ${c.name}\n`;
-                        });
-                        message += '\n';
-                    }
-                    
-                    if (ambiguous.length > 0) {
-                        message += '⚠️ AMBIGUOUS MATCHES (multiple saves match criteria):\n';
-                        ambiguous.forEach(c => {
-                            message += `  • ${c.name} matches: ${c.matches.join(', ')}\n`;
-                        });
-                        message += '\n';
-                        message += 'Import cannot proceed with ambiguous matches.\n';
-                        message += 'Please rename or delete conflicting saves first.';
-                        
-                        alert(message);
-                        return;
-                    }
-                    
-                    message += 'Continue with import?';
-                    
-                    if (!window.confirm(message)) return;
+
+                if (overwrites.length > 0) {
+                    const msg = `The following saves will be OVERWRITTEN:\n${overwrites.map(n => `  • ${n}`).join('\n')}\n\nContinue with import?`;
+                    if (!window.confirm(msg)) return;
                 }
-                
-                // Merge saves
-                Object.assign(storageData.saves, importData.saves);
-                
-                // Save back
-                localStorage.setItem('AdvancedAnalytics', JSON.stringify(storageData));
-                
-                // Reload
-                loadStorageData();
-                
-                const importCount = Object.keys(importData.saves).length;
-                api.ui.showNotification(
-                    `Imported ${importCount} save${importCount > 1 ? 's' : ''}`,
-                    'success'
+
+                // Import each save
+                await Promise.all(
+                    Object.entries(importData.saves).map(([saveName, savePayload]) => {
+                        const metadata = savePayload.metadata || {};
+                        const data     = savePayload.data     || savePayload; // backward compat
+                        return Storage.importSave(saveName, data, metadata);
+                    })
                 );
-                
-            } catch (error) {
-                console.error(`${CONFIG.LOG_PREFIX} Failed to import saves:`, error);
+
+                await loadStorageData();
+                const count = Object.keys(importData.saves).length;
+                api.ui.showNotification(`Imported ${count} save${count > 1 ? 's' : ''}`, 'success');
+
+            } catch (err) {
+                console.error(`${CONFIG.LOG_PREFIX} Failed to import saves:`, err);
                 api.ui.showNotification('Failed to import saves. Invalid file format.', 'error');
             }
         };
-        
+
         input.click();
     };
-    
-    // Table columns
+
+    // ── Table columns ────────────────────────────────────────────────────────
     const columns = [
+        { key: 'name',       label: 'Save Name', align: 'left' },
+        { key: 'city',       label: 'City',      align: 'right' },
         {
-            key: 'name',
-            label: 'Save Name',
-            align: 'left'
+            key: 'modified', label: 'Modified',  align: 'right',
+            render: (ts) => new Date(ts).toLocaleString(),
         },
         {
-            key: 'city',
-            label: 'City',
-            align: 'right'
+            key: 'dayCount', label: 'Days',      align: 'right',
+            render: (n) => n.toLocaleString(),
         },
         {
-            key: 'modified',
-            label: 'Modified',
-            align: 'right',
-            render: (timestamp) => {
-                const date = new Date(timestamp);
-                return date.toLocaleString();
-            }
+            key: 'routeCount', label: 'Routes',  align: 'right',
+            render: (n) => n.toLocaleString(),
         },
         {
-            key: 'dayCount',
-            label: 'Days',
-            align: 'right',
-            render: (count) => count.toLocaleString()
-        },
-        {
-            key: 'routeCount',
-            label: 'Routes',
-            align: 'right',
-            render: (count) => count.toLocaleString()
-        },
-        {
-            key: 'size',
-            label: 'Size',
-            align: 'right',
+            key: 'size', label: 'Size', align: 'right',
             render: (bytes) => {
-                if (bytes < 1024) return `${bytes} B`;
-                if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+                if (bytes < 1024)             return `${bytes} B`;
+                if (bytes < 1024 * 1024)      return `${(bytes / 1024).toFixed(1)} KB`;
                 return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-            }
-        }
+            },
+        },
     ];
-    
+
+    // ── Render ───────────────────────────────────────────────────────────────
     return (
         <Dialog
             id="aa-settings-dialog"
@@ -452,9 +285,9 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
             {/* Action buttons */}
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4">
                 <div className="flex items-center justify-between gap-2">
-                    {/* Left side - selection actions */}
+                    {/* Left — selection actions */}
                     <div className="flex items-center gap-2">
-                        {selectedIds.length > 0 && (
+                        {selectedIds.length > 0 ? (
                             <>
                                 <button
                                     onClick={handleDelete}
@@ -463,7 +296,7 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                                     <icons.Trash2 size={14} />
                                     <span>Delete ({selectedIds.length})</span>
                                 </button>
-                                
+
                                 <button
                                     onClick={handleExport}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
@@ -472,16 +305,14 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                                     <span>Export ({selectedIds.length})</span>
                                 </button>
                             </>
-                        )}
-                        
-                        {selectedIds.length === 0 && (
+                        ) : (
                             <span className="text-xs text-muted-foreground">
                                 Select saves to delete or export
                             </span>
                         )}
                     </div>
-                    
-                    {/* Right side - global actions */}
+
+                    {/* Right — global actions */}
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleDeleteAllExceptCurrent}
@@ -492,7 +323,7 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                             <icons.Trash2 size={14} />
                             <span>Clear All Except Current</span>
                         </button>
-                        
+
                         <button
                             onClick={handleImport}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border bg-primary text-primary-foreground border-primary hover:bg-primary/90"
@@ -503,7 +334,7 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                     </div>
                 </div>
             </div>
-            
+
             {/* Unsaved warning */}
             {showUnsavedWarning && (
                 <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
@@ -512,44 +343,64 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
                         <div className="text-xs text-amber-700 dark:text-amber-400">
                             <strong>Current session data not identifiable</strong>
                             <p className="mt-1">
-                                You need to save the game first before the current session data can be tracked and managed here.
+                                Save the game first so the current session can be tracked and managed here.
                             </p>
                         </div>
                     </div>
                 </div>
             )}
-            
+
+            {/* Loading state */}
+            {isLoading && (
+                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
+                    <icons.Loader2 size={16} className="animate-spin mr-2" />
+                    Loading saves…
+                </div>
+            )}
+
             {/* Table */}
-            <div className="overflow-auto rounded-lg border border-border">
-                <SettingsTable
-                    data={tableData}
-                    columns={columns}
-                    selectedIds={selectedIds}
-                    onSelectionChange={setSelectedIds}
-                    currentId={currentSaveName}
-                />
-            </div>
-            
+            {!isLoading && (
+                <div className="overflow-auto rounded-lg border border-border">
+                    <SettingsTable
+                        data={tableData}
+                        columns={columns}
+                        selectedIds={selectedIds}
+                        onSelectionChange={setSelectedIds}
+                        currentId={currentSaveName}
+                    />
+                </div>
+            )}
+
             {/* Storage info */}
             <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
                 <div className="flex items-start gap-2">
                     <icons.Info size={16} className="mt-0.5 text-muted-foreground shrink-0" />
                     <div className="text-xs text-muted-foreground space-y-1">
+                        <p><strong>Total saves:</strong> {tableData.length}</p>
                         <p>
-                            <strong>Total saves:</strong> {tableData.length}
-                        </p>
-                        <p>
-                            <strong>Total size:</strong>{' '}
+                            <strong>Total data size:</strong>{' '}
                             {(() => {
-                                const totalBytes = tableData.reduce((sum, row) => sum + row.size, 0);
-                                if (totalBytes < 1024) return `${totalBytes} B`;
-                                if (totalBytes < 1024 * 1024) return `${(totalBytes / 1024).toFixed(1)} KB`;
-                                return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
+                                const total = tableData.reduce((s, r) => s + r.size, 0);
+                                if (total < 1024)        return `${total} B`;
+                                if (total < 1024 * 1024) return `${(total / 1024).toFixed(1)} KB`;
+                                return `${(total / (1024 * 1024)).toFixed(1)} MB`;
                             })()}
                         </p>
+                        {storageInfo && (
+                            <p>
+                                <strong>IndexedDB usage:</strong>{' '}
+                                {storageInfo.usedMB} MB / {storageInfo.quotaMB} MB ({storageInfo.pct})
+                                <div className="mt-1.5 pt-2 relative pt-2 bg-background border rounded overflow-hidden">
+                                    <span
+                                        className="absolute left-0 bottom-0 h-full bg-destructive"
+                                        style={{width: storageInfo.pct}}
+                                    />
+                                </div>
+                            </p>
+                        )}
                         <p className="pt-2 border-t border-border/50">
-                            LocalStorage typically has a limit of 5-10 MB per domain. 
-                            Use export to backup your data externally.
+                            Data is stored in IndexedDB — no practical size limit for analytics data.
+                            Use export to back up saves externally.
                         </p>
                     </div>
                 </div>

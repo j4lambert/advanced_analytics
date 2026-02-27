@@ -1,314 +1,481 @@
 // Storage management module
-// Handles localStorage for save-specific data only (historical data)
+// Handles IndexedDB persistence for save-specific data (historical data, route statuses, config)
 //
-// ARCHITECTURE: Transactional Storage Model with Shared Immutable Data
-// ======================================================================
-// This implements a backup/restore pattern with optimization:
+// ARCHITECTURE: Transactional Storage Model
+// ==========================================
+// Same backup/restore pattern as before, now built on IndexedDB instead of localStorage.
+// IndexedDB has no practical size limit for our use case (~GB vs 5-10MB localStorage cap).
 //
-// - SHARED DATA: historicalData (immutable once captured, never changes)
-// - WORKING COPY: routeStatuses, configCache (volatile, changes during gameplay)
-// - SAVED COPY: routeStatuses, configCache (persistent, only updates on save)
+// KEY SCHEMA (all keys are strings):
+//   meta::saves                     → { [saveName]: SaveMetadata }
+//   save::{saveName}::historicalData → { days: {...} }          (shared/immutable)
+//   save::{saveName}::working::{key} → any                      (transactional - working)
+//   save::{saveName}::saved::{key}   → any                      (transactional - committed)
 //
 // LIFECYCLE:
-// 1. Game loads → restore() copies saved → working (rollback to saved state)
-// 2. Play game → data accumulates in working copy
-// 3. Game saves → backup() copies working → saved (commit transaction)
-//
-// STORAGE SAVINGS:
-// By sharing immutable historicalData, we reduce duplication by ~95%
-// Only volatile data (routeStatuses, configCache) needs the transactional model
+//   1. Game loads  → restore() copies saved:* → working:* (rollback to saved state)
+//   2. Play game   → data accumulates in working:*
+//   3. Game saves  → backup() copies working:* → saved:*  (commit transaction)
 
 import { CONFIG } from '../config.js';
 
-const STORAGE_KEY = 'AdvancedAnalytics';
+const DB_NAME    = 'AdvancedAnalytics';
+const DB_VERSION = 1;
+const STORE_NAME = 'analytics';
 
-// Keys that are immutable and can be shared between working and saved
-const SHARED_KEYS = ['historicalData'];
-
-// Keys that need transactional protection (working/saved split)
+// Keys that are immutable once written — stored at save root, not duplicated
+const SHARED_KEYS       = ['historicalData'];
+// Keys that use the working/saved transactional split
 const TRANSACTIONAL_KEYS = ['routeStatuses', 'configCache'];
 
+// ---------------------------------------------------------------------------
+// Low-level IDB helpers (module-private)
+// ---------------------------------------------------------------------------
+
+let _db = null;
+
 /**
- * Storage class for managing mod data in localStorage
- * 
- * STORAGE STRUCTURE:
- * {
- *   saves: {
- *     "SaveName1": {
- *       cityCode: "NYC",
- *       routeCount: 3,
- *       day: 6,
- *       stationCount: 25,
- *       historicalData: { days: {...} },  // SHARED between working/saved
- *       working: { 
- *         routeStatuses: {...}, 
- *         configCache: {...} 
- *       },
- *       saved: { 
- *         routeStatuses: {...}, 
- *         configCache: {...} 
- *       }
- *     }
- *   }
- * }
+ * Open (or reuse) the IndexedDB connection.
+ * @returns {Promise<IDBDatabase>}
  */
+async function _getDB() {
+    if (_db) return _db;
+
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+        req.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+
+        req.onsuccess = (event) => {
+            _db = event.target.result;
+            _db.onclose = () => { _db = null; };   // reconnect on next call
+            resolve(_db);
+        };
+
+        req.onerror   = () => reject(req.error);
+        req.onblocked = () => reject(new Error('[Storage] IDB upgrade blocked'));
+    });
+}
+
+/**
+ * Wrap a single IDB request in a Promise.
+ * @param {IDBRequest} request
+ * @returns {Promise<any>}
+ */
+function _wrap(request) {
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror   = () => reject(request.error);
+    });
+}
+
+/**
+ * Execute a single-key read.
+ * Returns null (not undefined) when the key is missing.
+ */
+async function _idbGet(key) {
+    const db    = await _getDB();
+    const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
+    const result = await _wrap(store.get(key));
+    return result !== undefined ? result : null;
+}
+
+/**
+ * Execute a single-key write.
+ */
+async function _idbSet(key, value) {
+    const db    = await _getDB();
+    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+    return _wrap(store.put(value, key));
+}
+
+/**
+ * Execute a single-key delete.
+ */
+async function _idbDelete(key) {
+    const db    = await _getDB();
+    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+    return _wrap(store.delete(key));
+}
+
+/**
+ * Atomic multi-write in a single transaction.
+ * @param {Object} entries - { key: value, ... }
+ */
+async function _idbSetMany(entries) {
+    const db  = await _getDB();
+    const tx  = db.transaction(STORE_NAME, 'readwrite');
+    const st  = tx.objectStore(STORE_NAME);
+    for (const [key, value] of Object.entries(entries)) {
+        st.put(value, key);
+    }
+    return new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror    = () => reject(tx.error);
+    });
+}
+
+/**
+ * Return all keys that start with a given prefix.
+ * @param {string} prefix
+ * @returns {Promise<string[]>}
+ */
+async function _idbKeysByPrefix(prefix) {
+    const db    = await _getDB();
+    const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
+    const allKeys = await _wrap(store.getAllKeys());
+    return allKeys.filter(k => k.startsWith(prefix));
+}
+
+/**
+ * Delete all keys that start with a given prefix (single transaction).
+ * @param {string} prefix
+ * @returns {Promise<number>} Number of deleted keys
+ */
+async function _idbDeleteByPrefix(prefix) {
+    const keys = await _idbKeysByPrefix(prefix);
+    if (keys.length === 0) return 0;
+
+    const db  = await _getDB();
+    const tx  = db.transaction(STORE_NAME, 'readwrite');
+    const st  = tx.objectStore(STORE_NAME);
+    for (const key of keys) st.delete(key);
+
+    return new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve(keys.length);
+        tx.onerror    = () => reject(tx.error);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Key builders
+// ---------------------------------------------------------------------------
+
+const Keys = {
+    meta:            () => 'meta::saves',
+    shared:  (save, k) => `save::${save}::${k}`,
+    working: (save, k) => `save::${save}::working::${k}`,
+    saved:   (save, k) => `save::${save}::saved::${k}`,
+    savePrefix: (save) => `save::${save}::`,
+};
+
+// ---------------------------------------------------------------------------
+// Save metadata helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the saves metadata map.
+ * Shape: { [saveName]: { cityCode, routeCount, day, stationCount } }
+ */
+async function _getMeta() {
+    return (await _idbGet(Keys.meta())) || {};
+}
+
+async function _setMeta(meta) {
+    return _idbSet(Keys.meta(), meta);
+}
+
+// ---------------------------------------------------------------------------
+// Public Storage class
+// ---------------------------------------------------------------------------
+
 export class Storage {
     constructor(saveName = null) {
         this.saveName = saveName;
     }
 
-    /**
-     * Get the entire storage object from localStorage
-     * @returns {Object} Storage object with saves property
-     */
-    getStorage() {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            return stored ? JSON.parse(stored) : { saves: {} };
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to parse storage:`, error);
-            return { saves: {} };
-        }
-    }
+    // ── Core read/write ────────────────────────────────────────────────────
 
     /**
-     * Save the entire storage object to localStorage
-     * @param {Object} data - Storage data to save
-     */
-    setStorage(data) {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        } catch (error) {
-            console.error(`${CONFIG.LOG_PREFIX} Failed to save storage:`, error);
-        }
-    }
-
-    /**
-     * Get save-specific data
-     * 
-     * For SHARED keys (historicalData): Returns shared data
-     * For TRANSACTIONAL keys (routeStatuses, configCache): Returns from working copy
-     * 
-     * @param {string} key - Storage key
-     * @param {*} defaultValue - Default value if key not found
-     * @returns {Promise<*>} Stored value or default
+     * Get a value from the current save's storage.
+     *
+     * SHARED keys (historicalData)     → read from shared slot
+     * TRANSACTIONAL keys (everything else) → read from working slot
+     *
+     * @param {string} key
+     * @param {*} defaultValue
+     * @returns {Promise<*>}
      */
     async get(key, defaultValue) {
-        const storage = this.getStorage();
-        const savePrefix = this.saveName || 'NoName';
-        
-        if (!storage.saves[savePrefix]) {
-            return defaultValue;
-        }
-        
-        const saveData = storage.saves[savePrefix];
-        
-        // Check if this is a shared key
-        if (SHARED_KEYS.includes(key)) {
-            return saveData[key] !== undefined ? saveData[key] : defaultValue;
-        }
-        
-        // Otherwise, get from working copy
-        const workingData = saveData.working || {};
-        return workingData[key] !== undefined ? workingData[key] : defaultValue;
+        const save = this.saveName || 'NoName';
+
+        const idbKey = SHARED_KEYS.includes(key)
+            ? Keys.shared(save, key)
+            : Keys.working(save, key);
+
+        const value = await _idbGet(idbKey);
+        return value !== null ? value : defaultValue;
     }
 
     /**
-     * Set save-specific data
-     * 
-     * For SHARED keys (historicalData): Writes directly to root level
-     * For TRANSACTIONAL keys (routeStatuses, configCache): Writes to working copy
-     * 
-     * @param {string} key - Storage key
-     * @param {*} value - Value to store
+     * Write a value to the current save's storage.
+     *
+     * SHARED keys     → write to shared slot (no transactional split)
+     * TRANSACTIONAL keys → write to working slot only
+     *
+     * @param {string} key
+     * @param {*} value
      * @returns {Promise<void>}
      */
     async set(key, value) {
-        const storage = this.getStorage();
-        const savePrefix = this.saveName || 'NoName';
-        
-        if (!storage.saves[savePrefix]) {
-            storage.saves[savePrefix] = { 
-                cityCode: null,
-                routeCount: 0,
-                day: 0,
-                stationCount: 0,
-                working: {}, 
-                saved: {} 
-            };
-        }
-        
-        const saveData = storage.saves[savePrefix];
-        
-        // Check if this is a shared key
-        if (SHARED_KEYS.includes(key)) {
-            // Write directly to root level (shared)
-            saveData[key] = value;
-        } else {
-            // Write to working copy (transactional)
-            if (!saveData.working) {
-                saveData.working = {};
-            }
-            saveData.working[key] = value;
-        }
-        
-        this.setStorage(storage);
+        const save = this.saveName || 'NoName';
+
+        const idbKey = SHARED_KEYS.includes(key)
+            ? Keys.shared(save, key)
+            : Keys.working(save, key);
+
+        return _idbSet(idbKey, value);
     }
 
     /**
-     * Delete a key from save-specific storage
-     * @param {string} key - Storage key to delete
-     * @returns {Promise<void>}
+     * Delete a key from the current save.
+     * @param {string} key
      */
     async delete(key) {
-        const storage = this.getStorage();
-        const savePrefix = this.saveName || 'NoName';
-        
-        if (!storage.saves[savePrefix]) return;
-        
-        const saveData = storage.saves[savePrefix];
-        
-        // Check if this is a shared key
-        if (SHARED_KEYS.includes(key)) {
-            delete saveData[key];
-        } else if (saveData.working) {
-            delete saveData.working[key];
-        }
-        
-        this.setStorage(storage);
+        const save = this.saveName || 'NoName';
+
+        const idbKey = SHARED_KEYS.includes(key)
+            ? Keys.shared(save, key)
+            : Keys.working(save, key);
+
+        return _idbDelete(idbKey);
     }
 
     /**
-     * COMMIT TRANSACTION: Backup working data to saved slot
-     * 
-     * Only backs up TRANSACTIONAL keys (routeStatuses, configCache)
-     * SHARED keys (historicalData) are already at root level
-     * 
-     * Flow:
-     * 1. Deep clone working copy of transactional keys
-     * 2. Save as saved copy
-     * 3. Update metadata (cityCode, routeCount, day, stationCount)
-     * 4. Saved is now the "source of truth" for this save
-     * 
+     * Return all logical keys stored for the current save.
+     * Strips the IDB key prefix so callers get plain key names.
+     * @returns {Promise<string[]>}
+     */
+    async keys() {
+        const save   = this.saveName || 'NoName';
+        const prefix = Keys.savePrefix(save);
+        const rawKeys = await _idbKeysByPrefix(prefix);
+
+        return rawKeys.map(k => {
+            // Strip: save::{name}::(shared|working|saved)::
+            const withoutPrefix = k.slice(prefix.length);
+            const slashIdx      = withoutPrefix.indexOf('::');
+            return slashIdx >= 0
+                ? withoutPrefix.slice(slashIdx + 2)
+                : withoutPrefix;
+        });
+    }
+
+    // ── Transactional commit / rollback ────────────────────────────────────
+
+    /**
+     * COMMIT: copy working transactional keys → saved slot.
+     * Also updates save metadata with current game state.
+     *
      * @param {Object} api - SubwayBuilderAPI instance
-     * @returns {Promise<void>}
      */
     async backup(api) {
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] backup() | save: ${this.saveName}`);
-        const storage = this.getStorage();
-        const savePrefix = this.saveName || 'NoName';
-        
-        if (!storage.saves[savePrefix]) return;
-        
-        const saveData = storage.saves[savePrefix];
-        
-        if (saveData.working) {
-            // Only backup transactional keys (not shared historicalData)
-            const transactionalData = {};
-            
-            TRANSACTIONAL_KEYS.forEach(key => {
-                if (saveData.working[key] !== undefined) {
-                    transactionalData[key] = saveData.working[key];
-                }
-            });
-            
-            // Deep clone to prevent reference sharing
-            saveData.saved = JSON.parse(JSON.stringify(transactionalData));
-            
-            // Update metadata
-            const cityCode = api.utils.getCityCode?.() || null;
-            const routes = api.gameState.getRoutes();
-            const stations = api.gameState.getStations();
-            const day = api.gameState.getCurrentDay();
-            
-            saveData.cityCode = cityCode;
-            saveData.routeCount = routes.length;
-            saveData.day = day;
-            saveData.stationCount = stations.length;
-            
-            this.setStorage(storage);
-            console.log(`${CONFIG.LOG_PREFIX} ✓ Transaction committed for save: ${savePrefix}`);
+        const save = this.saveName || 'NoName';
+        console.log(`${CONFIG.LOG_PREFIX} [Storage] backup() | save: ${save}`);
+
+        // Read all transactional working values
+        const workingEntries = {};
+        for (const key of TRANSACTIONAL_KEYS) {
+            const value = await _idbGet(Keys.working(save, key));
+            if (value !== null) {
+                workingEntries[Keys.saved(save, key)] = value;
+            }
         }
+
+        // Update metadata
+        const cityCode   = api.utils.getCityCode?.() || null;
+        const routes     = api.gameState.getRoutes();
+        const stations   = api.gameState.getStations();
+        const day        = api.gameState.getCurrentDay();
+
+        const meta = await _getMeta();
+        meta[save] = { cityCode, routeCount: routes.length, day, stationCount: stations.length };
+
+        workingEntries[Keys.meta()] = meta;
+
+        await _idbSetMany(workingEntries);
+
+        console.log(`${CONFIG.LOG_PREFIX} ✓ Transaction committed for save: ${save}`);
         console.log(`${CONFIG.LOG_PREFIX} [Storage] backup() complete`);
     }
 
     /**
-     * ROLLBACK TRANSACTION: Restore saved data to working slot
-     * 
-     * Only restores TRANSACTIONAL keys (routeStatuses, configCache)
-     * SHARED keys (historicalData) remain at root level unchanged
-     * 
-     * Flow:
-     * 1. Load saved copy (last committed state)
-     * 2. Deep clone it
-     * 3. Overwrite working copy
-     * 4. Working copy now matches the save file on disk
-     * 
-     * CRITICAL: This prevents data leakage from previous sessions!
-     * Without this, unsaved data from a previous session would persist.
-     * 
-     * @returns {Promise<void>}
+     * ROLLBACK: copy saved transactional keys → working slot.
+     * Prevents data leakage from a previous session.
      */
     async restore() {
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() | save: ${this.saveName}`);
-        const storage = this.getStorage();
-        const savePrefix = this.saveName || 'NoName';
-        
-        if (!storage.saves[savePrefix]) return;
-        
-        const saveData = storage.saves[savePrefix];
-        
-        if (saveData.saved) {
-            // Deep clone to prevent reference sharing
-            saveData.working = JSON.parse(JSON.stringify(saveData.saved));
-            
-            this.setStorage(storage);
-            console.log(`${CONFIG.LOG_PREFIX} ✓ Rolled back to saved state for: ${savePrefix}`);
+        const save = this.saveName || 'NoName';
+        console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() | save: ${save}`);
+
+        const entries = {};
+        let restoredCount = 0;
+
+        for (const key of TRANSACTIONAL_KEYS) {
+            const saved = await _idbGet(Keys.saved(save, key));
+            if (saved !== null) {
+                entries[Keys.working(save, key)] = saved;
+                restoredCount++;
+            }
         }
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() complete | keys restored: ${Object.keys(saveData.working || {}).join(', ')}`);
+
+        if (restoredCount > 0) {
+            await _idbSetMany(entries);
+            console.log(`${CONFIG.LOG_PREFIX} ✓ Rolled back to saved state for: ${save} (${restoredCount} keys)`);
+        } else {
+            console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() — no saved state found for: ${save}`);
+        }
+
+        console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() complete`);
     }
 
+    // ── Metadata ───────────────────────────────────────────────────────────
+
     /**
-     * Update the current save name
-     * 
-     * Used when save is loaded or renamed.
-     * This switches the storage context to a different save file.
-     * 
-     * @param {string} newSaveName - New save name
+     * Update the save name (switches storage context).
+     * @param {string} newSaveName
      */
     setSaveName(newSaveName) {
         console.log(`${CONFIG.LOG_PREFIX} [Storage] setSaveName | ${this.saveName} → ${newSaveName}`);
         this.saveName = newSaveName;
     }
 
+    // ── Save management (used by settings dialog) ──────────────────────────
+
     /**
-     * Get all keys in current save's storage
-     * Includes both shared keys and working copy keys
-     * @returns {Promise<string[]>} Array of keys
+     * Return all save metadata entries.
+     * @returns {Promise<Object>} { [saveName]: { cityCode, routeCount, day, stationCount } }
      */
-    async keys() {
-        const storage = this.getStorage();
-        const savePrefix = this.saveName || 'NoName';
-        
-        if (!storage.saves[savePrefix]) {
-            return [];
+    static async getAllSaves() {
+        return _getMeta();
+    }
+
+    /**
+     * Delete a specific save and all its associated IDB keys.
+     * @param {string} saveName
+     */
+    static async deleteSave(saveName) {
+        await _idbDeleteByPrefix(Keys.savePrefix(saveName));
+
+        // Remove from metadata
+        const meta = await _getMeta();
+        delete meta[saveName];
+        await _setMeta(meta);
+    }
+
+    /**
+     * Rename a save in metadata (used when a temp session ID gets a real name).
+     * Does NOT copy IDB keys — call migrateKeys() if you need that.
+     * @param {string} oldName
+     * @param {string} newName
+     */
+    static async renameSave(oldName, newName) {
+        const meta = await _getMeta();
+        if (meta[oldName]) {
+            meta[newName] = meta[oldName];
+            delete meta[oldName];
+            await _setMeta(meta);
         }
-        
-        const saveData = storage.saves[savePrefix];
-        const allKeys = new Set();
-        
-        // Add shared keys
-        SHARED_KEYS.forEach(key => {
-            if (saveData[key] !== undefined) {
-                allKeys.add(key);
+    }
+
+    /**
+     * Copy all IDB keys from one save name to another.
+     * Used when a temp session ID is replaced by the real save name.
+     * @param {string} oldName
+     * @param {string} newName
+     * @param {boolean} deleteOld - Whether to delete old keys after copy
+     */
+    static async migrateKeys(oldName, newName, deleteOld = false) {
+        const db      = await _getDB();
+        const oldPfx  = Keys.savePrefix(oldName);
+        const newPfx  = Keys.savePrefix(newName);
+
+        const allKeys = await _idbKeysByPrefix(oldPfx);
+        if (allKeys.length === 0) return;
+
+        // Read all old values
+        const tx     = db.transaction(STORE_NAME, 'readonly');
+        const store  = tx.objectStore(STORE_NAME);
+        const pairs  = await Promise.all(
+            allKeys.map(async k => [k, await _wrap(store.get(k))])
+        );
+
+        // Write under new prefix
+        const newEntries = {};
+        for (const [oldKey, value] of pairs) {
+            if (value !== undefined) {
+                const newKey = newPfx + oldKey.slice(oldPfx.length);
+                newEntries[newKey] = value;
             }
-        });
-        
-        // Add working copy keys
-        if (saveData.working) {
-            Object.keys(saveData.working).forEach(key => allKeys.add(key));
         }
-        
-        return Array.from(allKeys);
+        await _idbSetMany(newEntries);
+
+        // Optionally remove old keys
+        if (deleteOld) {
+            await _idbDeleteByPrefix(oldPfx);
+        }
+    }
+
+    /**
+     * Export a save's data as a plain JS object (for JSON download).
+     * @param {string} saveName
+     * @returns {Promise<Object>}
+     */
+    static async exportSave(saveName) {
+        const prefix  = Keys.savePrefix(saveName);
+        const rawKeys = await _idbKeysByPrefix(prefix);
+
+        const db    = await _getDB();
+        const tx    = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+
+        const data = {};
+        await Promise.all(rawKeys.map(async k => {
+            const shortKey = k.slice(prefix.length);
+            data[shortKey] = await _wrap(store.get(k));
+        }));
+
+        return data;
+    }
+
+    /**
+     * Import a save's data from a plain JS object (produced by exportSave).
+     * Overwrites any existing data for that save name.
+     * @param {string} saveName
+     * @param {Object} data - Object with short keys (without save:: prefix)
+     * @param {Object} metadata - { cityCode, routeCount, day, stationCount }
+     */
+    static async importSave(saveName, data, metadata) {
+        const prefix  = Keys.savePrefix(saveName);
+        const entries = {};
+
+        for (const [shortKey, value] of Object.entries(data)) {
+            entries[prefix + shortKey] = value;
+        }
+
+        await _idbSetMany(entries);
+
+        // Update metadata
+        const meta = await _getMeta();
+        meta[saveName] = metadata;
+        await _setMeta(meta);
+    }
+
+    /**
+     * Estimate IndexedDB usage (Chrome/Electron only).
+     * @returns {Promise<{usedMB: string, quotaMB: string, pct: string}|null>}
+     */
+    static async estimateUsage() {
+        if (!navigator.storage?.estimate) return null;
+        const { usage, quota } = await navigator.storage.estimate();
+        return {
+            usedMB:  (usage  / 1024 / 1024).toFixed(2),
+            quotaMB: (quota  / 1024 / 1024).toFixed(0),
+            pct:     ((usage / quota) * 100).toFixed(1) + '%',
+        };
     }
 }
