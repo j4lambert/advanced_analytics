@@ -1,8 +1,10 @@
 // Transfer calculation module
 // Calculates transfer connections between routes for the analytics table.
 //
-// PRIMARY:  Zustand stationGroups — stations sharing a group = physical transfer hub
-// FALLBACK: nearbyStations walkingTime heuristic (original behaviour)
+// Transfer detection (both paths):
+//   1. Shared station:    station.routeIds has more than one route → direct transfer
+//   2. Zustand primary:  getSiblingStationIds() → stations in the same group
+//   3. Fallback:         nearbyStations walkingTime heuristic
 //
 // Result shape per route:
 // {
@@ -42,9 +44,9 @@ export function calculateTransfers(routes, api) {
 /**
  * Uses stationGroups to identify transfer hubs.
  *
- * For each route, iterates its stations. A station is a transfer point when
- * getSiblingStationIds() returns at least one ID — meaning the station shares
- * a group with another station served by a different route.
+ * For each route, iterates its stations. A station is a transfer point when:
+ *   - it is shared by multiple routes (station.routeIds.length > 1), OR
+ *   - getSiblingStationIds() returns siblings served by a different route.
  *
  * @private
  */
@@ -60,16 +62,17 @@ function _calculateTransfersZustand(routes, api) {
         allStations.forEach(station => {
             if (!station.routeIds?.includes(route.id)) return;
 
-            const siblingIds = getSiblingStationIds(station.id);
-            if (siblingIds.length === 0) return;
+            // 1. Shared station: multiple routes stop here directly
+            _addDirectRoutes(station, route.id, transfersByRoute);
 
-            // Each sibling station may serve different routes
+            // 2. Sibling stations in the same group (Zustand)
+            const siblingIds = getSiblingStationIds(station.id);
             siblingIds.forEach(sibId => {
                 const sibling = allStations.find(s => s.id === sibId);
                 if (!sibling?.routeIds) return;
 
                 sibling.routeIds.forEach(otherRouteId => {
-                    if (otherRouteId === route.id) return; // skip self
+                    if (otherRouteId === route.id) return;
 
                     if (!transfersByRoute.has(otherRouteId)) {
                         transfersByRoute.set(otherRouteId, new Set());
@@ -90,7 +93,8 @@ function _calculateTransfersZustand(routes, api) {
 // ---------------------------------------------------------------------------
 
 /**
- * Original implementation — kept as-is for fallback parity.
+ * Fallback implementation using nearbyStations walking-time heuristic.
+ * Also handles shared stations (routeIds.length > 1) just like the Zustand path.
  *
  * @private
  */
@@ -104,9 +108,12 @@ function _calculateTransfersFallback(routes, api) {
 
         allStations.forEach(station => {
             if (!station.routeIds?.includes(route.id)) return;
-            if (!station.nearbyStations?.length) return;
 
-            station.nearbyStations.forEach(nearby => {
+            // 1. Shared station: multiple routes stop here directly
+            _addDirectRoutes(station, route.id, transfersByRoute);
+
+            // 2. Nearby stations within walking threshold
+            station.nearbyStations?.forEach(nearby => {
                 if (nearby.walkingTime >= THRESHOLD) return;
 
                 const nearbyStation = allStations.find(s => s.id === nearby.stationId);
@@ -132,6 +139,30 @@ function _calculateTransfersFallback(routes, api) {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Register all routes that share `station` directly (station.routeIds.length > 1)
+ * as transfer connections for the current route being processed.
+ *
+ * Mutates `transfersByRoute` in place.
+ *
+ * @param {Object}              station          - Station object with routeIds array
+ * @param {string}              currentRouteId   - Route being processed (excluded)
+ * @param {Map<string,Set>}     transfersByRoute - Accumulator map
+ * @private
+ */
+function _addDirectRoutes(station, currentRouteId, transfersByRoute) {
+    if (!station?.routeIds || station.routeIds.length <= 1) return;
+
+    station.routeIds.forEach(otherRouteId => {
+        if (otherRouteId === currentRouteId) return;
+
+        if (!transfersByRoute.has(otherRouteId)) {
+            transfersByRoute.set(otherRouteId, new Set());
+        }
+        transfersByRoute.get(otherRouteId).add(station.id);
+    });
+}
 
 /**
  * Build the result object from a transfersByRoute map.
