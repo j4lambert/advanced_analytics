@@ -4,7 +4,7 @@
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function Dialog({ id, title, children, isOpen, onClose, size }) {
+export function Dialog({ id, title, children, isOpen, onClose, size, noPadding}) {
     const [state, setState] = React.useState('open');
     
     // Reset state to 'open' when dialog is opened
@@ -22,7 +22,7 @@ export function Dialog({ id, title, children, isOpen, onClose, size }) {
             <div
                 id={`${id}-backdrop`}
                 data-state={state}
-                className="aa-dialog-backdrop fixed left-[50%] top-[50%] z-[100] translate-x-[-50%] translate-y-[-50%] bg-black/50 backdrop-blur-sm"
+                className="aa-dialog-backdrop fixed left-[50%] top-[50%] z-[100] translate-x-[-50%] translate-y-[-50%] bg-black/50"
                 style={{ pointerEvents: 'auto', width: '100vw', height: '100vh' }}
                 onClick={onClose}
                 aria-hidden="true"
@@ -55,7 +55,7 @@ export function Dialog({ id, title, children, isOpen, onClose, size }) {
                 </div>
                 
                 {/* Body */}
-                <div className="aa-dialog-dialog-body px-6 py-4 overflow-y-auto">
+                <div className={noPadding ? 'aa-dialog-dialog-body' : ` aa-dialog-dialog-body px-6 py-4 overflow-y-auto`}>
                     {children}
                 </div>
             </div>
