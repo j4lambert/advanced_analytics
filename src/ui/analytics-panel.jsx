@@ -2,6 +2,7 @@
 // Shows only performance metrics, no state persistence
 
 import { CONFIG, INITIAL_STATE } from '../config.js';
+import { AnalyticsGuide } from './analytics-guide.jsx';
 import { SortableTable } from './table.jsx';
 import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
 
@@ -73,7 +74,8 @@ export function AnalyticsPanel() {
     return (
         <div id="aa-panel" className="flex flex-col h-full">
             {/* Status indicator */}
-            <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-border bg-muted/30">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
+                <AnalyticsGuide/>
                 <TooltipProvider  delayDuration={300} skipDelayDuration={1000}>
                     <Tooltip>
                         <TooltipTrigger asChild>
