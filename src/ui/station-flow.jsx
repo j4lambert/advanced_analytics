@@ -105,6 +105,12 @@ export function StationFlow() {
         return route?.color || '#22c55e';
     }, [selectedRoute, routes]);
 
+    const routeTextColor = React.useMemo(() => {
+        if (!selectedRoute) return '#ffffff';
+        const route = routes.find(r => r.id === selectedRoute);
+        return route?.textColor || '#ffffff';
+    }, [selectedRoute, routes]);
+
     return (
         <div className="aa-chart space-y-4">
             {/* Controls */}
@@ -170,6 +176,7 @@ export function StationFlow() {
                     <FlowChart
                         data={flowData}
                         routeColor={routeColor}
+                        routeTextColor={routeTextColor}
                     />
                 )}
             </div>
@@ -212,16 +219,17 @@ function makeTopAxisTick(flowData, tickSpacing) {
             : `${formatOffset(dataPoint.timeOffset)}`;
 
         return h('g', { transform: `translate(${x},${y})` }, [
-            // Time offset text
+            // Time offset text — rotated like station names
             h('text', {
                 key:        'label',
                 x:          0,
                 y:          0,
-                dy:         -8,
-                textAnchor: 'middle',
-                fill:       'var(--aa-chart-secondary-metric)',
+                dy:         -4,
+                textAnchor: 'start',
+                fill:       'hsl(var(--muted-foreground))',
                 fontSize:   12,
                 fontFamily: 'Monospace',
+                transform:  'rotate(-45)',
             }, offsetLabel),
         ].filter(Boolean));
     };
@@ -243,33 +251,38 @@ function makeBottomAxisTick(flowData) {
         const dataPoint    = flowData.find(d => d.name === payload.value);
         const hasTransfers = dataPoint?.hasTransfers ?? false;
 
-        // Transfer circle dimensions
-        const CR = 6;   // circle radius
-        const CY = 14;  // y offset from tick baseline
+        const CR  = 6;   // circle radius
+        const DY  = 10;  // y-offset from tick baseline
+        const GAP = 3;   // gap between text right-edge and circle left-edge
 
-        return h('g', { transform: `translate(${x},${y})` }, [
-            // Plain purple transfer circle (no pips, no hover)
-            hasTransfers && h('circle', {
-                key:         'transfer-circle',
-                cx:          0,
-                cy:          CY,
-                r:           CR,
-                fill:        'hsl(var(--background))',
-                stroke:      'var(--aa-transfer-color)',
-                strokeWidth: 1.5,
-            }),
+        // Both text and circle share the same rotated coordinate system so the
+        // circle appears inline as the "last character" of the label.
+        return h('g', { transform: `translate(${x - 6},${y})` }, [
+            h('g', { key: 'rotated', transform: 'rotate(-45)' }, [
 
-            // Station name rotated -45°
-            h('text', {
-                key:        'label',
-                x:          0,
-                y:          0,
-                dy:         hasTransfers ? CY * 2 + 4 : 10,
-                textAnchor: 'end',
-                fill:       'hsl(var(--muted-foreground))',
-                fontSize:   12,
-                transform:  'rotate(-45)',
-            }, label),
+                // Station name — shifted left to leave room for the circle when needed
+                h('text', {
+                    key:        'label',
+                    x:          hasTransfers ? -(CR + GAP) : 0,
+                    y:          DY,
+                    textAnchor: 'end',
+                    fill:       'hsl(var(--muted-foreground))',
+                    fontSize:   12,
+                }, label),
+
+                // Transfer circle — sits right at the text anchor point (cx=0),
+                // appearing as the last "letter" of the label in reading order
+                hasTransfers && h('circle', {
+                    key:         'transfer-circle',
+                    cx:          0,
+                    cy:          DY,
+                    r:           CR,
+                    fill:        'hsl(var(--background))',
+                    stroke:      'var(--aa-transfer-color)',
+                    strokeWidth: 1.5,
+                }),
+
+            ].filter(Boolean)),
         ].filter(Boolean));
     };
 }
@@ -362,7 +375,7 @@ function formatYAxisRight(value) { return `${value}%`; }
 // ---------------------------------------------------------------------------
 // FlowChart
 // ---------------------------------------------------------------------------
-function FlowChart({ data, routeColor }) {
+function FlowChart({ data, routeColor, routeTextColor }) {
     const h = React.createElement;
 
     // Measure container width to compute exact tick spacing for arrow placement
@@ -416,9 +429,8 @@ function FlowChart({ data, routeColor }) {
         [data, routeColor]
     );
 
-    // Determine bottom axis height: taller when transfers present (circle needs room)
-    const hasAnyTransfer   = data.some(d => d.hasTransfers);
-    const bottomAxisHeight = hasAnyTransfer ? 105 : 90;
+    // Circle is now inline with the label, so height is uniform regardless of transfers
+    const bottomAxisHeight = 90;
 
     return h('div', {
         ref:       containerRef,
@@ -444,7 +456,7 @@ function FlowChart({ data, routeColor }) {
         h(charts.ResponsiveContainer, { width: '100%', height: '100%' },
             h(charts.ComposedChart, {
                 data,
-                margin: { top: 28, right: 0, left: 0, bottom: 10 },
+                margin: { top: 42, right: 0, left: 0, bottom: 10 },
             }, [
                 h(charts.CartesianGrid, {
                     key: 'grid', strokeDasharray: '3 3', stroke: '#374151', opacity: 0.3,
@@ -457,7 +469,7 @@ function FlowChart({ data, routeColor }) {
                     dataKey:      'name',
                     orientation:  'top',
                     interval:     0,
-                    height:       28,
+                    height:       42,
                     tick:         TopTick,
                     tickLine:     false,
                     axisLine:     false,
@@ -513,7 +525,7 @@ function FlowChart({ data, routeColor }) {
                     stroke:            'var(--aa-chart-secondary-metric)',
                     strokeWidth:       2,
                     dot:               false,
-                    activeDot:         { r: 3, fill: 'var(--aa-chart-secondary-metric)'},
+                    activeDot:         { r: 3, fill: routeTextColor },
                     connectNulls:      false,
                     strokeOpacity:     0.5,
                     animationDuration: 500,
