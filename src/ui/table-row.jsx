@@ -165,10 +165,10 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                             side="left"
                             delayDuration={200}
                             content={
-                                <div className="space-y-1">
-                                    <div><span className={CONFIG.COLORS.TRAINS.HIGH}>High Demand</span>: {row.trainsHigh}</div>
-                                    <div><span className={CONFIG.COLORS.TRAINS.MEDIUM}>Medium Demand</span>: {row.trainsMedium}</div>
-                                    <div><span className={CONFIG.COLORS.TRAINS.LOW}>Low Demand</span>: {row.trainsLow}</div>
+                                <div className="gap-2 grid grid-cols-2">
+                                    <span className={CONFIG.COLORS.TRAINS.HIGH}>High Demand: </span> <span>{row.trainsHigh}</span>
+                                    <span className={CONFIG.COLORS.TRAINS.MEDIUM}>Medium Demand: </span> <span>{row.trainsMedium}</span>
+                                    <span className={CONFIG.COLORS.TRAINS.LOW}>Low Demand: </span> <span>{row.trainsLow}</span>
                                 </div>
                             }
                         >
@@ -202,7 +202,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                                 side="left"
                                 delayDuration={200}
                                 content={
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center flex-wrap gap-y-2 gap-1">
                                         {row.transfers.routeIds?.map((routeId) => (
                                             <RouteBadge key={routeId} routeId={routeId} size="1.4rem" />
                                         ))}

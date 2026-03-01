@@ -70,9 +70,9 @@ export function SortableTable({
                                 {header.description ? (
                                     <Tooltip
                                         side="top"
-                                        delayDuration={300}
+                                        delayDuration={200}
                                         content={
-                                            <div className="text-xs text-left space-y-1">
+                                            <div className="text-sm text-left space-y-1">
                                                 {header.description.split('|').map((line, i) => (
                                                     <p key={i}>{line}</p>
                                                 ))}
