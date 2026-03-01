@@ -49,6 +49,10 @@ export function injectStyles() {
         #sb-aa-panel-wrapper .aa-table {
             height: 100%;
         }
+        
+        .aa-dialog-dialog-header {
+            border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+        }
            
         /* ===== Charts ===================================================== */
         html .aa-chart [fill="#ccc"] {

@@ -174,6 +174,7 @@ export function AnalyticsGuideDialog({ isOpen, onClose }) {
             noPadding={true}
             isOpen={isOpen}
             onClose={onClose}
+            backdropClasses="bg-black/80"
         >
             <section className="flex min-h-0 h-[80vh]">
 
@@ -318,12 +319,11 @@ export function AnalyticsGuideDialog({ isOpen, onClose }) {
                                 <span className="text-red-500 font-medium">Red</span>: near or over capacity (above 95%) or critically under-used (below 30%).
                             </li>
                         </ul>
-                        <Note>
+                        <p className="pt-1">
                             Very low usage is not inherently bad since a new route takes time to attract
                             passengers. Give new routes time to grow. Very high usage is a service quality risk and may suppress
                             further ridership growth.
-                        </Note>
-                        <div className="pt-1"/>
+                        </p>
                         <Warning>
                             Value computed for the entire day. A route may be overload in a rush hours or underload during night time.
                         </Warning>

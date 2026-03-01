@@ -615,7 +615,7 @@ export function SystemMap() {
         <div className="space-y-3">
 
             {/* ── Top bar: route-filter dropdown + badges ─────── */}
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex gap-3">
 
                 <Dropdown
                     togglerText={`${selectedRoutes.length}/${allRouteIds.length}`}

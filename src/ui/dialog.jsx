@@ -6,7 +6,7 @@ import { Portal } from './portal.jsx';
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function Dialog({ id, title, children, isOpen, onClose, size, noPadding}) {
+export function Dialog({ id, title, backdropClasses, children, isOpen, onClose, size, noPadding}) {
     const [state, setState] = React.useState('open');
 
     // Reset state to 'open' when dialog is opened
@@ -25,7 +25,7 @@ export function Dialog({ id, title, children, isOpen, onClose, size, noPadding})
                 <div
                     id={`${id}-backdrop`}
                     data-state={state}
-                    className="aa-dialog-backdrop fixed left-[50%] top-[50%] z-[100] translate-x-[-50%] translate-y-[-50%] bg-black/50"
+                    className={backdropClasses + " aa-dialog-backdrop fixed left-[50%] top-[50%] z-[100] translate-x-[-50%] translate-y-[-50%] bg-black/50"}
                     style={{ pointerEvents: 'auto', width: '100vw', height: '100vh' }}
                     onClick={onClose}
                     aria-hidden="true"
