@@ -483,21 +483,29 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
         // Dims "Today" bars (partial day) and non-hovered routes
         return function LiveBarShape(props) {
             const { x, y, width, height, payload } = props;
-            const liveFillOpacity   = payload?.isLive ? 0.2 : 0.3;
-            const fillOpacity  = hoveredRoute && hoveredRoute !== routeId ? 0.1 : liveFillOpacity;
-            const strokeDasharray  = payload?.isLive ? '3 3' : false;
-            const opacity  = hoveredRoute && hoveredRoute !== routeId ? 0.2 : 1;
+            if (!width || !height) return null;
+
+            // SVG <rect> requires non-negative dimensions.
+            // Recharts passes negative height for negative values, with y at
+            // the zero-line. Normalise so the rect always starts at the visual top.
+            const rectY      = height < 0 ? y + height : y;
+            const rectHeight = Math.abs(height);
+
+            const liveFillOpacity = payload?.isLive ? 0.2 : 0.3;
+            const fillOpacity     = hoveredRoute && hoveredRoute !== routeId ? 0.1 : liveFillOpacity;
+            const strokeDasharray = payload?.isLive ? '3 3' : undefined;
+            const opacity         = hoveredRoute && hoveredRoute !== routeId ? 0.2 : 1;
 
             return h('rect', {
-                x, y, width, height,
+                x, y: rectY, width, height: rectHeight,
                 rx: 2,
                 ry: 2,
-                fill: color,
-                stroke: color,
-                strokeWidth: 1,
-                opacity: opacity,
-                fillOpacity: fillOpacity,
-                strokeDasharray: strokeDasharray,
+                fill:          color,
+                stroke:        color,
+                strokeWidth:   1,
+                opacity,
+                fillOpacity,
+                strokeDasharray,
             });
         };
     };
