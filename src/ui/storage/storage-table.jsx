@@ -1,13 +1,13 @@
-// SettingsTable component
+// StorageTable component
 // Generic table for settings management with selection and sorting
 
-import { CONFIG } from '../config.js';
+import { CONFIG } from '../../config.js';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
 
 /**
- * SettingsTable Component
+ * StorageTable Component
  * 
  * @param {Object} props
  * @param {Array} props.data - Table data array
@@ -16,7 +16,7 @@ const { React } = api.utils;
  * @param {function} props.onSelectionChange - Callback when selection changes
  * @param {string} props.currentId - ID of current/active row to highlight
  */
-export function SettingsTable({ 
+export function StorageTable({
     data = [], 
     columns = [],
     selectedIds = [],

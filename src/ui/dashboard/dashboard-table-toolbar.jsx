@@ -1,17 +1,17 @@
-// Toolbar component
+// DashboardTableToolbar component
 // Top toolbar with filters, timeframe selection, and compare mode
 
-import { CONFIG } from '../config.js';
-import { formatDayLabel, getAvailableDays } from '../utils/formatting.js';
-import { Dropdown } from './dropdown.jsx';
-import { DropdownItem } from './dropdown-item.jsx';
-import { ButtonsGroup, ButtonsGroupItem } from './buttons-group.jsx';
-import { Tooltip } from './tooltip.jsx';
+import { CONFIG } from '../../config.js';
+import { formatDayLabel, getAvailableDays } from '../../utils/formatting.js';
+import { Dropdown } from '../../components/dropdown.jsx';
+import { DropdownItem } from '../../components/dropdown-item.jsx';
+import { ButtonsGroup, ButtonsGroupItem } from '../../components/buttons-group.jsx';
+import { Tooltip } from '../../components/tooltip.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function Toolbar({
+export function DashboardTableToolbar({
     groupState,
     onGroupChange,
     timeframeState,

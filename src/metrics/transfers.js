@@ -18,7 +18,7 @@ import { CONFIG } from '../config.js';
 import {
     isZustandAvailable,
     getSiblingStationIds,
-} from '../core/zustand-store.js';
+} from '../core/api-support.js';
 
 // ---------------------------------------------------------------------------
 // Public API

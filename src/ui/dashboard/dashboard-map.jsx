@@ -9,12 +9,12 @@
 // other routes reachable from there — if non-empty, it's a transfer point.
 // The SVG dot is positioned on the station of the route that encounters it first.
 
-import { getRouteStationsInOrder } from '../utils/route-utils.js';
-import { getStationTransferRoutes } from '../utils/transfer-utils.js';
-import { getStationGroups, isZustandAvailable } from '../core/zustand-store.js';
-import { Dropdown } from './dropdown.jsx';
-import { DropdownItem } from './dropdown-item.jsx';
-import { RouteBadge } from './route-badge.jsx';
+import { getRouteStationsInOrder } from '../../utils/route-utils.js';
+import { getStationTransferRoutes } from '../../utils/transfer-utils.js';
+import { getStationGroups, isZustandAvailable } from '../../core/api-support.js';
+import { Dropdown } from '../../components/dropdown.jsx';
+import { DropdownItem } from '../../components/dropdown-item.jsx';
+import { RouteBadge } from '../../components/route-badge.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
@@ -443,7 +443,7 @@ function useSystemMapData(selectedRouteIds) {
                 setMapData({ renderedRoutes, transferDots, transferMap, stationNames, routes, allRoutes });
 
             } catch (err) {
-                console.error('[SystemMap] Error computing layout:', err);
+                console.error('[DashboardMap] Error computing layout:', err);
                 setMapData(null);
             }
         }
@@ -498,7 +498,7 @@ function MapTooltip({ data, mapData }) {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────
 
-export function SystemMap() {
+export function DashboardMap() {
     // ── Route filter state ────────────────────────────────────
     // Declared BEFORE the hook so we can pass the filter in for layout re-compute.
     const [selectedRoutes, setSelectedRoutes] = React.useState([]);

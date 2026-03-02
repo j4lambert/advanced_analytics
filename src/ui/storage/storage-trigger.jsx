@@ -1,12 +1,12 @@
-// AnalyticsSetting component
+// StorageTrigger component
 // Settings button that opens storage management dialog
 
-import { AnalyticsSettingDialog } from './analytics-setting-dialog.jsx';
+import { StorageDialog } from './storage-dialog.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function AnalyticsSetting() {
+export function StorageTrigger() {
     const [isOpen, setIsOpen] = React.useState(false);
     
     return (
@@ -19,7 +19,7 @@ export function AnalyticsSetting() {
                 <icons.DatabaseZap size={16} />
             </button>
             
-            <AnalyticsSettingDialog 
+            <StorageDialog
                 isOpen={isOpen} 
                 onClose={() => setIsOpen(false)} 
             />

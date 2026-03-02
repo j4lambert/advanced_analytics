@@ -1,6 +1,8 @@
-// Zustand store access module
-// Provides direct access to the game's internal Zustand store,
-// bypassing the public API for more precise data.
+// This module provides fallback support for the API.
+
+// Used when the game does not provide correct data due to lifecycle issues, or
+// when retrieve and process the information via API would require excessive
+// computations.
 //
 // ARCHITECTURE:
 // - Locates the Zustand store at module init time (one-time scan)
@@ -8,7 +10,7 @@
 // - Logs availability once at startup so it's visible in the dev console
 //
 // USAGE:
-//   import { getTransferStationIds, isZustandAvailable } from './zustand-store.js';
+//   import { getTransferStationIds, isZustandAvailable } from './api-support.js';
 
 import { CONFIG } from '../config.js';
 

@@ -7,12 +7,12 @@
 // - Bottom X axis: station names (rotated -45°) with plain purple transfer circle indicators
 // - Transfer info shown in the regular chart tooltip (below % choosing metro)
 
-import { CONFIG } from '../config.js';
-import { Dropdown } from './dropdown.jsx';
-import { DropdownItem } from './dropdown-item.jsx';
-import { RouteBadge } from './route-badge.jsx';
-import { getRouteStationsInOrder } from '../utils/route-utils.js';
-import { getStationTransferRoutes } from '../utils/transfer-utils.js';
+import { CONFIG } from '../../config.js';
+import { Dropdown } from '../../components/dropdown.jsx';
+import { DropdownItem } from '../../components/dropdown-item.jsx';
+import { RouteBadge } from '../../components/route-badge.jsx';
+import { getRouteStationsInOrder } from '../../utils/route-utils.js';
+import { getStationTransferRoutes } from '../../utils/transfer-utils.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons, charts } = api.utils;

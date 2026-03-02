@@ -3,10 +3,10 @@
 
 import { CONFIG } from './config.js';
 import { initLifecycleHooks, getStorage, handleMapReadyFallback } from './core/lifecycle.js';
-import { injectStyles } from './ui/styles.js';
-import { AnalyticsDialog } from './ui/analytics-dialog.jsx';
-import { AnalyticsPanel } from './ui/analytics-panel.jsx';
-import { PortalHost } from './ui/portal-host.jsx';
+import { injectStyles } from './assets/styles.js';
+import { Dashboard } from './ui/dashboard.jsx';
+import { Panel } from './ui/panel.jsx';
+import { PortalHost } from './hooks/portal-host.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
@@ -47,7 +47,7 @@ const AdvancedAnalytics = {
 
             api.ui.registerComponent('top-bar', {
                 id: 'aa-dialog-mount',
-                component: AnalyticsDialog
+                component: Dashboard
             });
 
             // PortalHost acts as a rendering target for the Portal component:
@@ -78,7 +78,7 @@ const AdvancedAnalytics = {
                 title: 'Advanced Analytics',
                 icon: 'ChartPie',
                 width: 640,
-                render: AnalyticsPanel
+                render: Panel
             });
 
             console.log(`${CONFIG.LOG_PREFIX} [LC] ✓ Dialog component registered`);

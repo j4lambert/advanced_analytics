@@ -1,12 +1,12 @@
-// AnalyticsSetting component
+// StorageTrigger component
 // Settings button that opens storage management dialog
 
-import { AnalyticsGuideDialog } from './analytics-guide-dialog.jsx';
+import { GuideDialog } from './guide-dialog.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function AnalyticsGuide() {
+export function GuideTrigger() {
     const [isOpen, setIsOpen] = React.useState(false);
     
     return (
@@ -20,7 +20,7 @@ export function AnalyticsGuide() {
                 <span className="ml-2 text-xs">Guide</span>
             </button>
             
-            <AnalyticsGuideDialog
+            <GuideDialog
                 isOpen={isOpen} 
                 onClose={() => setIsOpen(false)} 
             />

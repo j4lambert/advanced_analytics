@@ -1,23 +1,23 @@
 // Main analytics panel component
 // Manages state locally with no persistence - resets when unmounted
 //
-// When liveRouteData is provided by the parent (AnalyticsDialog) the component
+// When liveRouteData is provided by the parent (Dashboard) the component
 // uses it directly instead of running its own useRouteMetrics fetch for live
 // mode.  This avoids a duplicate API call and keeps both siblings in sync.
 
-import { CONFIG, INITIAL_STATE } from '../config.js';
-import { Toolbar } from './toolbar.jsx';
-import { SortableTable } from './table.jsx';
-import { getStorage } from '../core/lifecycle.js';
-import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
-import { sortTableData } from '../utils/sorting.js';
+import { CONFIG, INITIAL_STATE } from '../../config.js';
+import { DashboardTableToolbar } from './dashboard-table-toolbar.jsx';
+import { SortableTable } from '../table.jsx';
+import { getStorage } from '../../core/lifecycle.js';
+import { useRouteMetrics } from '../../hooks/useRouteMetrics.js';
+import { sortTableData } from '../../utils/sorting.js';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
 
-export function AnalyticsTable({
+export function DashboardTable({
     groups = ['trains', 'finance', 'performance'],
-    liveRouteData = null,   // optional — provided by AnalyticsDialog
+    liveRouteData = null,   // optional — provided by Dashboard
 }) {
     // All state is local - resets when component unmounts
     const [sortState, setSortState]                     = React.useState(INITIAL_STATE.sort);
@@ -132,7 +132,7 @@ export function AnalyticsTable({
                     <h3 className="whitespace-nowrap text-2xl font-semibold leading-none tracking-tight">Routes Stats</h3>
                 </div>
                 <div className="pb-3 flex items-center justify-between gap-8">
-                    <Toolbar
+                    <DashboardTableToolbar
                         groupState={groupState}
                         onGroupChange={updateGroupState}
                         timeframeState={timeframeState}

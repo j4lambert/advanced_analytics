@@ -2,7 +2,7 @@
 // Usage: <Tooltip content="label" side="bottom" delayDuration={300}><button/></Tooltip>
 // The single child receives the ref and mouse handlers via cloneElement.
 
-import { Portal } from './portal.jsx';
+import { Portal } from '../hooks/portal.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;

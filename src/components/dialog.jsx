@@ -1,7 +1,7 @@
 // Generic Dialog Component
 // Handles backdrop, animations, and cleanup
 
-import { Portal } from './portal.jsx';
+import { Portal } from '../hooks/portal.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;

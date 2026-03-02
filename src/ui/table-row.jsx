@@ -2,12 +2,12 @@
 // Renders a single table row with all cells
 
 import { CONFIG } from '../config.js';
-import { RouteBadge } from './route-badge.jsx';
+import { RouteBadge } from '../components/route-badge.jsx';
 import { formatCurrency, formatCurrencyCompact, formatCurrencyFull, calculateTotalTrains } from '../utils/formatting.js';
 import { getCellClasses } from '../utils/sorting.js';
 import { getUtilizationClasses, getComparisonColorClass, getComparisonArrow } from '../utils/colors.js';
 
-import { Tooltip } from './tooltip.jsx';
+import { Tooltip } from '../components/tooltip.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;

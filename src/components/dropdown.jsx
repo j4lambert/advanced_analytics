@@ -1,7 +1,7 @@
 // Dropdown component
 // Generic dropdown menu with single/multi-select support
 
-import { Portal } from './portal.jsx';
+import { Portal } from '../hooks/portal.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;

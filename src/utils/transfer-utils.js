@@ -9,7 +9,7 @@ import {
     isZustandAvailable,
     getGroupForStation,
     getSiblingStationIds,
-} from '../core/zustand-store.js';
+} from '../core/api-support.js';
 
 // ---------------------------------------------------------------------------
 // Public API

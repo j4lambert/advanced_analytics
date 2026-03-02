@@ -1,5 +1,5 @@
 // Custom hook for route metrics data fetching and processing
-// Eliminates duplication between analytics-table.jsx and analytics-panel.jsx
+// Eliminates duplication between dashboard-table.jsx and panel.jsx
 //
 // USAGE:
 // const { tableData, isLoading } = useRouteMetrics({
@@ -157,7 +157,7 @@ export function useRouteMetrics({
  * Fetch live route data from current game state
  * 
  * This is the core data fetching logic that was duplicated in both
- * analytics-table.jsx and analytics-panel.jsx
+ * dashboard-table.jsx and panel.jsx
  * 
  * Now includes real-time cost calculation for newly created routes
  * 

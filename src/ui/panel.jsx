@@ -2,17 +2,17 @@
 // Shows only performance metrics, no state persistence
 
 import { CONFIG, INITIAL_STATE } from '../config.js';
-import { AnalyticsGuide } from './analytics-guide.jsx';
+import { GuideTrigger } from './guide/guide-trigger.jsx';
 import { SortableTable } from './table.jsx';
 import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
 
-import { Tooltip } from './tooltip.jsx';
+import { Tooltip } from '../components/tooltip.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
 
-export function AnalyticsPanel() {
+export function Panel() {
     // Local state only - no persistence, resets on each render
     const [sortState, setSortState] = React.useState(INITIAL_STATE.sort);
     
@@ -76,7 +76,7 @@ export function AnalyticsPanel() {
         <div id="aa-panel" className="flex flex-col h-full">
             {/* Status indicator */}
             <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
-                <AnalyticsGuide/>
+                <GuideTrigger/>
                 <Tooltip content="Open the full analytics dialog with all metrics" side="left" delayDuration={300}>
                     <button
                         onClick={() => window.AdvancedAnalytics?.openDialog?.()}

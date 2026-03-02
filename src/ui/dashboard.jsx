@@ -3,17 +3,17 @@
 //
 // ARCHITECTURE NOTE:
 // This component owns both historicalData and liveRouteData so that
-// AnalyticsTable and AnalyticsChart can share the same live snapshot
-// without fetching it twice.  AnalyticsTable accepts liveRouteData as
+// DashboardTable and DashboardTrends can share the same live snapshot
+// without fetching it twice.  DashboardTable accepts liveRouteData as
 // an optional prop and skips its own fetch when it is provided.
 
-import { Dialog } from './dialog.jsx';
-import { AnalyticsGuide } from './analytics-guide.jsx';
-import { AnalyticsSetting } from './analytics-setting.jsx';
-import { AnalyticsTable } from './analytics-table.jsx';
-import { AnalyticsChart } from './analytics-chart.jsx';
-import { StationFlow } from './station-flow.jsx';
-import { SystemMap } from './system-map.jsx';
+import { Dialog } from '../components/dialog.jsx';
+import { GuideTrigger } from './guide/guide-trigger.jsx';
+import { StorageTrigger } from './storage/storage-trigger.jsx';
+import { DashboardTable } from './dashboard/dashboard-table.jsx';
+import { DashboardTrends } from './dashboard/dashboard-trends.jsx';
+import { StationFlow } from './route/station-flow.jsx';
+import { DashboardMap } from './dashboard/dashboard-map.jsx';
 import { getStorage } from '../core/lifecycle.js';
 import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
 import { INITIAL_STATE } from '../config.js';
@@ -21,13 +21,13 @@ import { INITIAL_STATE } from '../config.js';
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function AnalyticsDialog() {
+export function Dashboard() {
     const [isOpen, setIsOpen] = React.useState(false);
     const [historicalData, setHistoricalData] = React.useState({ days: {} });
 
     const storage = getStorage();
 
-    // ── Live data (shared between AnalyticsTable and AnalyticsChart) ──────────
+    // ── Live data (shared between DashboardTable and DashboardTrends) ──────────
     // We use the default sort from INITIAL_STATE; the table manages its own sort
     // internally, but for the purpose of sharing we only need the raw route data.
     // The empty historicalData is memoised so the hook's dependency array is stable.
@@ -78,7 +78,7 @@ export function AnalyticsDialog() {
             onClose={() => setIsOpen(false)}
         >
             <section class="flex gap-2 justify-end border-b pb-4">
-                <AnalyticsGuide/>
+                <GuideTrigger/>
                 <div className="flex items-center gap-2 whitespace-nowrap">
                     {!api.gameState.isPaused() && (
                         <>
@@ -96,12 +96,12 @@ export function AnalyticsDialog() {
                         </>
                     )}
                     <span className="border-foreground/20 border-r ml-2 mr-2 py-3"/>
-                    <AnalyticsSetting/>
+                    <StorageTrigger/>
                 </div>
             </section>
 
             {/* Table Section — receives pre-fetched live data */}
-            <AnalyticsTable
+            <DashboardTable
                 groups={['trains', 'finance', 'performance']}
                 liveRouteData={liveRouteData}
             />
@@ -111,7 +111,7 @@ export function AnalyticsDialog() {
                 <div className="py-5">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Historical Trends</h3>
                 </div>
-                <AnalyticsChart
+                <DashboardTrends
                     historicalData={historicalData}
                     liveRouteData={liveRouteData}
                 />
@@ -132,7 +132,7 @@ export function AnalyticsDialog() {
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">System Map</h3>
                     <p className="text-sm text-muted-foreground mt-1">Network schematic map</p>
                 </div>
-                <SystemMap />
+                <DashboardMap />
             </section>
         </Dialog>
     );

@@ -1,17 +1,17 @@
-// AnalyticsSettingDialog component
+// StorageDialog component
 // Dialog for managing saved analytics data: delete, export, import
 // Now backed by IndexedDB via Storage static methods (no direct localStorage access)
 
-import { CONFIG } from '../config.js';
-import { Dialog } from './dialog.jsx';
-import { SettingsTable } from './settings-table.jsx';
-import { Storage } from '../core/storage.js';
-import { getCurrentSaveName } from '../core/lifecycle.js';
+import { CONFIG } from '../../config.js';
+import { Dialog } from '../../components/dialog.jsx';
+import { StorageTable } from './storage-table.jsx';
+import { Storage } from '../../core/storage.js';
+import { getCurrentSaveName } from '../../core/lifecycle.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function AnalyticsSettingDialog({ isOpen, onClose }) {
+export function StorageDialog({ isOpen, onClose }) {
     const [tableData,           setTableData]           = React.useState([]);
     const [selectedIds,         setSelectedIds]         = React.useState([]);
     const [currentSaveName,     setCurrentSaveName]     = React.useState(null);
@@ -371,7 +371,7 @@ export function AnalyticsSettingDialog({ isOpen, onClose }) {
             {/* Table */}
             {!isLoading && (
                 <div className="overflow-auto rounded-lg border border-border">
-                    <SettingsTable
+                    <StorageTable
                         data={tableData}
                         columns={columns}
                         selectedIds={selectedIds}

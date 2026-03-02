@@ -12,12 +12,12 @@
 // Metrics that are NOT time-dependent (ridership, utilization, stations,
 // transfers) show only the raw live value — extrapolation would be misleading.
 
-import { CONFIG } from '../config.js';
-import { getAvailableDays } from '../utils/formatting.js';
-import { ButtonsGroup, ButtonsGroupItem } from './buttons-group.jsx';
-import { Dropdown } from './dropdown.jsx';
-import { DropdownItem } from './dropdown-item.jsx';
-import { RouteBadge } from './route-badge.jsx';
+import { CONFIG } from '../../config.js';
+import { getAvailableDays } from '../../utils/formatting.js';
+import { ButtonsGroup, ButtonsGroupItem } from '../../components/buttons-group.jsx';
+import { Dropdown } from '../../components/dropdown.jsx';
+import { DropdownItem } from '../../components/dropdown-item.jsx';
+import { RouteBadge } from '../../components/route-badge.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons, charts } = api.utils;
@@ -65,7 +65,7 @@ function buildTodayPoint(liveRouteData, metricKey) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function AnalyticsChart({ historicalData, liveRouteData = [] }) {
+export function DashboardTrends({ historicalData, liveRouteData = [] }) {
     const [chartType,       setChartType]       = React.useState('line');
     const [selectedRoutes,  setSelectedRoutes]  = React.useState([]);
     const [selectedMetric,  setSelectedMetric]  = React.useState('utilization');

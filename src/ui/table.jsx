@@ -5,7 +5,7 @@ import { CONFIG } from '../config.js';
 import { TableRow } from './table-row.jsx';
 import { getSortIndicator, getHeaderClasses } from '../utils/sorting.js';
 
-import { Tooltip } from './tooltip.jsx';
+import { Tooltip } from '../components/tooltip.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;

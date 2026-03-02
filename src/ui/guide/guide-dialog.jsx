@@ -1,7 +1,7 @@
-// AnalyticsGuideDialog component
+// GuideDialog component
 // Inline user guide with sidebar navigation and scrollable content
 
-import { Dialog } from './dialog.jsx';
+import { Dialog } from '../../components/dialog.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
@@ -158,7 +158,7 @@ function Badge({ style, children }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function AnalyticsGuideDialog({ isOpen, onClose }) {
+export function GuideDialog({ isOpen, onClose }) {
 
     const scrollTo = (id) => {
         if (!id) return;
