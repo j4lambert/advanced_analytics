@@ -100,7 +100,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         group="performance"
                     />
                 ) : (
-                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getUtilizationClasses(row.utilization)} ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getUtilizationClasses(row.utilization)} ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
                         {row.utilization}%
                     </td>
                 )
@@ -160,7 +160,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         group="trains"
                     />
                 ) : (
-                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses('trainSchedule', sortState, groupState, 'trains')}`}>
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses('trainSchedule', sortState, groupState, 'trains')}`}>
                         <Tooltip
                             side="left"
                             delayDuration={200}
@@ -196,7 +196,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                 ) : (
                     <td className={`px-3 py-2 align-middle text-right ${getCellClasses('transfers', sortState, groupState, 'trains')}`}>
                         {row.transfers?.count === 0 ? (
-                            <span className="font-mono text-xs">0</span>
+                            <span className="tabular-nums text-xs">0</span>
                         ) : (
                             <Tooltip
                                 side="left"
@@ -209,7 +209,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                                     </div>
                                 }
                             >
-                                <span className="font-bold font-mono cursor-help">
+                                <span className="font-bold tabular-nums cursor-help">
                                     {row.transfers.count}
                                 </span>
                             </Tooltip>
@@ -329,8 +329,8 @@ function MetricCell({ columnKey, value, isComparison, primaryValue, secondaryVal
     // Show tooltip for large currency values
     if (useCompactTooltip && Math.abs(value) >= 100000) {
         return (
-            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
-                <Tooltip side="left" delayDuration={200} content={<p className="text-xs font-mono">{formatCurrencyFull(value, 0)}</p>}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <Tooltip side="left" delayDuration={200} content={<p className="text-xs tabular-nums">{formatCurrencyFull(value, 0)}</p>}>
                     <span className="cursor-help">{displayValue}</span>
                 </Tooltip>
             </td>
@@ -338,7 +338,7 @@ function MetricCell({ columnKey, value, isComparison, primaryValue, secondaryVal
     }
 
     return (
-        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
             {displayValue}
         </td>
     );
@@ -370,8 +370,8 @@ function ProfitCell({ columnKey, value, isComparison, primaryValue, secondaryVal
     // Show tooltip for large currency values
     if (useCompactTooltip && Math.abs(value) >= 100000) {
         return (
-            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
-                <Tooltip side="left" delayDuration={200} content={<p className="text-xs font-mono">{formatCurrencyFull(value, decimals)}</p>}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <Tooltip side="left" delayDuration={200} content={<p className="text-xs tabular-nums">{formatCurrencyFull(value, decimals)}</p>}>
                     <span className={`${colorClass} cursor-help`}>{displayValue}</span>
                 </Tooltip>
             </td>
@@ -379,7 +379,7 @@ function ProfitCell({ columnKey, value, isComparison, primaryValue, secondaryVal
     }
 
     return (
-        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
             <div className={colorClass}>{displayValue}</div>
         </td>
     );
@@ -390,7 +390,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
     // Handle special cases
     if (value === 'NEW') {
         return (
-            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                 <span className={CONFIG.COLORS.COMPARE.NEW}>NEW</span>
             </td>
         );
@@ -398,7 +398,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
     
     if (value === 'DELETED') {
         return (
-            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                 <span className={CONFIG.COLORS.COMPARE.DELETED}>(Deleted)</span>
             </td>
         );
@@ -410,7 +410,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
         
         if (type === 'new') {
             return (
-                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                     <span className={CONFIG.COLORS.COMPARE.NEW}>NEW</span>
                 </td>
             );
@@ -418,7 +418,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
         
         if (type === 'zero' || percentValue === 0) {
             return (
-                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                     <span className={CONFIG.COLORS.COMPARE.NEUTRAL}>=</span>
                 </td>
             );
@@ -457,8 +457,8 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
                     const fullDelta = formatCurrencyFull(delta, decimals);
                     
                     return (
-                        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
-                            <Tooltip side="left" delayDuration={200} content={<p className="text-xs font-mono">{fullDelta}</p>}>
+                        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                            <Tooltip side="left" delayDuration={200} content={<p className="text-xs tabular-nums">{fullDelta}</p>}>
                                 <span className={`${colorClass} cursor-help`}>{displayValue}</span>
                             </Tooltip>
                         </td>
@@ -466,7 +466,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
                 }
                 
                 return (
-                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                         <span className={colorClass}>{displayValue}</span>
                     </td>
                 );
@@ -481,7 +481,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
             const displayValue = `${prefix}${formattedDelta} ${arrow}`;
             
             return (
-                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+                <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                     <span className={colorClass}>{displayValue}</span>
                 </td>
             );
@@ -491,7 +491,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
         const displayValue = `${percentValue > 0 ? '+' : ''}${percentValue.toFixed(1)}% ${arrow}`;
         
         return (
-            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
                 <span className={colorClass}>{displayValue}</span>
             </td>
         );
@@ -499,7 +499,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
     
     // Fallback
     return (
-        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right font-mono ${getCellClasses(columnKey, sortState, groupState, group)}`}>
+        <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
             -
         </td>
     );

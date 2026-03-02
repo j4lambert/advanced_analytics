@@ -87,7 +87,7 @@ export const CONFIG = {
         { key: 'ridership', label: 'Ridership', align: 'right', group: 'performance' },
         { key: 'capacity', label: 'Throughput', align: 'right', group: 'trains', description: 'Daily Capacity: total passengers this route can carry in 24 hours.|Based on train frequency, car capacity, loop time, and demand schedule.|Higher values mean more room to grow ridership.' },
         { key: 'utilization', label: 'Usage', align: 'right', group: 'performance', description: 'Based on ridership against potential throughput' },
-        { key: 'stations', label: 'Stations', align: 'right', group: 'trains' },
+        { key: 'stations', label: 'Stops', align: 'right', group: 'trains' },
         { key: 'trainType', label: 'Type', align: 'right', group: 'trains', description: 'Train Type' },
         { key: 'trainSchedule', label: 'Trains', align: 'right', group: 'trains', description: 'Number of trains:|- High Demand |- Medium Demand |- Low Demand)' },
         { key: 'transfers', label: 'Transfers', align: 'right', group: 'trains', description: 'Direct transfers with other routes |Note: List direct transfers only, passengers may walk to further stations not listed here ' },
