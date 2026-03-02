@@ -30,7 +30,6 @@ const AdvancedAnalytics = {
         
         if (this.initialized) {
             console.log(`${CONFIG.LOG_PREFIX} [LC] init() skipped — already initialized`);
-            // console.log(`${CONFIG.LOG_PREFIX} Already initialized, skipping`);
             return;
         }
         

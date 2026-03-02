@@ -210,7 +210,7 @@ export function GuideDialog({ isOpen, onClose }) {
                     {/* ── Introduction ── */}
                     <SectionTitle id="aa-guide-intro">Introduction</SectionTitle>
                     <p className=" text-foreground/80">
-                        <strong>Advanced Analytics</strong> adds historical per-route performance advanced analytics to Subway Builder.
+                        <strong>Advanced Analytics</strong> adds historical per-route advanced analytics to Subway Builder.
                     </p>
                     <p className=" text-foreground/80 mt-2">
                         It tracks ridership, capacity, financial metrics, and transfer connections,

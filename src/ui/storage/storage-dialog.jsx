@@ -285,13 +285,13 @@ export function StorageDialog({ isOpen, onClose }) {
             backdropClasses="bg-black/80"
         >
             {/* Intro */}
-            <p>
+            <p class={'text-muted-foreground text-sm'}>
                 <strong>Advanced Analytics</strong> stores all its data in IndexedDB,
                 the browser's built-in persistent database embedded in the game's
                 Electron runtime. Data survives game restarts and has no practical
                 size limit for the amount of analytics data this mod generates.
             </p>
-            <hr/>
+            <hr class={'my-4'}/>
             {/* Action buttons */}
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4">
                 <div className="flex items-center justify-between gap-2">
