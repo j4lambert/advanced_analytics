@@ -1,0 +1,50 @@
+# .github/workflows/release.yml
+name: Build Release ZIP
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+    if: startsWith(github.event.head_commit.message, '[RELEASE]') || startsWith(github.event.head_commit.message, '[PRE-RELEASE]')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version and release type
+        id: meta
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          VERSION=$(echo "$MSG" | grep -oP '\d+\.\d+\.\d+')
+          if echo "$MSG" | grep -q '^\[PRE-RELEASE\]'; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+
+      - name: Build ZIP
+        run: |
+          mkdir -p staging/advanced_analytics
+          cp manifest.json staging/advanced_analytics/
+          cp -r dist/ staging/advanced_analytics/dist/
+          cd staging
+          zip -r ../advanced_analytics-v${{ steps.meta.outputs.version }}.zip advanced_analytics/
+
+      - name: Create GitHub Release + upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.meta.outputs.version }}
+          name: v${{ steps.meta.outputs.version }}
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          files: advanced_analytics-v${{ steps.meta.outputs.version }}.zip
