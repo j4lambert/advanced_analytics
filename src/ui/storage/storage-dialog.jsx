@@ -103,9 +103,9 @@ export function StorageDialog({ isOpen, onClose }) {
         if (selectedIds.length === 0) return;
 
         const deletingCurrent = currentSaveName && selectedIds.includes(currentSaveName);
-        let message = `Delete ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''}?`;
+        let message = `Delete ${selectedIds.length} save${selectedIds.length > 1 ? 's' : ''} data?`;
         if (deletingCurrent) {
-            message += '\n\n⚠️ WARNING: You are deleting the CURRENT save!\nAll data for this session will be lost.';
+            message += '\n\n⚠️ WARNING: You are deleting the CURRENT save DATA.\nAll data for this session will be lost.';
         }
         message += '\n\nThis action cannot be undone.';
 
@@ -281,7 +281,7 @@ export function StorageDialog({ isOpen, onClose }) {
             title="Storage Management"
             isOpen={isOpen}
             onClose={onClose}
-            size='85vw'
+            size='1080px'
             backdropClasses="bg-black/80"
         >
             {/* Intro */}
