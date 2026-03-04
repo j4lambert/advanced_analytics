@@ -8,19 +8,24 @@
 // a TRUE rolling 24-hour window without any day-boundary resets.
 //
 // Key public functions:
-//   getRoute24hStats(routeId)            — rolling last-24h stats
-//   getRouteTodayStats(routeId)          — current day stats (trend chart "Today")
-//   initAccumulator(api)                 — start poll + register money hook (idempotent)
-//   stopAccumulating()                   — stop poll/prune intervals
-//   clearAccumulatorState()              — wipe all events (call before restoreEvents)
-//   persistEvents(storage)              — save event log to IDB
+//   getRoute24hStats(routeId)              — rolling last-24h stats
+//   getRouteTodayStats(routeId)            — current day stats (trend chart "Today")
+//   initAccumulator(api)                   — start poll + register money hook (idempotent)
+//   stopAccumulating()                     — stop poll/prune intervals
+//   clearAccumulatorState()                — wipe all events (call before restoreEvents)
+//   persistEvents(storage)                 — save event log to IDB
 //   restoreEvents(storage, currentElapsed) — load + prune stale events from IDB
 //
 // Architecture:
 //   onMoneyChanged  → append { t, amount, weights } to _revEvents / _costEvents
-//   poll (500ms)    → update _lastRevWeights, _lastCostWeights, detect config changes
+//   poll (500ms)    → update _lastRevWeights, _lastCostWeights, refresh caches
 //   prune (60s)     → drop events older than 24 h + grace period
 //   transfers (~5s) → refresh _transfersCache via calculateTransfers
+//
+// Capacity:
+//   Static full-day throughput ceiling — same formula as calculateRouteMetrics.
+//   Stable throughout the day; only changes when the train schedule or loop
+//   time changes.  No rolling window, no prorating for new routes.
 //
 // Weight carry-forward (tail-lag defence):
 //   revenuePerHour oscillates near 0 between game engine pulses.  We track
@@ -49,10 +54,6 @@ let _api             = null;
 // Event logs
 let _revEvents    = []; // { t: elapsedSec, amount: number, weights: { routeId: proportion } }
 let _costEvents   = []; // same shape
-
-// Config change timeline — used for exact rolling capacity calculation
-let _configEvents  = []; // { t: elapsedSec, routeId: string, config: {high,medium,low} }
-let _lastConfigs   = {}; // routeId → last observed { high, medium, low }
 
 // Weight carry-forward (non-zero proportions, kept across tail-lag periods)
 let _lastRevWeights  = {}; // routeId → proportion  (values sum to 1)
@@ -88,51 +89,6 @@ function _emptyStats() {
         profitPerPassenger: 0,
         profitPerTrain:     0,
     };
-}
-
-// ── Helper: demand-phase hours in an elapsed-seconds range ─────────────────
-
-/**
- * Compute hours of each demand type (high/medium/low) within [t1, t2].
- * Handles windows that span day boundaries.
- *
- * @param {number} t1 - Start in elapsed seconds
- * @param {number} t2 - End in elapsed seconds
- * @returns {{ high: number, medium: number, low: number }}
- */
-function _demandPhaseHoursInRange(t1, t2) {
-    const hours = { high: 0, medium: 0, low: 0 };
-    if (t2 <= t1) return hours;
-
-    let t = t1;
-    while (t < t2) {
-        const secInDay  = t % 86400;
-        const hourInDay = Math.floor(secInDay / 3600);
-
-        const phase = CONFIG.DEMAND_PHASES.find(
-            p => hourInDay >= p.startHour && hourInDay < p.endHour
-        );
-
-        if (!phase) {
-            // Should not happen with well-formed DEMAND_PHASES; advance 1 s
-            t += 1;
-            continue;
-        }
-
-        // Compute how far until the next phase/day boundary
-        const dayStart          = t - secInDay;
-        const nextPhaseInDay    = phase.endHour * 3600;
-        const nextPhaseBoundary = dayStart + nextPhaseInDay;
-        const dayBoundary       = dayStart + 86400;
-
-        const segEnd   = Math.min(nextPhaseBoundary, dayBoundary, t2);
-        const segHours = (segEnd - t) / 3600;
-
-        hours[phase.type] += segHours;
-        t = segEnd;
-    }
-
-    return hours;
 }
 
 // ── Helper: formula-based cost rates per route ─────────────────────────────
@@ -194,15 +150,22 @@ function _buildWeights(rates, prevWeights) {
     return weights;
 }
 
-// ── Helper: rolling capacity over a time window ────────────────────────────
+// ── Helper: static full-day capacity ──────────────────────────────────────
 
 /**
- * Compute the total capacity a route could carry between [cutoff, now].
- * Uses _configEvents to handle mid-window train schedule changes.
- * Capacity starts from the route's first config event (creation proxy)
- * so new routes don't claim capacity before they existed.
+ * Maximum passengers the route can carry across a full 24-hour day.
+ *
+ * Uses the fixed demand-hour totals from CONFIG (6 h high, 9 h medium, 9 h low)
+ * and the current train schedule — identical to calculateRouteMetrics.
+ *
+ * This value is stable throughout the day and only changes when the player
+ * edits the train schedule or the route's loop time changes.
+ *
+ * @param {Object} route     - Route object (current game state)
+ * @param {Object} trainType - Train type definition
+ * @returns {number} Rounded passenger capacity
  */
-function _computeRollingCapacity(routeId, route, trainType, cutoff, now) {
+function _computeStaticCapacity(route, trainType) {
     if (!route.stComboTimings?.length) return 0;
 
     const timings     = route.stComboTimings;
@@ -215,55 +178,18 @@ function _computeRollingCapacity(routeId, route, trainType, cutoff, now) {
         : trainType.stats.carsPerCarSet;
     const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
 
-    // Config events for this route, oldest first
-    const eventsForRoute = _configEvents
-        .filter(e => e.routeId === routeId)
-        .sort((a, b) => a.t - b.t);
+    const trainCounts = {
+        high:   route.trainSchedule?.highDemand   || 0,
+        medium: route.trainSchedule?.mediumDemand || 0,
+        low:    route.trainSchedule?.lowDemand    || 0,
+    };
 
-    // Effective start: max(cutoff, first config event).
-    // For routes created within the 24 h window this excludes time before creation.
-    const firstEvent     = eventsForRoute[0];
-    const effectiveCutoff = firstEvent ? Math.max(cutoff, firstEvent.t) : cutoff;
-
-    // Config that was active at effectiveCutoff
-    let configAtCutoff = null;
-    for (const e of eventsForRoute) {
-        if (e.t <= effectiveCutoff) configAtCutoff = e.config;
-    }
-
-    if (!configAtCutoff) {
-        // No earlier event: use the current route schedule as the best guess
-        configAtCutoff = {
-            high:   route.trainSchedule?.highDemand   || 0,
-            medium: route.trainSchedule?.mediumDemand || 0,
-            low:    route.trainSchedule?.lowDemand    || 0,
-        };
-    }
-
-    // Build segments between config changes within [effectiveCutoff, now]
-    const segments   = [];
-    let activeConfig = configAtCutoff;
-    let segStart     = effectiveCutoff;
-
-    for (const e of eventsForRoute) {
-        if (e.t <= effectiveCutoff) continue;
-        if (e.t >= now)             break;
-        segments.push({ start: segStart, end: e.t, config: activeConfig });
-        activeConfig = e.config;
-        segStart     = e.t;
-    }
-    segments.push({ start: segStart, end: now, config: activeConfig });
-
-    // Integrate capacity across segments
-    let total = 0;
-    for (const seg of segments) {
-        const ph = _demandPhaseHoursInRange(seg.start, seg.end);
-        const c  = seg.config;
-        total += (c.high * ph.high + c.medium * ph.medium + c.low * ph.low)
-               * loopsPerHour * capacityPerTrain;
-    }
-
-    return Math.round(total);
+    return Math.round(
+        (trainCounts.high   * CONFIG.DEMAND_HOURS.high   +
+         trainCounts.medium * CONFIG.DEMAND_HOURS.medium +
+         trainCounts.low    * CONFIG.DEMAND_HOURS.low)
+        * loopsPerHour * capacityPerTrain
+    );
 }
 
 // ── Core stats computation ─────────────────────────────────────────────────
@@ -315,7 +241,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     let utilization = 0;
 
     if (trainType) {
-        capacity    = _computeRollingCapacity(routeId, route, trainType, cutoff, now);
+        capacity    = _computeStaticCapacity(route, trainType);
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
     }
 
@@ -387,23 +313,6 @@ function _tick() {
     _routesCache     = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
 
-    // ── Config change detection → record to _configEvents ───────────────
-    routes.forEach(route => {
-        const config = {
-            high:   route.trainSchedule?.highDemand   || 0,
-            medium: route.trainSchedule?.mediumDemand || 0,
-            low:    route.trainSchedule?.lowDemand    || 0,
-        };
-        const last = _lastConfigs[route.id];
-        if (!last ||
-            config.high   !== last.high   ||
-            config.medium !== last.medium ||
-            config.low    !== last.low) {
-            _configEvents.push({ t: elapsed, routeId: route.id, config });
-            _lastConfigs[route.id] = config;
-        }
-    });
-
     // ── Refresh transfers cache every N ticks ───────────────────────────
     _transfersTick++;
     if (_transfersTick % TRANSFERS_REFRESH_N === 0) {
@@ -422,11 +331,10 @@ function _pruneEvents() {
     const now    = _api.gameState.getElapsedSeconds();
     const cutoff = now - 86400 - GRACE_SECONDS;
 
-    _revEvents    = _revEvents.filter(e => e.t >= cutoff);
-    _costEvents   = _costEvents.filter(e => e.t >= cutoff);
-    _configEvents = _configEvents.filter(e => e.t >= cutoff);
+    _revEvents  = _revEvents.filter(e => e.t >= cutoff);
+    _costEvents = _costEvents.filter(e => e.t >= cutoff);
 
-    console.log(`${TAG} ✂ Pruned events | cutoff: ${Math.round(cutoff)}s | rev: ${_revEvents.length} | cost: ${_costEvents.length} | cfg: ${_configEvents.length}`);
+    console.log(`${TAG} ✂ Pruned events | cutoff: ${Math.round(cutoff)}s | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -471,8 +379,6 @@ export function stopAccumulating() {
 export function clearAccumulatorState() {
     _revEvents       = [];
     _costEvents      = [];
-    _configEvents    = [];
-    _lastConfigs     = {};
     _lastRevWeights  = {};
     _lastCostWeights = {};
     _routesCache     = null;
@@ -529,11 +435,10 @@ export async function persistEvents(storage) {
     if (!storage) return;
     try {
         await storage.set(PERSIST_KEY, {
-            revEvents:    _revEvents,
-            costEvents:   _costEvents,
-            configEvents: _configEvents,
+            revEvents:  _revEvents,
+            costEvents: _costEvents,
         });
-        console.log(`${TAG} 💾 Events persisted | rev: ${_revEvents.length} | cost: ${_costEvents.length} | cfg: ${_configEvents.length}`);
+        console.log(`${TAG} 💾 Events persisted | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
     } catch (e) {
         console.error(`${TAG} Failed to persist events:`, e);
     }
@@ -561,18 +466,10 @@ export async function restoreEvents(storage, currentElapsed) {
         const cutoff = currentElapsed - 86400 - GRACE_SECONDS;
 
         // Keep only events in [cutoff, currentElapsed]
-        _revEvents    = (saved.revEvents    || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
-        _costEvents   = (saved.costEvents   || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
-        _configEvents = (saved.configEvents || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
+        _revEvents  = (saved.revEvents  || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
+        _costEvents = (saved.costEvents || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
 
-        // Rebuild _lastConfigs from the most-recent config event per route
-        _lastConfigs = {};
-        const sortedCfg = [..._configEvents].sort((a, b) => a.t - b.t);
-        for (const e of sortedCfg) {
-            _lastConfigs[e.routeId] = e.config;
-        }
-
-        console.log(`${TAG} ♻ Events restored | rev: ${_revEvents.length} | cost: ${_costEvents.length} | cfg: ${_configEvents.length}`);
+        console.log(`${TAG} ♻ Events restored | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
     } catch (e) {
         console.error(`${TAG} Failed to restore events:`, e);
     }

@@ -621,8 +621,6 @@
   var _api = null;
   var _revEvents = [];
   var _costEvents = [];
-  var _configEvents = [];
-  var _lastConfigs = {};
   var _lastRevWeights = {};
   var _lastCostWeights = {};
   var _routesCache = null;
@@ -649,31 +647,6 @@
       profitPerPassenger: 0,
       profitPerTrain: 0
     };
-  }
-  function _demandPhaseHoursInRange(t1, t2) {
-    const hours = { high: 0, medium: 0, low: 0 };
-    if (t2 <= t1) return hours;
-    let t = t1;
-    while (t < t2) {
-      const secInDay = t % 86400;
-      const hourInDay = Math.floor(secInDay / 3600);
-      const phase = CONFIG.DEMAND_PHASES.find(
-        (p) => hourInDay >= p.startHour && hourInDay < p.endHour
-      );
-      if (!phase) {
-        t += 1;
-        continue;
-      }
-      const dayStart = t - secInDay;
-      const nextPhaseInDay = phase.endHour * 3600;
-      const nextPhaseBoundary = dayStart + nextPhaseInDay;
-      const dayBoundary = dayStart + 86400;
-      const segEnd = Math.min(nextPhaseBoundary, dayBoundary, t2);
-      const segHours = (segEnd - t) / 3600;
-      hours[phase.type] += segHours;
-      t = segEnd;
-    }
-    return hours;
   }
   function _computeCostRates(elapsedSeconds, routes) {
     if (!_api) return {};
@@ -713,7 +686,7 @@
     }
     return weights;
   }
-  function _computeRollingCapacity(routeId, route, trainType, cutoff, now) {
+  function _computeStaticCapacity(route, trainType) {
     if (!route.stComboTimings?.length) return 0;
     const timings = route.stComboTimings;
     const loopTimeSec = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
@@ -721,38 +694,14 @@
     const loopsPerHour = 3600 / loopTimeSec;
     const carsPerTrain = route.carsPerTrain !== void 0 ? route.carsPerTrain : trainType.stats.carsPerCarSet;
     const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
-    const eventsForRoute = _configEvents.filter((e) => e.routeId === routeId).sort((a, b) => a.t - b.t);
-    const firstEvent = eventsForRoute[0];
-    const effectiveCutoff = firstEvent ? Math.max(cutoff, firstEvent.t) : cutoff;
-    let configAtCutoff = null;
-    for (const e of eventsForRoute) {
-      if (e.t <= effectiveCutoff) configAtCutoff = e.config;
-    }
-    if (!configAtCutoff) {
-      configAtCutoff = {
-        high: route.trainSchedule?.highDemand || 0,
-        medium: route.trainSchedule?.mediumDemand || 0,
-        low: route.trainSchedule?.lowDemand || 0
-      };
-    }
-    const segments = [];
-    let activeConfig = configAtCutoff;
-    let segStart = effectiveCutoff;
-    for (const e of eventsForRoute) {
-      if (e.t <= effectiveCutoff) continue;
-      if (e.t >= now) break;
-      segments.push({ start: segStart, end: e.t, config: activeConfig });
-      activeConfig = e.config;
-      segStart = e.t;
-    }
-    segments.push({ start: segStart, end: now, config: activeConfig });
-    let total = 0;
-    for (const seg of segments) {
-      const ph = _demandPhaseHoursInRange(seg.start, seg.end);
-      const c = seg.config;
-      total += (c.high * ph.high + c.medium * ph.medium + c.low * ph.low) * loopsPerHour * capacityPerTrain;
-    }
-    return Math.round(total);
+    const trainCounts = {
+      high: route.trainSchedule?.highDemand || 0,
+      medium: route.trainSchedule?.mediumDemand || 0,
+      low: route.trainSchedule?.lowDemand || 0
+    };
+    return Math.round(
+      (trainCounts.high * CONFIG.DEMAND_HOURS.high + trainCounts.medium * CONFIG.DEMAND_HOURS.medium + trainCounts.low * CONFIG.DEMAND_HOURS.low) * loopsPerHour * capacityPerTrain
+    );
   }
   function _computeStatsForWindow(routeId, cutoff, now) {
     if (!_api) return _emptyStats();
@@ -792,7 +741,7 @@
     let capacity = 0;
     let utilization = 0;
     if (trainType) {
-      capacity = _computeRollingCapacity(routeId, route, trainType, cutoff, now);
+      capacity = _computeStaticCapacity(route, trainType);
       utilization = capacity > 0 ? Math.round(ridership / capacity * 100) : 0;
     }
     const profit = revenue - cost;
@@ -847,18 +796,6 @@
     _lastCostWeights = _buildWeights(costRates, _lastCostWeights);
     _routesCache = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
-    routes.forEach((route) => {
-      const config = {
-        high: route.trainSchedule?.highDemand || 0,
-        medium: route.trainSchedule?.mediumDemand || 0,
-        low: route.trainSchedule?.lowDemand || 0
-      };
-      const last = _lastConfigs[route.id];
-      if (!last || config.high !== last.high || config.medium !== last.medium || config.low !== last.low) {
-        _configEvents.push({ t: elapsed, routeId: route.id, config });
-        _lastConfigs[route.id] = config;
-      }
-    });
     _transfersTick++;
     if (_transfersTick % TRANSFERS_REFRESH_N === 0) {
       try {
@@ -873,8 +810,7 @@
     const cutoff = now - 86400 - GRACE_SECONDS;
     _revEvents = _revEvents.filter((e) => e.t >= cutoff);
     _costEvents = _costEvents.filter((e) => e.t >= cutoff);
-    _configEvents = _configEvents.filter((e) => e.t >= cutoff);
-    console.log(`${TAG} \u2702 Pruned events | cutoff: ${Math.round(cutoff)}s | rev: ${_revEvents.length} | cost: ${_costEvents.length} | cfg: ${_configEvents.length}`);
+    console.log(`${TAG} \u2702 Pruned events | cutoff: ${Math.round(cutoff)}s | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
   }
   function initAccumulator(api28) {
     _api = api28;
@@ -899,8 +835,6 @@
   function clearAccumulatorState() {
     _revEvents = [];
     _costEvents = [];
-    _configEvents = [];
-    _lastConfigs = {};
     _lastRevWeights = {};
     _lastCostWeights = {};
     _routesCache = null;
@@ -926,10 +860,9 @@
     try {
       await storage2.set(PERSIST_KEY, {
         revEvents: _revEvents,
-        costEvents: _costEvents,
-        configEvents: _configEvents
+        costEvents: _costEvents
       });
-      console.log(`${TAG} \u{1F4BE} Events persisted | rev: ${_revEvents.length} | cost: ${_costEvents.length} | cfg: ${_configEvents.length}`);
+      console.log(`${TAG} \u{1F4BE} Events persisted | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
     } catch (e) {
       console.error(`${TAG} Failed to persist events:`, e);
     }
@@ -945,13 +878,7 @@
       const cutoff = currentElapsed - 86400 - GRACE_SECONDS;
       _revEvents = (saved.revEvents || []).filter((e) => e.t >= cutoff && e.t <= currentElapsed);
       _costEvents = (saved.costEvents || []).filter((e) => e.t >= cutoff && e.t <= currentElapsed);
-      _configEvents = (saved.configEvents || []).filter((e) => e.t >= cutoff && e.t <= currentElapsed);
-      _lastConfigs = {};
-      const sortedCfg = [..._configEvents].sort((a, b) => a.t - b.t);
-      for (const e of sortedCfg) {
-        _lastConfigs[e.routeId] = e.config;
-      }
-      console.log(`${TAG} \u267B Events restored | rev: ${_revEvents.length} | cost: ${_costEvents.length} | cfg: ${_configEvents.length}`);
+      console.log(`${TAG} \u267B Events restored | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
     } catch (e) {
       console.error(`${TAG} Failed to restore events:`, e);
     }
@@ -1616,9 +1543,9 @@
     const handleDelete = async () => {
       if (selectedIds.length === 0) return;
       const deletingCurrent = currentSaveName2 && selectedIds.includes(currentSaveName2);
-      let message = `Delete ${selectedIds.length} save${selectedIds.length > 1 ? "s" : ""}?`;
+      let message = `Delete ${selectedIds.length} save${selectedIds.length > 1 ? "s" : ""} data?`;
       if (deletingCurrent) {
-        message += "\n\n\u26A0\uFE0F WARNING: You are deleting the CURRENT save!\nAll data for this session will be lost.";
+        message += "\n\n\u26A0\uFE0F WARNING: You are deleting the CURRENT save DATA.\nAll data for this session will be lost.";
       }
       message += "\n\nThis action cannot be undone.";
       if (!window.confirm(message)) return;
@@ -1773,7 +1700,7 @@ Continue with import?`;
         title: "Storage Management",
         isOpen,
         onClose,
-        size: "85vw",
+        size: "1080px",
         backdropClasses: "bg-black/80"
       },
       /* @__PURE__ */ React6.createElement("p", { class: "text-muted-foreground text-sm" }, /* @__PURE__ */ React6.createElement("strong", null, "Advanced Analytics"), " stores all its data in IndexedDB, the browser's built-in persistent database embedded in the game's Electron runtime. Data survives game restarts and has no practical size limit for the amount of analytics data this mod generates."),
