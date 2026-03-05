@@ -268,8 +268,8 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                 />
             )}
             
-            {/* Profit per Train - performance */}
-            {isColumnVisible('performance') && (
+            {/* Profit per Train - finance */}
+            {isColumnVisible('finance') && (
                 <ProfitCell
                     columnKey="profitPerTrain"
                     value={row.profitPerTrain}
@@ -279,7 +279,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     showPercentages={compareShowPercentages}
                     sortState={sortState}
                     groupState={groupState}
-                    group="performance"
+                    group="finance"
                     decimals={2}
                     useCompactTooltip={true}
                 />
