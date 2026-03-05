@@ -15,7 +15,7 @@ function NavSection({ id, label, scrollTo }) {
         <li>
             <button
                 onClick={() => scrollTo(id)}
-                className="pt-2 w-full text-left font-semibold text-foreground py-1 hover:text-primary"
+                className="px-2 w-full text-left font-semibold text-foreground/80 hover:text-foreground py-1 rounded-md hover:bg-accent"
             >
                 {label}
             </button>
@@ -25,10 +25,10 @@ function NavSection({ id, label, scrollTo }) {
 
 function NavItem({ id, label, icon, scrollTo }) {
     return (
-        <li>
+        <li className={'ml-2'}>
             <button
                 onClick={() => scrollTo(id)}
-                className="flex gap-1 items-center w-full text-left text-foreground/80 py-1.5 pl-2 hover:text-foreground text-xs"
+                className="flex gap-1 items-center w-full text-left py-1.5 pl-2 text-foreground/80 hover:text-foreground text-xs rounded-md hover:bg-accent"
             >
                 {icon && React.createElement(icons[icon], { size: 14 })}
                 {label}
@@ -55,7 +55,7 @@ function MetricEntry({ id, label, icon, children }) {
             <div className={"flex gap-2"}>
                 {icon && React.createElement(icons[icon], { size: 20, className: 'mt-1 shrink-0 '})}
                 <div>
-                    <h3 className="text-2xl font-semibold mb-1 gap-2">
+                    <h3 className="text-lg font-semibold mb-1 gap-2">
                         {label}
                     </h3>
                     <div className="text-foreground/80 leading-relaxed space-y-1.5 text-sm">
@@ -183,7 +183,7 @@ export function GuideDialog({ isOpen, onClose }) {
 
                 {/* ── Sidebar ── */}
                 <aside className="relative shrink-0 h-full">
-                    <div className="bg-background border-border border-r flex h-full inset-0 justify-center overflow-y-auto p-3 pl-7 pr-8">
+                    <div className="bg-background border-border border-r flex h-full inset-0 justify-center overflow-y-auto p-3 pl-5 pr-8">
                         <ul className="space-y-0.5">
                             <NavSection id="aa-guide-intro"       label="Introduction"  scrollTo={scrollTo} />
                             <NavSection id="aa-guide-data-modes"  label="Data Modes"    scrollTo={scrollTo} />
@@ -270,7 +270,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             hours — 6h total)</li>
                             <li><span className="font-bold text-orange-400">Medium</span> (shoulder
                             hours — 9h total)</li>
-                            <li><span className="font-bold text-green-500">Low</span> (overnight
+                            <li><span className="font-bold text-green-600 dark:text-green-400">Low</span> (overnight
                             — 9h total).</li>
                         </ul>
                         <p>
@@ -301,7 +301,7 @@ export function GuideDialog({ isOpen, onClose }) {
                         <UsageThresholdBar />
                         <ul className="list-disc pb-1">
                             <li>
-                                <span className="text-green-500 font-medium">Green</span> (45–85%): healthy usage range.
+                                <span className="text-green-600 dark:text-green-400 font-medium">Green</span> (45–85%): healthy usage range.
                             </li>
                             <li>
                                 <span className="text-yellow-500 font-medium">Yellow</span>: the route is getting busy (85–95%) or under-used (30–45%).
@@ -326,7 +326,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             The number of trains assigned to each demand tier.<br/>Displayed as three
                             values: <span className="text-red-500">High</span> /
                             {' '}<span className="text-orange-400">Medium</span> /
-                            {' '}<span className="text-green-500">Low</span>. The tiers correspond to fixed time windows in the game day.
+                            {' '}<span className="text-green-600 dark:text-green-400">Low</span>. The tiers correspond to fixed time windows in the game day.
                         </p>
                     </MetricEntry>
 
@@ -372,18 +372,12 @@ export function GuideDialog({ isOpen, onClose }) {
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-revenue" label="Revenue" icon="ArrowBigUpDash">
-                        <p className='pb-1'>
+                        <p>
                             Total fare income for the day, taken from the game's
                             revenue-per-hour figure and extrapolated to 24 hours. This value
                             is determined by the game's fare model and passenger mix — the
                             mod reads it directly without modification.
                         </p>
-                        <Warning>
-                            Use this value as a performance indicator rather than as a pure financial metric.
-                            The API provides a point-in-time snapshot instead of actual
-                            completed journeys. As a result, these figures may differ from the values
-                            shown in the "Financial Dashboard".
-                        </Warning>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-cost" label="Cost" icon="ArrowBigDownDash">
@@ -416,10 +410,6 @@ export function GuideDialog({ isOpen, onClose }) {
                             so a route with healthy ridership can still lose money if it runs
                             too many trains or uses an expensive train type on a short loop.
                         </p>
-                        <Warning>
-                            Use this value as a performance indicator rather than as a pure financial metric.
-                            See "Revenue".
-                        </Warning>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-profit-pax" label="Profit / Pax" icon='UserRoundSearch'>
@@ -433,24 +423,15 @@ export function GuideDialog({ isOpen, onClose }) {
                             for expansion. A large route with negative profit per passenger
                             is costing more the more it is used.
                         </Note>
-                        <div className='pb-1'/>
-                        <Warning>
-                            Use this value as a performance indicator rather than as a pure financial metric.
-                            See "Revenue".
-                        </Warning>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-profit-train" label="Profit / Train" icon='TrainFrontTunnel'>
-                        <p className='pb-1'>
+                        <p>
                             Daily profit divided by the total number of trains deployed across
                             all three demand tiers. Shows how much each individual train
                             contributes to the bottom line. Useful for evaluating whether
                             adding trains to a route is financially worthwhile.
                         </p>
-                        <Warning>
-                            Use this value as a performance indicator rather than as a pure financial metric.
-                            See "Revenue".
-                        </Warning>
                     </MetricEntry>
 
                     {/* ── Storage ── */}
