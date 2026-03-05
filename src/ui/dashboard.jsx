@@ -8,6 +8,7 @@
 // an optional prop and skips its own fetch when it is provided.
 
 import { Dialog } from '../components/dialog.jsx';
+import { AboutTrigger } from './about/about-trigger.jsx';
 import { GuideTrigger } from './guide/guide-trigger.jsx';
 import { StorageTrigger } from './storage/storage-trigger.jsx';
 import { DashboardTable } from './dashboard/dashboard-table.jsx';
@@ -76,9 +77,11 @@ export function Dashboard() {
             size={1280}
             onClose={() => setIsOpen(false)}
         >
-            <section class="flex gap-2 justify-end border-b pb-4">
+            <section class="flex gap-2 border-b pb-4">
                 <GuideTrigger/>
-                <div className="flex items-center gap-2 whitespace-nowrap">
+                <span className="border-foreground/20 border-r ml-2 mr-2 py-3"/>
+                <AboutTrigger/>
+                <div className="flex items-center gap-2 whitespace-nowrap ml-auto">
                     {!api.gameState.isPaused() && (
                         <>
                             <span className="text-xs">Tracking Data</span>

@@ -172,7 +172,7 @@ export function GuideDialog({ isOpen, onClose }) {
     return (
         <Dialog
             id="aa-guide-dialog"
-            title="Advanced Analytics - User Guide"
+            title="User Guide"
             size={980}
             noPadding={true}
             isOpen={isOpen}
