@@ -117,7 +117,6 @@ export function calculateRealTimeMetrics(route, trainType, ridership, projectedD
         : projectedDailyRevenue * (elapsedHours / 24);
     const dailyProfit = scaledRevenue - dailyCost;
     
-    const profitPerPassenger = ridership > 0 ? dailyProfit / ridership : 0;
     const totalTrains = trainCounts.high + trainCounts.medium + trainCounts.low;
     const profitPerTrain = totalTrains > 0 ? dailyProfit / totalTrains : 0;
 
@@ -131,7 +130,6 @@ export function calculateRealTimeMetrics(route, trainType, ridership, projectedD
         trainSchedule: trainCounts.high,
         dailyCost,
         dailyProfit,
-        profitPerPassenger,
         profitPerTrain
     };
 }

@@ -88,7 +88,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             dailyCost: 'NEW',
             dailyRevenue: 'NEW',
             dailyProfit: 'NEW',
-            profitPerPassenger: 'NEW',
             profitPerTrain: 'NEW',
             primaryValues: {
                 ridership: primaryRoute.ridership,
@@ -100,7 +99,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 dailyCost: primaryRoute.dailyCost,
                 dailyRevenue: primaryRoute.dailyRevenue,
                 dailyProfit: primaryRoute.dailyProfit,
-                profitPerPassenger: primaryRoute.profitPerPassenger,
                 profitPerTrain: primaryRoute.profitPerTrain
             },
             secondaryValues: {
@@ -113,7 +111,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 dailyCost: secondaryRoute?.dailyCost || 0,
                 dailyRevenue: secondaryRoute?.dailyRevenue || 0,
                 dailyProfit: secondaryRoute?.dailyProfit || 0,
-                profitPerPassenger: secondaryRoute?.profitPerPassenger || 0,
                 profitPerTrain: secondaryRoute?.profitPerTrain || 0
             },
             deleted: false,
@@ -136,7 +133,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             dailyCost: 'DELETED',
             dailyRevenue: 'DELETED',
             dailyProfit: 'DELETED',
-            profitPerPassenger: 'DELETED',
             profitPerTrain: 'DELETED',
             primaryValues: {
                 ridership: 0,
@@ -148,7 +144,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 dailyCost: 0,
                 dailyRevenue: 0,
                 dailyProfit: 0,
-                profitPerPassenger: 0,
                 profitPerTrain: 0
             },
             secondaryValues: {
@@ -161,7 +156,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 dailyCost: secondaryRoute.dailyCost,
                 dailyRevenue: secondaryRoute.dailyRevenue,
                 dailyProfit: secondaryRoute.dailyProfit,
-                profitPerPassenger: secondaryRoute.profitPerPassenger,
                 profitPerTrain: secondaryRoute.profitPerTrain
             },
             deleted: true,
@@ -189,11 +183,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
         dailyCost: calculatePercentageChange(primaryRoute.dailyCost, secondaryRoute.dailyCost, 'dailyCost'),
         dailyRevenue: calculatePercentageChange(primaryRoute.dailyRevenue, secondaryRoute.dailyRevenue, 'dailyRevenue'),
         dailyProfit: calculatePercentageChange(primaryRoute.dailyProfit, secondaryRoute.dailyProfit, 'dailyProfit'),
-        profitPerPassenger: calculatePercentageChange(
-            primaryRoute.profitPerPassenger, 
-            secondaryRoute.profitPerPassenger, 
-            'profitPerPassenger'
-        ),
         profitPerTrain: calculatePercentageChange(
             primaryRoute.profitPerTrain, 
             secondaryRoute.profitPerTrain, 
@@ -215,7 +204,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             dailyCost: primaryRoute.dailyCost,
             dailyRevenue: primaryRoute.dailyRevenue,
             dailyProfit: primaryRoute.dailyProfit,
-            profitPerPassenger: primaryRoute.profitPerPassenger,
             profitPerTrain: primaryRoute.profitPerTrain
         },
         secondaryValues: {
@@ -228,7 +216,6 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             dailyCost: secondaryRoute.dailyCost,
             dailyRevenue: secondaryRoute.dailyRevenue,
             dailyProfit: secondaryRoute.dailyProfit,
-            profitPerPassenger: secondaryRoute.profitPerPassenger,
             profitPerTrain: secondaryRoute.profitPerTrain
         },
         deleted: false,

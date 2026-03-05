@@ -33,7 +33,6 @@ export function getEmptyMetrics() {
         dailyCost: 0,
         dailyRevenue: 0,
         dailyProfit: 0,
-        profitPerPassenger: 0,
         profitPerTrain: 0,
         transfers: { count: 0, routes: [], routeIds: [], stationIds: [] }
     };
@@ -95,7 +94,6 @@ export function calculateRouteMetrics(route, trainType, ridership, dailyRevenue)
 
     const stations = route.stNodes?.length > 0 ? route.stNodes.length - 1 : 0;
     const dailyProfit = dailyRevenue - dailyCost;
-    const profitPerPassenger = ridership > 0 ? dailyProfit / ridership : 0;
     const totalTrains = trainCounts.high + trainCounts.medium + trainCounts.low;
     const profitPerTrain = totalTrains > 0 ? dailyProfit / totalTrains : 0;
 
@@ -109,7 +107,6 @@ export function calculateRouteMetrics(route, trainType, ridership, dailyRevenue)
         trainSchedule: trainCounts.high,
         dailyCost,
         dailyProfit,
-        profitPerPassenger,
         profitPerTrain
     };
 }

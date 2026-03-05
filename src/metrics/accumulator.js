@@ -86,7 +86,6 @@ function _emptyStats() {
         trainsLow:          0,
         trainSchedule:      0,
         totalTrains:        0,
-        profitPerPassenger: 0,
         profitPerTrain:     0,
     };
 }
@@ -246,7 +245,6 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     }
 
     const profit            = revenue - cost;
-    const profitPerPassenger = ridership   > 0 ? profit / ridership   : 0;
     const profitPerTrain     = totalTrains > 0 ? profit / totalTrains : 0;
 
     return {
@@ -263,7 +261,6 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         trainsLow:      trainCounts.low,
         trainSchedule:  trainCounts.high,
         totalTrains,
-        profitPerPassenger,
         profitPerTrain,
     };
 }
@@ -399,7 +396,7 @@ export function clearAccumulatorState() {
  * @returns {Object} { dailyRevenue, dailyCost, dailyProfit, ridership,
  *                     capacity, utilization, stations, transfers,
  *                     trainsHigh, trainsMedium, trainsLow, trainSchedule,
- *                     totalTrains, profitPerPassenger, profitPerTrain }
+ *                     totalTrains, profitPerTrain }
  */
 export function getRoute24hStats(routeId) {
     if (!_api) return _emptyStats();

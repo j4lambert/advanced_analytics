@@ -268,23 +268,6 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                 />
             )}
             
-            {/* Profit per Passenger - performance */}
-            {isColumnVisible('finance') && (
-                <ProfitCell
-                    columnKey="profitPerPassenger"
-                    value={row.profitPerPassenger}
-                    isComparison={row.isComparison}
-                    primaryValue={row.primaryValues?.profitPerPassenger}
-                    secondaryValue={row.secondaryValues?.profitPerPassenger}
-                    showPercentages={compareShowPercentages}
-                    sortState={sortState}
-                    groupState={groupState}
-                    group="performance"
-                    decimals={2}
-                    useCompactTooltip={false}
-                />
-            )}
-            
             {/* Profit per Train - performance */}
             {isColumnVisible('performance') && (
                 <ProfitCell
@@ -434,7 +417,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
             const absDelta = Math.abs(delta);
             
             // Check if this is a finance column (needs $ prefix)
-            const isFinanceColumn = ['dailyCost', 'dailyRevenue', 'dailyProfit', 'profitPerPassenger', 'profitPerTrain'].includes(columnKey);
+            const isFinanceColumn = ['dailyCost', 'dailyRevenue', 'dailyProfit', 'profitPerTrain'].includes(columnKey);
             
             if (isFinanceColumn) {
                 // Use compact format for deltas >= 100k
@@ -443,7 +426,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
                     const millions = absDelta / 1000000;
                     displayValue = `${prefix}${millions.toFixed(2)}M ${arrow}`;
                 } else {
-                    const decimals = ['profitPerPassenger', 'profitPerTrain'].includes(columnKey) ? 2 : 0;
+                    const decimals = ['profitPerTrain'].includes(columnKey) ? 2 : 0;
                     const formattedDelta = absDelta.toLocaleString(undefined, {
                         minimumFractionDigits: decimals,
                         maximumFractionDigits: decimals
@@ -453,7 +436,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
                 
                 // Show tooltip for large deltas
                 if (useCompactTooltip && absDelta >= 100000) {
-                    const decimals = ['profitPerPassenger', 'profitPerTrain'].includes(columnKey) ? 2 : 0;
+                    const decimals = ['profitPerTrain'].includes(columnKey) ? 2 : 0;
                     const fullDelta = formatCurrencyFull(delta, decimals);
                     
                     return (
@@ -473,7 +456,7 @@ function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPe
             }
             
             // Non-finance columns (no compact format needed)
-            const decimals = ['profitPerPassenger', 'profitPerTrain'].includes(columnKey) ? 2 : 0;
+            const decimals = ['profitPerTrain'].includes(columnKey) ? 2 : 0;
             const formattedDelta = absDelta.toLocaleString(undefined, {
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals

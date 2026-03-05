@@ -93,7 +93,6 @@ export const CONFIG = {
         { key: 'dailyCost', label: 'Cost', align: 'right', group: 'finance' },
         { key: 'dailyRevenue', label: 'Revenue', align: 'right', group: 'finance' },
         { key: 'dailyProfit', label: 'Profit', align: 'right', group: 'finance' },
-        { key: 'profitPerPassenger', label: 'Profit/Pax', align: 'right', group: 'finance' },
         { key: 'profitPerTrain', label: 'Profit/Train', align: 'right', group: 'performance' }
     ]
 };
