@@ -46,9 +46,7 @@ function findZustandStore() {
 // Perform the scan once at module load time.
 const _store = findZustandStore();
 
-if (_store) {
-    console.log(`${CONFIG.LOG_PREFIX} [Zustand] ✓ Store found — enhanced data accessors active`);
-} else {
+if (!_store) {
     console.warn(`${CONFIG.LOG_PREFIX} [Zustand] ✗ Store not found — falling back to API-based methods`);
 }
 

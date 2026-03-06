@@ -55,7 +55,6 @@ export function useRouteMetrics({
     React.useEffect(() => {
         // Skip updates in debug mode
         if (CONFIG.debug) {
-            console.log(`${CONFIG.LOG_PREFIX} Debug mode - updates paused`);
             return;
         }
 

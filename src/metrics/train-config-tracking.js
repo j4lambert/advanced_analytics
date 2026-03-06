@@ -58,7 +58,6 @@ export async function captureInitialDayConfig(day, api, storage) {
     });
     
     await storage.set('configCache', configCache);
-    console.log(`${CONFIG.LOG_PREFIX} Captured initial day config for Day ${day}: ${routes.length} routes`);
 }
 
 /**

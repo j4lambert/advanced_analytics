@@ -42,8 +42,6 @@ export async function captureHistoricalData(day, api, storage, routeStatsMap = {
         };
 
         await storage.set('historicalData', historicalData);
-
-        console.log(`${CONFIG.LOG_PREFIX} Captured data for Day ${day}: ${processedData.length} routes`);
     } catch (error) {
         console.error(`${CONFIG.LOG_PREFIX} Failed to capture historical data:`, error);
     }
@@ -58,7 +56,6 @@ export async function loadHistoricalData(storage) {
     try {
         const historicalData = await storage.get('historicalData', { days: {} });
         const dayCount = Object.keys(historicalData.days).length;
-        console.log(`${CONFIG.LOG_PREFIX} Loaded historical data: ${dayCount} days`);
         return historicalData;
     } catch (error) {
         console.error(`${CONFIG.LOG_PREFIX} Failed to load historical data:`, error);
@@ -103,7 +100,6 @@ export async function pruneHistoricalData(daysToKeep, storage) {
         });
 
         await storage.set('historicalData', historicalData);
-        console.log(`${CONFIG.LOG_PREFIX} Pruned ${daysToDelete.length} old days, keeping ${daysToKeep} most recent`);
     } catch (error) {
         console.error(`${CONFIG.LOG_PREFIX} Failed to prune historical data:`, error);
     }

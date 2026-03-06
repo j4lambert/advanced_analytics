@@ -284,8 +284,6 @@ function _registerMoneyHook(api) {
             }
         }
     });
-
-    console.log(`${TAG} ✓ onMoneyChanged hook registered`);
 }
 
 // ── Poll tick ──────────────────────────────────────────────────────────────
@@ -330,8 +328,6 @@ function _pruneEvents() {
 
     _revEvents  = _revEvents.filter(e => e.t >= cutoff);
     _costEvents = _costEvents.filter(e => e.t >= cutoff);
-
-    console.log(`${TAG} ✂ Pruned events | cutoff: ${Math.round(cutoff)}s | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -353,8 +349,6 @@ export function initAccumulator(api) {
 
     _pollTimer  = setInterval(_tick,        POLL_INTERVAL_MS);
     _pruneTimer = setInterval(_pruneEvents, PRUNE_INTERVAL_MS);
-
-    console.log(`${TAG} ▶ Accumulator started | poll: ${POLL_INTERVAL_MS}ms | prune: ${PRUNE_INTERVAL_MS}ms`);
 }
 
 /**
@@ -366,7 +360,6 @@ export function initAccumulator(api) {
 export function stopAccumulating() {
     if (_pollTimer)  { clearInterval(_pollTimer);  _pollTimer  = null; }
     if (_pruneTimer) { clearInterval(_pruneTimer); _pruneTimer = null; }
-    console.log(`${TAG} ■ Accumulator stopped`);
 }
 
 /**
@@ -382,7 +375,6 @@ export function clearAccumulatorState() {
     _trainTypesCache = null;
     _transfersCache  = null;
     _transfersTick   = 0;
-    console.log(`${TAG} ↺ Accumulator state cleared`);
 }
 
 // ── Live rolling queries ───────────────────────────────────────────────────
@@ -435,7 +427,6 @@ export async function persistEvents(storage) {
             revEvents:  _revEvents,
             costEvents: _costEvents,
         });
-        console.log(`${TAG} 💾 Events persisted | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
     } catch (e) {
         console.error(`${TAG} Failed to persist events:`, e);
     }
@@ -456,7 +447,6 @@ export async function restoreEvents(storage, currentElapsed) {
     try {
         const saved = await storage.get(PERSIST_KEY, null);
         if (!saved) {
-            console.log(`${TAG} No persisted events found`);
             return;
         }
 
@@ -465,8 +455,6 @@ export async function restoreEvents(storage, currentElapsed) {
         // Keep only events in [cutoff, currentElapsed]
         _revEvents  = (saved.revEvents  || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
         _costEvents = (saved.costEvents || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
-
-        console.log(`${TAG} ♻ Events restored | rev: ${_revEvents.length} | cost: ${_costEvents.length}`);
     } catch (e) {
         console.error(`${TAG} Failed to restore events:`, e);
     }

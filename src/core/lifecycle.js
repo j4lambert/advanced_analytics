@@ -32,18 +32,14 @@ export async function handleMapReadyFallback(api) {
     const resolvedName = zustandName || `session_${Date.now()}`;
     const source       = zustandName ? 'Zustand' : 'temp ID';
 
-    console.log(`${CONFIG.LOG_PREFIX} [LC] handleMapReadyFallback | saveName: ${resolvedName} (source: ${source})`);
-
     storage = _initStorage(resolvedName);
 
     const matchingKey = await _findMatchingSave(resolvedName, api);
 
     if (matchingKey) {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] handleMapReadyFallback — found matching save: ${matchingKey}`);
         storage.setSaveName(matchingKey);
         currentSaveName = matchingKey;
     } else {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] handleMapReadyFallback — no matching save found, using: ${resolvedName}`);
         currentSaveName = resolvedName;
     }
 
@@ -57,8 +53,6 @@ export async function handleMapReadyFallback(api) {
     clearAccumulatorState();
     await restoreEvents(storage, api.gameState.getElapsedSeconds());
     initAccumulator(api);
-
-    console.log(`${CONFIG.LOG_PREFIX} [LC] handleMapReadyFallback complete | active save: ${currentSaveName}`);
 }
 
 /**
@@ -136,7 +130,6 @@ async function _pruneFutureHistoricalData(storage, api) {
 
         if (pruned) {
             await storage.set('historicalData', historicalData);
-            console.log(`${CONFIG.LOG_PREFIX} [LC] Pruned historical data for days >= ${currentDay}`);
         }
     } catch (e) {
         console.error(`${CONFIG.LOG_PREFIX} [LC] Failed to prune future historical data:`, e);
@@ -148,11 +141,9 @@ async function _pruneFutureHistoricalData(storage, api) {
  * @param {Object} api - SubwayBuilderAPI instance
  */
 export function initLifecycleHooks(api) {
-    console.log(`${CONFIG.LOG_PREFIX} Setting up lifecycle hooks...`);
 
     // ── onGameInit ──────────────────────────────────────────────────────────
     api.hooks.onGameInit(() => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameInit fired | storage: ${storage ? storage.saveName : 'null'}`);
         // New game: no persisted events to restore
         clearAccumulatorState();
         initAccumulator(api);
@@ -160,18 +151,15 @@ export function initLifecycleHooks(api) {
 
     // ── onGameLoaded ────────────────────────────────────────────────────────
     api.hooks.onGameLoaded(async (saveName) => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameLoaded fired | saveName: ${saveName} | prev storage: ${storage ? storage.saveName : 'null'}`);
 
         storage = _initStorage(saveName);
 
         const matchingKey = await _findMatchingSave(saveName, api);
 
         if (matchingKey) {
-            console.log(`${CONFIG.LOG_PREFIX} [LC] Found matching save: ${matchingKey}`);
             storage.setSaveName(matchingKey);
             currentSaveName = matchingKey;
         } else {
-            console.log(`${CONFIG.LOG_PREFIX} [LC] No matching save found, using: ${saveName}`);
             currentSaveName = saveName;
         }
 
@@ -184,13 +172,10 @@ export function initLifecycleHooks(api) {
         clearAccumulatorState();
         await restoreEvents(storage, api.gameState.getElapsedSeconds());
         initAccumulator(api);
-
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameLoaded complete | active save: ${currentSaveName}`);
     });
 
     // ── onGameSaved ─────────────────────────────────────────────────────────
     api.hooks.onGameSaved(async (saveName) => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameSaved fired | saveName: ${saveName} | prev storage: ${storage ? storage.saveName : 'null'}`);
 
         if (!storage) {
             storage = _initStorage(saveName);
@@ -204,12 +189,6 @@ export function initLifecycleHooks(api) {
 
             await Storage.migrateKeys(oldSaveName, saveName, isTempId);
             await Storage.renameSave(oldSaveName, saveName);
-
-            if (isTempId) {
-                console.log(`${CONFIG.LOG_PREFIX} [LC] Migrated data from temp save "${oldSaveName}" to: "${saveName}"`);
-            } else {
-                console.log(`${CONFIG.LOG_PREFIX} [LC] Copied data from "${oldSaveName}" to: "${saveName}"`);
-            }
         }
 
         storage.setSaveName(saveName);
@@ -217,25 +196,18 @@ export function initLifecycleHooks(api) {
 
         await storage.backup(api);
         await persistEvents(storage);
-
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameSaved complete | active save: ${currentSaveName}`);
     });
 
     // ── onGameEnd ───────────────────────────────────────────────────────────
     api.hooks.onGameEnd((result) => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameEnd fired | result: ${JSON.stringify(result)}`);
-
         storage         = null;
         currentSaveName = null;
 
         stopAccumulating();
-
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onGameEnd — state reset complete`);
     });
 
     // ── onDayChange ─────────────────────────────────────────────────────────
     api.hooks.onDayChange(async (dayThatEnded) => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onDayChange fired | day ended: ${dayThatEnded} | storage: ${storage ? storage.saveName : 'null'}`);
 
         if (!storage) {
             console.warn(`${CONFIG.LOG_PREFIX} Storage not initialized, skipping data capture`);
@@ -262,8 +234,6 @@ export function initLifecycleHooks(api) {
 
     // ── onRouteCreated ──────────────────────────────────────────────────────
     api.hooks.onRouteCreated((route) => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onRouteCreated | route: ${route.id} | storage: ${storage ? storage.saveName : 'null'}`);
-
         if (!storage) return;
 
         const currentDay   = api.gameState.getCurrentDay();
@@ -273,15 +243,11 @@ export function initLifecycleHooks(api) {
 
     // ── onRouteDeleted ──────────────────────────────────────────────────────
     api.hooks.onRouteDeleted((routeId) => {
-        console.log(`${CONFIG.LOG_PREFIX} [LC] onRouteDeleted | route: ${routeId} | storage: ${storage ? storage.saveName : 'null'}`);
-
         if (!storage) return;
 
         const currentDay = api.gameState.getCurrentDay();
         _setRouteStatus(routeId, 'deleted', currentDay, storage);
     });
-
-    console.log(`${CONFIG.LOG_PREFIX} ✓ Lifecycle hooks registered`);
 }
 
 /**

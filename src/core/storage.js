@@ -276,7 +276,6 @@ export class Storage {
      */
     async backup(api) {
         const save = this.saveName || 'NoName';
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] backup() | save: ${save}`);
 
         // Read all transactional working values
         const workingEntries = {};
@@ -299,9 +298,6 @@ export class Storage {
         workingEntries[Keys.meta()] = meta;
 
         await _idbSetMany(workingEntries);
-
-        console.log(`${CONFIG.LOG_PREFIX} ✓ Transaction committed for save: ${save}`);
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] backup() complete`);
     }
 
     /**
@@ -310,8 +306,6 @@ export class Storage {
      */
     async restore() {
         const save = this.saveName || 'NoName';
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() | save: ${save}`);
-
         const entries = {};
         let restoredCount = 0;
 
@@ -325,12 +319,7 @@ export class Storage {
 
         if (restoredCount > 0) {
             await _idbSetMany(entries);
-            console.log(`${CONFIG.LOG_PREFIX} ✓ Rolled back to saved state for: ${save} (${restoredCount} keys)`);
-        } else {
-            console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() — no saved state found for: ${save}`);
         }
-
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] restore() complete`);
     }
 
     // ── Metadata ───────────────────────────────────────────────────────────
@@ -340,7 +329,6 @@ export class Storage {
      * @param {string} newSaveName
      */
     setSaveName(newSaveName) {
-        console.log(`${CONFIG.LOG_PREFIX} [Storage] setSaveName | ${this.saveName} → ${newSaveName}`);
         this.saveName = newSaveName;
     }
 
