@@ -6,7 +6,7 @@ export function injectStyles() {
     style.textContent = `
         /* ===== General ==================================================== */
         html.dark .aa-dialog-dialog, html.dark #aa-panel,
-        html.dark .aa-dropdown-menu {
+        html.dark .aa-dropdown-menu, html.dark .aa-static-panel {
             color-scheme: dark;
         }
         html {
@@ -52,6 +52,12 @@ export function injectStyles() {
         
         .aa-dialog-dialog-header {
             border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+        }
+        
+        .aa-static-panel {
+            max-width: MIN(CALC(100vw - 500px), 1280px);
+            width: 1280px;
+            margin-right: 52px;
         }
            
         /* ===== Charts ===================================================== */

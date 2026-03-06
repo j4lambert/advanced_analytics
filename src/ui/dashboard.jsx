@@ -7,7 +7,7 @@
 // without fetching it twice.  DashboardTable accepts liveRouteData as
 // an optional prop and skips its own fetch when it is provided.
 
-import { Dialog } from '../components/dialog.jsx';
+import { StaticPanel } from '../components/static-panel';
 import { AboutTrigger } from './about/about-trigger.jsx';
 import { GuideTrigger } from './guide/guide-trigger.jsx';
 import { StorageTrigger } from './storage/storage-trigger.jsx';
@@ -70,11 +70,10 @@ export function Dashboard() {
     }, []);
     
     return (
-        <Dialog
-            id="aa-dialog-analytics"
+        <StaticPanel
+            id="aa-dashboard"
             title="Advanced Analytics - Dashboard"
             isOpen={isOpen}
-            size={1280}
             onClose={() => setIsOpen(false)}
         >
             <section class="flex gap-2 border-b pb-4">
@@ -127,6 +126,6 @@ export function Dashboard() {
                 </div>
                 <DashboardMap />
             </section>
-        </Dialog>
+        </StaticPanel>
     );
 }

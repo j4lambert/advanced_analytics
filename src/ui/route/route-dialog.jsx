@@ -3,7 +3,7 @@
 // Opened by clicking any interactive RouteBadge.
 // Exposed globally as window.AdvancedAnalytics.openRouteDialog(routeId).
 
-import { Dialog }       from '../../components/dialog.jsx';
+import { StaticPanel }  from '../../components/static-panel.jsx';
 import { Dropdown }     from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge }   from '../../components/route-badge.jsx';
@@ -399,10 +399,10 @@ function RouteDialogTitle({ routeId, onRouteChange }) {
     return (
         <div className="flex items-center gap-2 min-w-0">
             <Dropdown
-                togglerClasses="flex items-center border gap-1 rounded-md hover:bg-accent px-2 py-1.5 transition-colors text-xs"
+                togglerClasses="flex items-center gap-1 rounded-md hover:bg-accent px-2 py-1.5 transition-colors text-xs"
                 togglerContent={
                     routeId
-                        ? <RouteBadge routeId={routeId} size="1.2rem" interactive={false} />
+                        ? <RouteBadge routeId={routeId} size="1rem" interactive={false} />
                         : <span className="text-muted-foreground text-sm">Select</span>
                 }
                 value={routeId}
@@ -414,7 +414,7 @@ function RouteDialogTitle({ routeId, onRouteChange }) {
             </Dropdown>
 
             {current && (
-                <span className="font-semibold text-lg truncate">
+                <span className="font-semibold">
                     Route Analytics
                 </span>
             )}
@@ -441,7 +441,7 @@ export function RouteDialog() {
     }, []);
 
     return (
-        <Dialog
+        <StaticPanel
             id="aa-dialog-route"
             title={
                 <RouteDialogTitle
@@ -454,6 +454,6 @@ export function RouteDialog() {
             size={1280}
         >
             {isOpen && routeId && <RouteContent routeId={routeId} />}
-        </Dialog>
+        </StaticPanel>
     );
 }
