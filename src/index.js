@@ -1,5 +1,7 @@
-// Advanced Analytics v0.9.2
-// Modular refactored version with JSX UI components
+// Advanced Analytics v1.0.0
+//
+// Historical per-route advanced analytics to Subway Builder
+// https://github.com/stefanorigano/advanced_analytics
 
 import { CONFIG } from './config.js';
 import { initLifecycleHooks, getStorage, handleMapReadyFallback } from './core/lifecycle.js';
