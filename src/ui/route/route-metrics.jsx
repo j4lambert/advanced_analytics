@@ -15,6 +15,7 @@ import { getAvailableDays } from '../../utils/formatting.js';
 import { ButtonsGroup, ButtonsGroupItem } from '../../components/buttons-group.jsx';
 import { getStorage } from '../../core/lifecycle.js';
 import { getRouteTodayStats } from '../../metrics/accumulator.js';
+import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons, charts } = api.utils;
@@ -159,6 +160,39 @@ export function RouteMetrics({ routeId }) {
     const [chartType,       setChartType]       = React.useState('line');
     const [selectedMetrics, setSelectedMetrics] = React.useState(DEFAULT_METRICS);
     const [timeframe,       setTimeframe]       = React.useState('7');
+
+    const storage = getStorage();
+    // Ref guard: prevents save effect from firing before the initial load
+    const prefsSaveable = React.useRef(false);
+
+    // ── UI Preferences: load ──────────────────────────────────────────────
+    // Chart settings are global (not per-route) so the same controls are
+    // remembered across all route dialogs within the same save file.
+    React.useEffect(() => {
+        if (prefsSaveable.current) return;
+        if (!storage) return;
+        loadPrefs(storage, 'routeMetrics').then(prefs => {
+            if (prefs.chartType === 'line' || prefs.chartType === 'bar') {
+                setChartType(prefs.chartType);
+            }
+            if (Array.isArray(prefs.selectedMetrics) && prefs.selectedMetrics.length > 0) {
+                const validKeys = new Set(METRICS.map(m => m.key));
+                const filtered = prefs.selectedMetrics.filter(k => validKeys.has(k));
+                // Keep at least one metric selected (safety net for schema drift)
+                if (filtered.length > 0) setSelectedMetrics(filtered);
+            }
+            if (['7', '14', 'all'].includes(prefs.timeframe)) {
+                setTimeframe(prefs.timeframe);
+            }
+            prefsSaveable.current = true;
+        });
+    }, [storage]);
+
+    // ── UI Preferences: save ──────────────────────────────────────────────
+    React.useEffect(() => {
+        if (!prefsSaveable.current || !storage) return;
+        savePrefs(storage, 'routeMetrics', { chartType, selectedMetrics, timeframe });
+    }, [storage, chartType, selectedMetrics, timeframe]);
 
     const { historicalData, liveData } = useRouteMetricsData(routeId);
 

@@ -1,5 +1,6 @@
 // Main analytics panel component
-// Manages state locally with no persistence - resets when unmounted
+// Toolbar state (filters, timeframe, compare mode) is persisted to IDB under
+// the 'uiPreferences/dashboardTable' namespace and restored on re-open.
 //
 // When liveRouteData is provided by the parent (Dashboard) the component
 // uses it directly instead of running its own useRouteMetrics fetch for live
@@ -11,6 +12,7 @@ import { SortableTable } from '../table.jsx';
 import { getStorage } from '../../core/lifecycle.js';
 import { useRouteMetrics } from '../../hooks/useRouteMetrics.js';
 import { sortTableData } from '../../utils/sorting.js';
+import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
@@ -30,7 +32,10 @@ export function DashboardTable({
     const [compareShowPercentages, setCompareShowPercentages] = React.useState(true);
     
     const storage = getStorage();
-    
+
+    // Ref guard: prevents the save effect from firing before preferences have been loaded
+    const prefsSaveable = React.useRef(false);
+
     // Load historical data on mount (only data that's persisted for game saves)
     React.useEffect(() => {
         const loadHistorical = async () => {
@@ -54,6 +59,50 @@ export function DashboardTable({
         
         return () => clearInterval(checkUpdates);
     }, [storage, historicalData]);
+
+    // ── UI Preferences: load ────────────────────────────────────────────────
+    // Runs once when storage becomes available. Restores previous toolbar state.
+    React.useEffect(() => {
+        if (prefsSaveable.current) return;
+        if (!storage) return;
+        loadPrefs(storage, 'dashboardTable').then(prefs => {
+            if (prefs.groupState && typeof prefs.groupState === 'object') {
+                // Spread into defaults so any keys added in future versions are kept
+                setGroupState(prev => ({ ...prev, ...prefs.groupState }));
+            }
+            if (prefs.timeframeState !== undefined) {
+                setTimeframeState(prefs.timeframeState);
+            }
+            if (typeof prefs.compareMode === 'boolean') {
+                setCompareMode(prefs.compareMode);
+            }
+            if (prefs.comparePrimaryDay !== undefined) {
+                setComparePrimaryDay(prefs.comparePrimaryDay);
+            }
+            if (prefs.compareSecondaryDay !== undefined) {
+                setCompareSecondaryDay(prefs.compareSecondaryDay);
+            }
+            if (typeof prefs.compareShowPercentages === 'boolean') {
+                setCompareShowPercentages(prefs.compareShowPercentages);
+            }
+            prefsSaveable.current = true;
+        });
+    }, [storage]);
+
+    // ── UI Preferences: save ────────────────────────────────────────────────
+    // Fires whenever any toolbar state changes. The prefsSaveable guard ensures
+    // the initial-render defaults are never written before the load completes.
+    React.useEffect(() => {
+        if (!prefsSaveable.current || !storage) return;
+        savePrefs(storage, 'dashboardTable', {
+            groupState,
+            timeframeState,
+            compareMode,
+            comparePrimaryDay,
+            compareSecondaryDay,
+            compareShowPercentages,
+        });
+    }, [storage, groupState, timeframeState, compareMode, comparePrimaryDay, compareSecondaryDay, compareShowPercentages]);
 
     // ── Data fetching ────────────────────────────────────────────────────────
     // When a parent supplies liveRouteData we only need the hook for non-live

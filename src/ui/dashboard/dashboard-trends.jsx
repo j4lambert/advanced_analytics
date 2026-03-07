@@ -18,6 +18,8 @@ import { ButtonsGroup, ButtonsGroupItem } from '../../components/buttons-group.j
 import { Dropdown } from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge } from '../../components/route-badge.jsx';
+import { getStorage } from '../../core/lifecycle.js';
+import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons, charts } = api.utils;
@@ -73,6 +75,12 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
     const [hoveredRoute,    setHoveredRoute]     = React.useState(null);
 
     const routes = api.gameState.getRoutes();
+
+    const storage = getStorage();
+    // Ref guard: prevents save effect from firing before the initial load
+    const prefsSaveable = React.useRef(false);
+    // Stable string key for the route-filter effect (avoids dep on object reference)
+    const routeIdKey = routes.map(r => r.id).join(',');
 
     const metricConfig = CHART_METRICS.find(m => m.key === selectedMetric);
 
@@ -140,6 +148,61 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
             }
         }
     }, [routes, allDays, historicalData, liveRouteData, selectedRoutes.length]);
+
+    // ── UI Preferences: load ────────────────────────────────────────────────
+    // Restores chart controls for the current save. Route IDs are validated
+    // against the live route list so stale IDs are never written into state.
+    React.useEffect(() => {
+        if (prefsSaveable.current) return;
+        if (!storage) return;
+        loadPrefs(storage, 'dashboardTrends').then(prefs => {
+            if (prefs.chartType === 'line' || prefs.chartType === 'bar') {
+                setChartType(prefs.chartType);
+            }
+            if (Array.isArray(prefs.selectedRoutes) && prefs.selectedRoutes.length > 0) {
+                // Filter against the current live route list to drop deleted routes
+                const currentRoutes = api.gameState.getRoutes();
+                const validIds = new Set(currentRoutes.map(r => r.id));
+                const filtered = prefs.selectedRoutes.filter(id => validIds.has(id));
+                // Only restore if at least one route is still valid; otherwise let
+                // the auto-select effect handle it naturally.
+                if (filtered.length > 0) setSelectedRoutes(filtered);
+            }
+            const validMetricKeys = new Set(CHART_METRICS.map(m => m.key));
+            if (prefs.selectedMetric && validMetricKeys.has(prefs.selectedMetric)) {
+                setSelectedMetric(prefs.selectedMetric);
+            }
+            if (['7', '14', 'all'].includes(prefs.timeframe)) {
+                setTimeframe(prefs.timeframe);
+            }
+            prefsSaveable.current = true;
+        });
+    }, [storage]);
+
+    // ── Route filter: remove stale IDs during an active session ────────────
+    // Fires whenever routes are added or removed while the dashboard is open.
+    // If all selected routes are deleted the auto-select effect will re-trigger.
+    React.useEffect(() => {
+        if (routes.length === 0) return;
+        const validIds = new Set(routes.map(r => r.id));
+        setSelectedRoutes(prev => {
+            const filtered = prev.filter(id => validIds.has(id));
+            // Preserve the same array reference when nothing changed (avoids
+            // unnecessary re-renders and save-effect triggers)
+            return filtered.length === prev.length ? prev : filtered;
+        });
+    }, [routeIdKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── UI Preferences: save ────────────────────────────────────────────────
+    React.useEffect(() => {
+        if (!prefsSaveable.current || !storage) return;
+        savePrefs(storage, 'dashboardTrends', {
+            chartType,
+            selectedRoutes,
+            selectedMetric,
+            timeframe,
+        });
+    }, [storage, chartType, selectedRoutes, selectedMetric, timeframe]);
 
     return (
         <div className="space-y-4">

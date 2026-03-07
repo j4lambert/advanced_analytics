@@ -15,6 +15,8 @@ import { getStationGroups, isZustandAvailable } from '../../core/api-support.js'
 import { Dropdown } from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge } from '../../components/route-badge.jsx';
+import { getStorage } from '../../core/lifecycle.js';
+import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
@@ -503,6 +505,13 @@ export function DashboardMap() {
     // Declared BEFORE the hook so we can pass the filter in for layout re-compute.
     const [selectedRoutes, setSelectedRoutes] = React.useState([]);
 
+    const storage = getStorage();
+    // prefsLoaded gates the seed effect: we don't want to seed to "all routes"
+    // before we've had a chance to restore the saved selection from IDB.
+    const [prefsLoaded, setPrefsLoaded] = React.useState(false);
+    // Ref guard: prevents save effect from firing before the initial load
+    const prefsSaveable = React.useRef(false);
+
     // Pass the current selection into the hook.
     // While selectedRoutes is still [] (first render), pass null → hook uses all routes.
     const filterArg = selectedRoutes.length > 0 ? selectedRoutes : null;
@@ -515,15 +524,49 @@ export function DashboardMap() {
         [allRoutes.map(r => r.id).join(',')]
     );
 
-    // Seed selectedRoutes to "all" on first data arrival, and clean up stale ids thereafter.
+    // ── UI Preferences: load ────────────────────────────────────────────────
+    // Restores the saved route filter for the current save file. Runs once
+    // as soon as storage is available; always marks prefsLoaded=true so the
+    // seed effect below can proceed even when storage is unavailable.
     React.useEffect(() => {
+        if (prefsSaveable.current) return;
+        const doLoad = async () => {
+            if (storage) {
+                const prefs = await loadPrefs(storage, 'dashboardMap');
+                if (Array.isArray(prefs.selectedRoutes) && prefs.selectedRoutes.length > 0) {
+                    // Validate against live routes — drop any that no longer exist
+                    const currentRoutes = api.gameState.getRoutes();
+                    const validIds = new Set(currentRoutes.map(r => r.id));
+                    const filtered = prefs.selectedRoutes.filter(id => validIds.has(id));
+                    // If at least one valid route remains, restore the selection.
+                    // Otherwise fall through to the seed effect (which will pick all routes).
+                    if (filtered.length > 0) setSelectedRoutes(filtered);
+                }
+            }
+            prefsSaveable.current = true;
+            setPrefsLoaded(true);
+        };
+        doLoad();
+    }, [storage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Seed selectedRoutes to "all" on first data arrival, and clean up stale ids thereafter.
+    // The prefsLoaded gate ensures we don't override a restored selection with "all routes".
+    React.useEffect(() => {
+        if (!prefsLoaded) return;
         if (allRouteIds.length === 0) return;
-        setSelectedRoutes(prev =>
-            prev.length === 0
-                ? allRouteIds
-                : prev.filter(id => allRouteIds.includes(id))
-        );
-    }, [allRouteIds.join(',')]);
+        setSelectedRoutes(prev => {
+            if (prev.length === 0) return allRouteIds;
+            const filtered = prev.filter(id => allRouteIds.includes(id));
+            // Preserve same reference when nothing changed (avoids spurious saves)
+            return filtered.length === prev.length ? prev : filtered;
+        });
+    }, [allRouteIds.join(','), prefsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── UI Preferences: save ────────────────────────────────────────────────
+    React.useEffect(() => {
+        if (!prefsSaveable.current || !storage) return;
+        savePrefs(storage, 'dashboardMap', { selectedRoutes });
+    }, [storage, selectedRoutes]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Hover state ───────────────────────────────────────────
     const [hoveredRoute,    setHoveredRoute]    = React.useState(null);

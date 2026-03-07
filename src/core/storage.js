@@ -26,7 +26,7 @@ const STORE_NAME = 'analytics';
 // Keys that are immutable once written — stored at save root, not duplicated
 const SHARED_KEYS       = ['historicalData'];
 // Keys that use the working/saved transactional split
-const TRANSACTIONAL_KEYS = ['routeStatuses', 'configCache'];
+const TRANSACTIONAL_KEYS = ['routeStatuses', 'configCache', 'uiPreferences'];
 
 // ---------------------------------------------------------------------------
 // Low-level IDB helpers (module-private)
