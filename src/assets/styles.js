@@ -54,10 +54,16 @@ export function injectStyles() {
             border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
         }
         
-        .aa-static-panel {
-            max-width: MIN(CALC(100vw - 500px), 1280px);
+        #root:has(#metro-nav-panel) .aa-static-panel {
+            max-width: MIN(CALC(100vw - 535px), 1280px);
             width: 1280px;
+        }
+        
+        .aa-static-panel {
+            max-width: MIN(CALC(100vw - 104px), 1280px);
+            width: 100%;
             margin-right: 52px;
+            min-width: 900px;
         }
            
         /* ===== Charts ===================================================== */
