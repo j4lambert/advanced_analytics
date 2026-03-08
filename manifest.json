@@ -1,9 +1,11 @@
 {
-    "id": "com.stefanorigano.advanced_analytics",
+    "id": "advanced-analytics",
     "name": "Advanced Analytics",
     "description": "Adds historical per-route advanced analytics to Subway Builder",
-
-    "version": "1.0.1",
+    "dependencies": {
+        "subway-builder": ">=1.0.0"
+    },
+    "version": "1.1.0",
     "author": { "name": "Steno" },
     "main": "dist/index.js"
 }

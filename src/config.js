@@ -1,7 +1,7 @@
 // Configuration constants for Advanced Analytics
 
 export const CONFIG = {
-    VERSION: '1.0.1',
+    VERSION: '1.1.0',
     
     UTILIZATION_THRESHOLDS: {
         CRITICAL_LOW: 30,

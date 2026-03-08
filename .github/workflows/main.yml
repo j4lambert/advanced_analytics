@@ -1,4 +1,4 @@
-# .github/workflows/release.yml
+# .github/workflows/main.yml
 name: Build Release ZIP
 
 on:
@@ -41,21 +41,22 @@ jobs:
           else
             PRERELEASE=false
           fi
+          BODY=$(echo "$MSG" | sed -E 's/^\[(PRE-)?RELEASE\] [0-9]+\.[0-9]+\.[0-9]+ ?//')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
 
       - name: Build ZIP
         run: |
-          mkdir -p staging/advanced_analytics
-          cp manifest.json staging/advanced_analytics/
-          cp -r dist/ staging/advanced_analytics/dist/
-          cd staging
-          zip -r ../advanced_analytics-v${{ steps.meta.outputs.version }}.zip advanced_analytics/
+          zip -r advanced_analytics-v${{ steps.meta.outputs.version }}.zip manifest.json dist/
 
       - name: Create GitHub Release + upload asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.meta.outputs.version }}
           name: v${{ steps.meta.outputs.version }}
+          body: ${{ steps.meta.outputs.body }}
           prerelease: ${{ steps.meta.outputs.prerelease }}
-          files: advanced_analytics-v${{ steps.meta.outputs.version }}.zip
+          files: |
+            advanced_analytics-v${{ steps.meta.outputs.version }}.zip
+            manifest.json

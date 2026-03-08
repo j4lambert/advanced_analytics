@@ -1,4 +1,4 @@
-// Advanced Analytics v1.0.1
+// Advanced Analytics v1.1.0
 //
 // Historical per-route advanced analytics to Subway Builder
 // https://github.com/stefanorigano/advanced_analytics

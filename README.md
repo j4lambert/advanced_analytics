@@ -25,26 +25,34 @@ All data is stored in IndexedDB and persists across game restarts. No save file 
 <a href='https://ko-fi.com/Q5Q61VIM68' target='_blank'><img height='20' style='border:0px;height:40px;' src='https://storage.ko-fi.com/cdn/kofi3.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
 ![3.png](README/3.png)
----
-
-## Download
-[![Latest Release](https://img.shields.io/github/v/release/stefanorigano/advanced_analytics?label=stable&color=2ea44f)](https://github.com/stefanorigano/advanced_analytics/releases/latest)
-[![Pre-release](https://img.shields.io/github/v/release/stefanorigano/advanced_analytics?include_prereleases&label=pre-release&color=e3b341)](https://github.com/stefanorigano/advanced_analytics/releases?q=prerelease%3Atrue)
-
-Pre-releases may contain incomplete features or bugs. Use stable builds for everyday play.
 
 ---
 
 ## Installation
+There are two installation methods.
 
-1. Download the ZIP from the release page.
-2. Extract the `advanced_analytics/` folder into your mods directory:
-    - **Windows:** `%APPDATA%\SubwayBuilder\mods\`
-    - **macOS:** `~/Library/Application Support/SubwayBuilder/mods/`
-    - **Linux:** `~/.config/SubwayBuilder/mods/`
-3. Launch Subway Builder. The mod loads automatically.
+### 🚇 _Railyard_ mod manager (suggested)
+Install [_Railyard_](https://subwaybuildermodded.com/railyard/) mod manager.
+Search for "Advanced Analytics".
 
-![top.png](README/top.png)
+### 🛠️ Manual (Github)
+1. Crate the `advanced-analytics` folder in into your mods directory ( Main Menu > Settings > Mods)
+2. Download the [latest ZIP from the release page]( https://github.com/stefanorigano/advanced_analytics/releases/latest).
+3. Extract the ZIP content **into** the advanced-analytics folder you created.
+4. Restart the game and activate the "Advanced Analytics" - That's it 🙂
+
+---
+
+#### Manual Download Links
+
+[![Latest Release](https://img.shields.io/github/v/release/stefanorigano/advanced_analytics?label=stable&color=2ea44f)](https://github.com/stefanorigano/advanced_analytics/releases/latest)
+[![Pre-release](https://img.shields.io/github/v/release/stefanorigano/advanced_analytics?include_prereleases&label=pre-release&color=e3b341)](https://github.com/stefanorigano/advanced_analytics/releases?q=prerelease%3Atrue)
+
+_Pre-releases may contain incomplete features or bugs. Use stable builds for everyday play._
+
+---
+
+   ![top.png](README/top.png)
 
 ---
 
