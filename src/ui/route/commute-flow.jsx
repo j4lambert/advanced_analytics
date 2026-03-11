@@ -263,13 +263,13 @@ function buildSankeyData(
         if (boardingHW > 0) {
             const i = nodes.length;
             nodes.push({ name: 'Home → Work' });
-            meta.push({ side: 'left', journey: 'hw', label: 'Work →' });
+            meta.push({ side: 'left', journey: 'hw', label: 'From Work →' });
             links.push({ source: i, target: boardingIdx, value: boardingHW, journey: 'hw' });
         }
         if (boardingWH > 0) {
             const i = nodes.length;
             nodes.push({ name: 'Work → Home' });
-            meta.push({ side: 'left', journey: 'wh', label: 'Home →' });
+            meta.push({ side: 'left', journey: 'wh', label: 'From Home →' });
             links.push({ source: i, target: boardingIdx, value: boardingWH, journey: 'wh' });
         }
     }
@@ -287,13 +287,13 @@ function buildSankeyData(
         if (alightingHW > 0) {
             const i = nodes.length;
             nodes.push({ name: 'Home → Work' });
-            meta.push({ side: 'right', journey: 'hw', label: '→ Work' });
+            meta.push({ side: 'right', journey: 'hw', label: '→ To Work' });
             links.push({ source: alightingIdx, target: i, value: alightingHW, journey: 'hw' });
         }
         if (alightingWH > 0) {
             const i = nodes.length;
             nodes.push({ name: 'Work → Home' });
-            meta.push({ side: 'right', journey: 'wh', label: '→ Home ' });
+            meta.push({ side: 'right', journey: 'wh', label: '→ To Home' });
             links.push({ source: alightingIdx, target: i, value: alightingWH, journey: 'wh' });
         }
     }
@@ -452,23 +452,14 @@ function CommuteSankey({ data, stationName, routeColor, prevStationName, nextSta
     const totalBoarding  = data.boardingHW  + data.boardingWH;
     const totalAlighting = data.alightingHW + data.alightingWH;
 
-    // Sankey might not be available in older Recharts bundles
-    if (!charts.Sankey) {
-        return (
-            <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                Sankey chart not available in this version
-            </div>
-        );
-    }
-
     return (
         <div style={{ width: '100%', height: 260, position: 'relative' }}>
             {/* Single summary row: train load arriving · station · train load departing */}
             <div
-                className="absolute left-0 right-0 top-2 text-center font-bold text-foreground text-sm pointer-events-none whitespace-nowrap"
+                className="absolute left-0 right-0 top-4 text-center text-foreground pointer-events-none text-xs whitespace-nowrap"
                 style={{ zIndex: 1 }}
             >
-                {stationName}
+                <span class={'font-bold text-sm'}>{stationName}</span>
             </div>
             <charts.ResponsiveContainer width="100%" height="100%">
                 <charts.Sankey
@@ -498,19 +489,17 @@ function CommuteSankey({ data, stationName, routeColor, prevStationName, nextSta
             {/* Single summary row: train load arriving · station · train load departing */}
             <div
                 className="absolute left-0 right-0 bottom-0 grid text-center text-sm text-foreground pointer-events-none whitespace-nowrap"
-                style={{ zIndex: 1, gridTemplateColumns: '1fr 0.15fr 1fr 0.15fr 1fr' }}
+                style={{ zIndex: 1, gridTemplateColumns: '1fr  1.3fr  1fr' }}
             >
-                <span>
-                    {prevStationName ? prevStationName : 'Previous Stop' }
+                <div>
+                    → <small>From</small> <b>{prevStationName}</b>
                     {/*: <strong>{viaMetroIn.toLocaleString()}</strong>*/}
-                </span>
+                </div>
                 <span/>
-                <span/>
-                <span/>
-                <span>
-                    {nextStationName ? nextStationName : 'Next Stop' }
+                <div>
+                    → <small>To</small> <b>{nextStationName}</b>
                     {/*<strong>{viaMetroOut.toLocaleString()}</strong> ↑*/}
-                </span>
+                </div>
             </div>
         </div>
     );
@@ -518,16 +507,16 @@ function CommuteSankey({ data, stationName, routeColor, prevStationName, nextSta
 
 // ── Legend ────────────────────────────────────────────────────────────────────
 
-function CommuteLegend({ routeColor }) {
+function CommuteLegend({ routeColor, routeName }) {
     return (
         <div className="flex items-center gap-6 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_HOME_WORK }} />
-                <span>Home → Work</span>
+                <span>Home</span>
             </div>
             <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_WORK_HOME }} />
-                <span>Work → Home</span>
+                <span>Work</span>
             </div>
             <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_AGGREGATOR }} />
@@ -535,7 +524,7 @@ function CommuteLegend({ routeColor }) {
             </div>
             <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm" style={{ background: routeColor }} />
-                <span>Passthrough</span>
+                <span>Route: {routeName}</span>
             </div>
         </div>
     );
@@ -546,11 +535,12 @@ function CommuteLegend({ routeColor }) {
 export function CommuteFlow({ routeId, externalStationId }) {
     const routes = api.gameState.getRoutes();
 
-    const { routeColor } = React.useMemo(() => {
+    const { routeColor, routeTextColor, routeName } = React.useMemo(() => {
         const r = routes.find(r => r.id === routeId);
         return {
             routeColor:     r?.color     ?? '#6b7280',
             routeTextColor: r?.textColor ?? '#ffffff',
+            routeName: r?.bullet ?? 'n/a' ,
         };
     }, [routeId, routes]);
 
@@ -580,8 +570,8 @@ export function CommuteFlow({ routeId, externalStationId }) {
 
     // Adjacent station names for "From …" / "To …" labels on the Via metro nodes
     const selectedIdx     = stations.findIndex(s => s.id === selectedId);
-    const prevStationName = selectedIdx > 0                    ? stations[selectedIdx - 1].name : null;
-    const nextStationName = selectedIdx < stations.length - 1  ? stations[selectedIdx + 1].name : null;
+    const prevStationName = selectedIdx > 0                    ? stations[selectedIdx - 1].name : stations[stations.length - 1].name;
+    const nextStationName = selectedIdx < stations.length - 1  ? stations[selectedIdx + 1].name : stations[0].name;
 
     if (stations.length === 0) {
         return (
@@ -594,7 +584,7 @@ export function CommuteFlow({ routeId, externalStationId }) {
     return (
         <div className="space-y-5">
             {/* ── Legend ── */}
-            <CommuteLegend routeColor={routeColor} />
+            <CommuteLegend routeColor={routeColor} routeName={routeName} />
 
             {/* ── Sankey chart ── */}
             <div className="rounded-lg border border-border bg-background/50 p-4">
