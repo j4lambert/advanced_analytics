@@ -281,7 +281,7 @@ export function StorageDialog({ isOpen, onClose }) {
             title="Storage Management"
             isOpen={isOpen}
             onClose={onClose}
-            size='1080px'
+            size='920px'
             backdropClasses="bg-black/80"
         >
             {/* Intro */}
