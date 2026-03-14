@@ -210,23 +210,21 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
             <div className="flex items-center justify-between gap-4">
                 {/* Chart type */}
                 <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">Chart:</span>
                     <ButtonsGroup value={chartType} onChange={setChartType}>
-                        <ButtonsGroupItem value="line" text="Line" />
-                        <ButtonsGroupItem value="bar"  text="Bar"  />
+                        <ButtonsGroupItem value="line" text="Lines" />
+                        <ButtonsGroupItem value="bar"  text="Bars"  />
                     </ButtonsGroup>
                 </div>
 
                 {/* Route & Metric selection */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">Routes:</span>
+                <div className="flex items-center gap-3">
                     <Dropdown
                         togglerContent={
                             selectedRoutes.length === 1
                                 ? <RouteBadge routeId={selectedRoutes[0]} size="1.2rem" interactive={false} />
                                 : null
                         }
-                        togglerIcon={selectedRoutes.length === 0 ? icons.Route : null}
+                        togglerIcon={icons.Route}
                         togglerText={
                             selectedRoutes.length === 0 ? 'Select routes'
                             : selectedRoutes.length > 1  ? `${selectedRoutes.length} selected`
@@ -256,7 +254,6 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
                         ))}
                     </Dropdown>
 
-                    <span className="text-xs font-medium">Metric:</span>
                     <Dropdown
                         togglerIcon={icons.LineChart}
                         togglerText={metricConfig?.label || 'Select metric'}
@@ -278,7 +275,6 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
 
                 {/* Timeframe */}
                 <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">Period:</span>
                     <ButtonsGroup value={timeframe} onChange={setTimeframe}>
                         {TIMEFRAMES.map(tf => (
                             <ButtonsGroupItem key={tf.key} value={tf.key} text={tf.label} />
@@ -310,6 +306,7 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
                         metricKey={selectedMetric}
                         metricLabel={metricConfig?.label}
                         chartType={chartType}
+                        timeframe={timeframe}
                         hoveredRoute={hoveredRoute}
                         onHover={setHoveredRoute}
                         onLeave={() => setHoveredRoute(null)}
@@ -322,7 +319,7 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
 
 // ── Chart display ────────────────────────────────────────────────────────────
 
-function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, chartType,
+function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, chartType, timeframe,
                         hoveredRoute, onHover, onLeave }) {
     const h = React.createElement;
 
@@ -364,7 +361,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
         }, [
             h('div', {
                 key: 'label',
-                className: 'text-xs font-medium mb-2 text-muted-foreground flex items-center gap-1.5'
+                className: 'text-xs font-medium mb-2 flex items-center gap-1.5 mb-3'
             }, [
                 isLivePoint && h('span', {
                     key: 'live-badge',
@@ -383,7 +380,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
                 const rawEntry   = payload.find(p => p.dataKey === routeId);
                 const rawVal     = rawEntry?.value;
 
-                return h('div', { key: routeId, className: 'mt-1' }, [
+                return h('div', { key: routeId, className: 'mt-3' }, [
                     // Route name + color pip
                     h('div', { key: 'name', className: 'flex items-center gap-1.5 mb-0.5' }, [
                         h('div', {
@@ -444,7 +441,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
         dataKey:      'day',
         stroke:       '#9ca3af',
         fontSize:     12,
-        tickFormatter: (day) => day === TODAY_LABEL ? '▸ Today' : `Day ${day}`,
+        tickFormatter: (day) => day === TODAY_LABEL ? '▸ Today' : timeframe !== 'all' ? `Day ${day}` : day,
         // Add breathing room after the Today tick so it doesn't hug the border
         padding:      { right: 32, left: 32 },
         axisLine:     false,

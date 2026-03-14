@@ -129,6 +129,7 @@ function StationStrip({ stations, selectedId, routeColor, onSelect }) {
             style={{ scrollbarWidth: 'thin', paddingBottom: 4 }}
         >
             <div className="flex justify-between pb-4" style={{ minWidth: '100%'}}>
+                {/*<div className={'text-lg px-3'}>→</div>*/}
                 {stations.map((st, idx) => {
                     const selected = st.id === selectedId;
                     return (
@@ -192,6 +193,7 @@ function StationStrip({ stations, selectedId, routeColor, onSelect }) {
                         </React.Fragment>
                     );
                 })}
+                {/*<div className={'text-lg px-3'}>↩</div>*/}
             </div>
         </div>
     );
@@ -419,7 +421,7 @@ function makeLinkRenderer(links, routeColor) {
 
 // ── Sankey chart ──────────────────────────────────────────────────────────────
 
-function CommuteSankey({ data, stationName, routeColor, prevStationName, nextStationName }) {
+function CommuteSankey({ data, stationName, routeColor, stationIndex, stationsLength,  prevStationName, nextStationName }) {
     const total = data.boardingHW + data.boardingWH + data.alightingHW + data.alightingWH + data.passthroughTotal;
 
     if (total === 0) {
@@ -451,6 +453,7 @@ function CommuteSankey({ data, stationName, routeColor, prevStationName, nextSta
 
     const totalBoarding  = data.boardingHW  + data.boardingWH;
     const totalAlighting = data.alightingHW + data.alightingWH;
+    const isLast = stationIndex + 1 === stationsLength;
 
     return (
         <div style={{ width: '100%', height: 260, position: 'relative' }}>
@@ -492,12 +495,11 @@ function CommuteSankey({ data, stationName, routeColor, prevStationName, nextSta
                 style={{ zIndex: 1, gridTemplateColumns: '1fr  1.3fr  1fr' }}
             >
                 <div>
-                    → <small>From</small> <b>{prevStationName}</b>
-                    {/*: <strong>{viaMetroIn.toLocaleString()}</strong>*/}
+                    <span>→</span> <small>From</small> <b>{prevStationName}</b>
                 </div>
                 <span/>
                 <div>
-                    → <small>To</small> <b>{nextStationName}</b>
+                    <span>{isLast ? '←' : '→'}</span> <small>{isLast ? 'Back to' : 'To'}</small> <b>{nextStationName}</b>
                     {/*<strong>{viaMetroOut.toLocaleString()}</strong> ↑*/}
                 </div>
             </div>
@@ -570,8 +572,8 @@ export function CommuteFlow({ routeId, externalStationId }) {
 
     // Adjacent station names for "From …" / "To …" labels on the Via metro nodes
     const selectedIdx     = stations.findIndex(s => s.id === selectedId);
-    const prevStationName = selectedIdx > 0                    ? stations[selectedIdx - 1].name : stations[stations.length - 1].name;
-    const nextStationName = selectedIdx < stations.length - 1  ? stations[selectedIdx + 1].name : stations[0].name;
+    const prevStationName = selectedIdx > 0                    ? stations[selectedIdx - 1].name : stations[selectedIdx + 1].name;
+    const nextStationName = selectedIdx < stations.length - 1  ? stations[selectedIdx + 1].name : stations[selectedIdx - 1].name;
 
     if (stations.length === 0) {
         return (
@@ -596,20 +598,25 @@ export function CommuteFlow({ routeId, externalStationId }) {
                     <CommuteSankey
                         data={commuteData}
                         stationName={selectedStation?.name ?? ''}
+                        stationIndex={selectedIdx}
+                        stationsLength={stations.length}
                         routeColor={routeColor}
                         prevStationName={prevStationName}
                         nextStationName={nextStationName}
                     />
                 )}
+
+                <div className="mt-6 pt-8 px-8">
+                    {/* ── Station strip toggler ── */}
+                    <StationStrip
+                        stations={stations}
+                        selectedId={selectedId}
+                        routeColor={routeColor}
+                        onSelect={setSelectedId}
+                    />
+                </div>
             </div>
 
-            {/* ── Station strip toggler ── */}
-            <StationStrip
-                stations={stations}
-                selectedId={selectedId}
-                routeColor={routeColor}
-                onSelect={setSelectedId}
-            />
         </div>
     );
 }

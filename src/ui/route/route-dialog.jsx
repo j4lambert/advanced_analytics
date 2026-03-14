@@ -157,8 +157,8 @@ function UsageGauge({ utilization, ridership, capacity }) {
 
 function StatCard({ label, icon, value, sub, children, valueClass = '' }) {
     return (
-        <div className="flex gap-2 rounded border bg-muted/20 p-4 h-full">
-            {icon && React.createElement(icons[icon], { size: 14, className: 'mt-0.5 shrink-0' })}
+        <div className="flex gap-3 rounded border bg-muted/20 p-4 pl-3 h-full">
+            {icon && React.createElement(icons[icon], { size: 22, className: 'mt-0.5 shrink-0' })}
             <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                     {label}
@@ -360,27 +360,26 @@ function RouteContent({ routeId }) {
 
             {/* ── Route Metrics chart ── */}
             <div className="pt-8">
-                <div className="py-5">
+                <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Route Metrics</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Historical trends for key performance indicators</p>
+                    <p className="text-xs text-muted-foreground mt-1">Historical trends for key performance indicators</p>
                 </div>
                 <RouteMetrics routeId={routeId} />
             </div>
 
             {/* ── Station Flow chart ── */}
             <div className="pt-8">
-                <div className="py-5">
+                <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Stations Flow</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Network schematic map</p>
                 </div>
                 <StationFlow routeId={routeId} onStationClick={handleStationClick} />
             </div>
 
             {/* ── Commute Flow chart ── */}
             <div ref={commuteFlowRef} className="pt-8">
-                <div className="py-5">
+                <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Commute Flows</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                         Completed commuter journeys boarding and alighting at each station
                     </p>
                 </div>

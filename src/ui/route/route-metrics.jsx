@@ -311,6 +311,7 @@ export function RouteMetrics({ routeId }) {
                     <RouteMetricsChart
                         data={chartData}
                         selectedMetrics={selectedMetrics}
+                        timeframe={timeframe}
                         chartType={chartType}
                         axisUnitTypes={axisUnitTypes}
                     />
@@ -330,7 +331,7 @@ export function RouteMetrics({ routeId }) {
 // This ensures every metric is scaled correctly against its own domain,
 // even when 3+ unit types are selected simultaneously.
 
-function RouteMetricsChart({ data, selectedMetrics, chartType, axisUnitTypes }) {
+function RouteMetricsChart({ data, selectedMetrics, timeframe, chartType, axisUnitTypes }) {
     const h = React.createElement;
 
     const leftUnit  = axisUnitTypes[0] ?? null;
@@ -476,7 +477,8 @@ function RouteMetricsChart({ data, selectedMetrics, chartType, axisUnitTypes }) 
         dataKey:       'day',
         stroke:        '#9ca3af',
         fontSize:      12,
-        tickFormatter: (day) => day === TODAY_LABEL ? '▸ Today' : `Day ${day}`,
+        tickFormatter: (day) => day === TODAY_LABEL ? '▸ Today' : timeframe !== 'all' ? `Day ${day}` : day,
+        //tickFormatter: (day) => day === TODAY_LABEL ? '▸ Today' : `Day ${day}`,
         padding:       { right: 32, left: 32 },
         axisLine:      false,
         tickLine:      false,

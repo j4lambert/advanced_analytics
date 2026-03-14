@@ -120,9 +120,9 @@ export function Dashboard() {
             
             {/* System Map */}
             <section className="mt-8 mb-6">
-                <div className="py-5">
+                <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">System Map</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Network schematic map</p>
+                    <p className="text-xs text-muted-foreground mt-1">Network schematic map</p>
                 </div>
                 <DashboardMap />
             </section>

@@ -84,7 +84,7 @@ export const CONFIG = {
     TABLE_HEADERS: [
         { key: 'name', label: 'Route', align: 'right'},
         { key: 'ridership', label: 'Ridership', align: 'right', group: 'performance' },
-        { key: 'capacity', label: 'Throughput', align: 'right', group: 'trains', description: 'Daily Capacity: total passengers this route can carry in 24 hours.|Based on train frequency, car capacity, loop time, and demand schedule.|Higher values mean more room to grow ridership.' },
+        { key: 'capacity', label: 'Throughput', align: 'right', group: 'trains', description: 'Daily Capacity: total passengers this route can carry in 24 hours' },
         { key: 'utilization', label: 'Usage', align: 'right', group: 'performance', description: 'Based on ridership against potential throughput' },
         { key: 'stations', label: 'Stops', align: 'right', group: 'trains' },
         { key: 'trainType', label: 'Type', align: 'right', group: 'trains', description: 'Train Type' },

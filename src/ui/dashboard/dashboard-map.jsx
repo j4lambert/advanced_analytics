@@ -43,8 +43,8 @@ const MIN_ROW_H     = 48;   // minimum swimlane height
 const MAX_ROW_H     = 54;   // maximum swimlane height cap
 const LABEL_W       = 100;  // left-margin width for route labels
 const RIGHT_PAD     = 0;   // right-edge padding
-const TOP_PAD       = 50;   // top margin reserved for hub name labels
-const BOT_PAD       = 16;
+const TOP_PAD       = 0;   // top margin reserved for hub name labels
+const BOT_PAD       = 0;
 const TAIL          = 50;   // px of tail beyond first/last hub column
 
 // Stroke widths
@@ -446,7 +446,7 @@ function MapTooltip({ data, mapData }) {
                 style={{ position: 'fixed', left: x, top: y, transform: 'translateY(-125%)', zIndex: 9999 }}
             >
                 <div className="font-semibold text-xs mb-1">{entry.name}</div>
-                <div className="flex flex-col gap-1 mt-1 pt-1 border-t border-border">
+                <div className="flex flex-col gap-2 mt-2 pt-3 border-t border-border">
                     {entry.routeIds.map(rid => {
                         const route = (allRoutes ?? []).find(r => r.id === rid);
                         return (

@@ -198,12 +198,12 @@ export function Dropdown({
     const togglerInner = togglerContent
         ? [
             React.createElement('span', { key: 'custom' }, togglerContent),
-            React.createElement('span', { key: 'caret', className: 'opacity-70' }, '⏷'),
+            React.createElement('span', { key: 'caret', className: 'text-sm opacity-70' }, '⏷'),
           ]
         : [
             TogglerIcon && React.createElement(TogglerIcon, { key: 'icon', className: 'w-4 h-4' }),
             togglerText && React.createElement('span', { key: 'text' }, togglerText),
-            React.createElement('span', { key: 'caret', className: 'opacity-70' }, '⏷'),
+            React.createElement('span', { key: 'caret', className: 'text-sm opacity-70' }, '⏷'),
           ].filter(Boolean);
 
     // isMeasuring: menu is in DOM but hidden while we capture its natural height
