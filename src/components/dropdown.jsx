@@ -160,6 +160,25 @@ export function Dropdown({
         return () => window.removeEventListener('scroll', onScroll, { capture: true });
     }, [isOpen]);
 
+    // ── Collect all available item values (used by Select All) ───────────────
+    const allItemValues = React.useMemo(() => {
+        const vals = [];
+        React.Children.forEach(children, child => {
+            if (React.isValidElement(child) && child.props.value !== undefined) {
+                vals.push(child.props.value);
+            }
+        });
+        return vals;
+    }, [children]);
+
+    const currentValues = Array.isArray(value) ? value : [];
+    const allSelected   = allItemValues.length > 0
+        && allItemValues.every(v => currentValues.includes(v));
+
+    const handleSelectAll = () => {
+        onChange(allSelected ? [] : [...allItemValues]);
+    };
+
     // ── Item click handling ────────────────────────────────────────────────────
     const handleItemClick = (itemValue) => {
         if (multiselect) {
@@ -267,12 +286,18 @@ export function Dropdown({
                     >
                         <div className="p-1">{enhancedChildren}</div>
 
-                        {/* Confirm button (multiselect only) */}
+                        {/* Select All + Confirm footer (multiselect only) */}
                         {multiselect && (
-                            <div className="backdrop-blur bg-background/50 border-border border-t bottom-0 mt-1 p-1 pt-2 sticky text-right">
+                            <div className="backdrop-blur bg-background/50 border-border border-t bottom-0 mt-1 p-2 sticky flex items-center justify-between gap-2">
+                                <button
+                                    onClick={handleSelectAll}
+                                    className="px-3 py-1 text-xs font-medium rounded bg-background border text-foreground hover:bg-accent transition-colors"
+                                >
+                                    {allSelected ? 'Deselect All' : 'Select All'}
+                                </button>
                                 <button
                                     onClick={handleDismiss}
-                                    className="px-3 py-1 text-xs font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="px-3 py-1 text-xs font-medium rounded bg-background border text-foreground hover:bg-primary/90 hover:text-secondary"
                                 >
                                     Confirm
                                 </button>

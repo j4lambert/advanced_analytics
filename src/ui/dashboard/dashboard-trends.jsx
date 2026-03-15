@@ -239,17 +239,8 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
                         {routes.map(route => (
                             <DropdownItem
                                 key={route.id}
+                                value={route.id}
                                 route={route}
-                                active={selectedRoutes.includes(route.id)}
-                                onClick={() => {
-                                    const next = selectedRoutes.includes(route.id)
-                                        ? selectedRoutes.filter(id => id !== route.id)
-                                        : [...selectedRoutes, route.id];
-                                    setSelectedRoutes(next);
-                                }}
-                                hoveredRoute={hoveredRoute}
-                                onHover={setHoveredRoute}
-                                onLeave={() => setHoveredRoute(null)}
                             />
                         ))}
                     </Dropdown>

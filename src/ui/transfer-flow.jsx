@@ -550,25 +550,27 @@ export function TransferFlowLegend({ routesData, hoveredRouteId, onHover, onLeav
                 <span className="border-l border-border h-4" />
             )}
 
-            {/* Per-route RouteBadges — click navigates (unless current), hover highlights */}
-            {routesData.map(r => {
-                const isCurrent = r.routeId === currentRouteId;
-                return (
-                    <div
-                        key={r.routeId}
-                        className="transition-opacity"
-                        style={{
-                            opacity: hoveredRouteId && hoveredRouteId !== r.routeId ? 0.35 : 1,
-                            cursor:  isCurrent ? 'default' : 'pointer',
-                            order:  isCurrent ? '0' : '1',
-                        }}
-                        onMouseEnter={() => !isCurrent && onHover?.(r.routeId)}
-                        onMouseLeave={() => onLeave?.()}
-                    >
-                        <RouteBadge routeId={r.routeId} size="1.4rem" interactive={!isCurrent} />
-                    </div>
-                );
-            })}
+            <div className="flex items-center gap-2">
+                {/* Per-route RouteBadges — click navigates (unless current), hover highlights */}
+                {routesData.map(r => {
+                    const isCurrent = r.routeId === currentRouteId;
+                    return (
+                        <div
+                            key={r.routeId}
+                            className="transition-opacity"
+                            style={{
+                                opacity: hoveredRouteId && hoveredRouteId !== r.routeId ? 0.35 : 1,
+                                cursor:  isCurrent ? 'default' : 'pointer',
+                                order:  isCurrent ? '0' : '1',
+                            }}
+                            onMouseEnter={() => !isCurrent && onHover?.(r.routeId)}
+                            onMouseLeave={() => onLeave?.()}
+                        >
+                            <RouteBadge routeId={r.routeId} size="1.4rem" interactive={!isCurrent} />
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }

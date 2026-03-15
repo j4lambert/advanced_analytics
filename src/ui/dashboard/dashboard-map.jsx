@@ -702,7 +702,7 @@ export function DashboardMap() {
             )}
 
             {/* ── Routes selected but no renderable data ──────── */}
-            {mapData && selectedRoutes.length > 0 && !hasRoutes && (
+            {!mapData || selectedRoutes.length > 0 || !hasRoutes && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="text-muted-foreground text-sm">No route data available</div>
                 </div>
@@ -720,7 +720,7 @@ export function DashboardMap() {
                 and making routes razor-thin (e.g. a 4344×2116 viewBox in a 1100px
                 container would render at ~535px tall instead of 2116px).
             */}
-            {hasRoutes && (
+            {hasRoutes && selectedRoutes.length > 0 && (
                 <div
                     className="rounded-lg border border-border bg-background/50 p-4 pl-3"
                     style={{ overflowX: canvasW > containerWidth - SVG_CONTAINER_PAD_X ? 'auto' : 'hidden' }}
@@ -928,7 +928,7 @@ export function DashboardMap() {
             )}
 
             {/* ── Transfer chips ───────────────────────────────── */}
-            {hasRoutes && (
+            {hasRoutes && selectedRoutes.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                     {transferDots.map(({ groupId, name, routeIds }) => {
                         const isHovered = hoveredTransfer === groupId;
