@@ -89,7 +89,7 @@ function useTransferHubs() {
 //   viaMetroOut = passthrough + boarding
 //   prevStationName / nextStationName
 
-function useTransferFlowData(stationIds) {
+export function useTransferFlowData(stationIds) {
     const [data, setData] = React.useState(null);
     const depsKey = stationIds ? [...stationIds].sort().join(',') : '';
 
@@ -200,6 +200,9 @@ function useTransferFlowData(stationIds) {
                         viaMetroOut:      entry.passthroughTotal + totalBoarding,
                         prevStationName:  prev?.name ?? '?',
                         nextStationName:  next?.name ?? '?',
+                        // True when this station is the last stop on this route.
+                        // Controls the "← Back to …" label on the outgoing node.
+                        isLast: selectedIdx === orderedStations.length - 1,
                     };
                 });
 
@@ -307,9 +310,12 @@ function buildTransferSankeyData(routesData, groupName) {
             links.push({ source: i, target: 0, value: r.viaMetroIn, color: r.color, routeId: r.routeId });
         }
         if (r.viaMetroOut > 0) {
-            const i = nodes.length;
+            const i         = nodes.length;
+            const outLabel  = r.isLast
+                ? `← Back to ${r.nextStationName}`
+                : `→ ${r.nextStationName}`;
             nodes.push({ name: r.bullet });
-            meta.push({ side: 'right', color: r.color, label: `→ ${r.nextStationName}`, routeId: r.routeId });
+            meta.push({ side: 'right', color: r.color, label: outLabel, routeId: r.routeId });
             links.push({ source: 0, target: i, value: r.viaMetroOut, color: r.color, routeId: r.routeId });
         }
     }
@@ -447,7 +453,7 @@ function makeLinkRenderer(links, hoveredRouteId) {
 
 // ── Sankey chart ──────────────────────────────────────────────────────────────
 
-function TransferSankey({ routesData, groupName, hoveredRouteId }) {
+export function TransferSankey({ routesData, groupName, hoveredRouteId }) {
     const totalFlow = routesData.reduce((s, r) => s + r.viaMetroIn + r.totalBoarding, 0);
 
     if (totalFlow === 0) {
@@ -520,7 +526,9 @@ function TransferSankey({ routesData, groupName, hoveredRouteId }) {
 //   • Clicking a badge opens the Route dialog (handled by RouteBadge internally).
 //   • Hovering a badge highlights that route's flows in the Sankey.
 
-function TransferFlowLegend({ routesData, hoveredRouteId, onHover, onLeave }) {
+// currentRouteId — when supplied (commute-flow context), that route's badge is
+// rendered non-interactive so clicking it doesn't reopen the same dialog.
+export function TransferFlowLegend({ routesData, hoveredRouteId, onHover, onLeave, currentRouteId }) {
     return (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-muted-foreground">
             {/* Journey-type swatches */}
@@ -542,22 +550,25 @@ function TransferFlowLegend({ routesData, hoveredRouteId, onHover, onLeave }) {
                 <span className="border-l border-border h-4" />
             )}
 
-            {/* Per-route RouteBadges — click navigates, hover highlights */}
-            {routesData.map(r => (
-                <div
-                    key={r.routeId}
-                    className="transition-opacity"
-                    style={{
-                        opacity:  hoveredRouteId && hoveredRouteId !== r.routeId ? 0.35 : 1,
-                        cursor:   'pointer',
-                    }}
-                    onMouseEnter={() => onHover?.(r.routeId)}
-                    onMouseLeave={() => onLeave?.()}
-                    // Click is delegated to RouteBadge (interactive=true)
-                >
-                    <RouteBadge routeId={r.routeId} size="1.4rem" interactive={true} />
-                </div>
-            ))}
+            {/* Per-route RouteBadges — click navigates (unless current), hover highlights */}
+            {routesData.map(r => {
+                const isCurrent = r.routeId === currentRouteId;
+                return (
+                    <div
+                        key={r.routeId}
+                        className="transition-opacity"
+                        style={{
+                            opacity: hoveredRouteId && hoveredRouteId !== r.routeId ? 0.35 : 1,
+                            cursor:  isCurrent ? 'default' : 'pointer',
+                            order:  isCurrent ? '0' : '1',
+                        }}
+                        onMouseEnter={() => !isCurrent && onHover?.(r.routeId)}
+                        onMouseLeave={() => onLeave?.()}
+                    >
+                        <RouteBadge routeId={r.routeId} size="1.4rem" interactive={!isCurrent} />
+                    </div>
+                );
+            })}
         </div>
     );
 }

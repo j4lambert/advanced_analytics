@@ -1,121 +1,41 @@
 // Commute Flow Component
-// Sankey chart showing the full passenger flow through a selected station.
+// Sankey chart showing the full passenger flow through a selected station on a route.
 //
-// LAYOUT (5 columns):
+// The Sankey and its underlying data logic are shared with TransferFlow (see
+// src/ui/transfer-flow.jsx).  For each selected station the component resolves
+// the "hub" — all station IDs in the same physical interchange group — and feeds
+// them to useTransferFlowData so that ALL connecting routes are displayed, not just
+// the one currently being viewed.
 //
-//   [Home→Work bd.]  ─┐                              ┌─ [Home→Work al.]
-//                     ├──► [Boarding] ─► [STATION] ─► [Alighting] ┤
-//   [Work→Home bd.]  ─┘                              └─ [Work→Home al.]
+// KEY DIFFERENCES FROM THE STANDALONE TransferFlow DASHBOARD SECTION:
+//   • Station selection is driven by the StationStrip, not a dropdown.
+//   • The current route's RouteBadge in the legend is non-interactive.
+//   • The chart title is the selected station's name (not the group/hub name).
 //
-//   [Prev. station]  ──────────────────► [STATION] ──────────────────► [Next station]
-//
-// HW/WH boarding flows funnel through a "Boarding" aggregator node before the
-// station; alighting flows fan out from an "Alighting" aggregator node after it.
-// Metro (passthrough) flows bypass both aggregators and link directly to the station.
-//
-// Station balance:
-//   in  = Boarding (totalBoard) + metroIn (pt + totalAlight)
-//   out = Alighting (totalAlight) + metroOut (pt + totalBoard)  → always equal.
-//
-// The station is selected via an interactive horizontal strip showing all stops.
+// Hub resolution:
+//   Zustand available → getGroupForStation(selectedId).stationIds (canonical)
+//   Fallback          → [selectedId] + any nearby transfer station IDs
+//                       (covers the nearbyStations walkingTime heuristic)
 
-import { CONFIG }                  from '../../config.js';
-import { getRouteStationsInOrder } from '../../utils/route-utils.js';
-import { getStationTransferRoutes } from '../../utils/transfer-utils.js';
-import { Dropdown }                 from '../../components/dropdown.jsx';
-import { DropdownItem }             from '../../components/dropdown-item.jsx';
-import {RouteDialog} from "./route-dialog";
+import { CONFIG }                                      from '../../config.js';
+import { getRouteStationsInOrder }                     from '../../utils/route-utils.js';
+import { getStationTransferRoutes }                    from '../../utils/transfer-utils.js';
+import { isZustandAvailable, getGroupForStation }      from '../../core/api-support.js';
+import { useTransferFlowData, TransferSankey, TransferFlowLegend } from '../transfer-flow.jsx';
+import { Dropdown }                                    from '../../components/dropdown.jsx';
+import { DropdownItem }                                from '../../components/dropdown-item.jsx';
 
 const api = window.SubwayBuilderAPI;
-const { React, icons, charts } = api.utils;
-
-// Journey-type palette
-const COLOR_HOME_WORK  = '#3b82f6'; // blue-500   — home → work
-const COLOR_WORK_HOME  = '#ef4444'; // red-500    — work → home
-
-// ── Data hook ─────────────────────────────────────────────────────────────────
-// Aggregates completed commutes for a specific station on a specific route.
-// Returns boarding/alighting/passthrough counts split by journey type.
-//
-// Passthrough: a commute that uses this route AND passes through this station
-// without boarding or alighting here — i.e. the station lies strictly between
-// the commute's entry and exit stations in the route's ordered station list.
-
-function useCommuteData(routeId, stationId) {
-    const [data, setData] = React.useState(null);
-
-    React.useEffect(() => {
-        if (!routeId || !stationId) { setData(null); return; }
-
-        const compute = () => {
-            try {
-                const commutes = api.gameState.getCompletedCommutes?.() ?? [];
-
-                // Build ordered station index for passthrough detection once per call
-                const orderedIds  = getRouteStationsInOrder(routeId, api).map(s => s.id);
-                const selectedIdx = orderedIds.indexOf(stationId);
-
-                let boardingHW   = 0;
-                let boardingWH   = 0;
-                let alightingHW  = 0;
-                let alightingWH  = 0;
-                let passthroughTotal = 0; // not split by journey — shown as one number
-
-                for (const c of commutes) {
-                    const seg = c.stationRoutes?.find(s => s.routeId === routeId);
-                    if (!seg || !seg.stationIds?.length) continue;
-
-                    const size  = c.size || 1;
-                    const isHW  = c.origin === 'home'; // home→work commuter
-                    const entry = seg.stationIds[0];
-                    const exit  = seg.stationIds[seg.stationIds.length - 1];
-
-                    if (entry === stationId) {
-                        if (isHW) boardingHW += size;
-                        else      boardingWH += size;
-                    } else if (exit === stationId) {
-                        if (isHW) alightingHW += size;
-                        else      alightingWH += size;
-                    } else if (selectedIdx !== -1) {
-                        // Check whether the selected station is strictly between
-                        // entry and exit in the route order (handles both directions)
-                        const entryIdx = orderedIds.indexOf(entry);
-                        const exitIdx  = orderedIds.indexOf(exit);
-                        if (entryIdx !== -1 && exitIdx !== -1) {
-                            const lo = Math.min(entryIdx, exitIdx);
-                            const hi = Math.max(entryIdx, exitIdx);
-                            if (selectedIdx > lo && selectedIdx < hi) {
-                                passthroughTotal += size;
-                            }
-                        }
-                    }
-                }
-
-                setData({ boardingHW, boardingWH, alightingHW, alightingWH, passthroughTotal });
-            } catch (err) {
-                console.error(`${CONFIG.LOG_PREFIX} CommuteFlow error:`, err);
-                setData({ boardingHW: 0, boardingWH: 0, alightingHW: 0, alightingWH: 0, passthroughTotal: 0 });
-            }
-        };
-
-        compute();
-        const id = setInterval(compute, CONFIG.REFRESH_INTERVAL);
-        return () => clearInterval(id);
-    }, [routeId, stationId]);
-
-    return data;
-}
+const { React, icons } = api.utils;
 
 // ── Station Strip ─────────────────────────────────────────────────────────────
-// Horizontal scrollable row of station dots connected by a route-colored line.
-// Clicking a dot selects that station for the Sankey.
+// Horizontal scrollable row of station dots connected by a route-coloured line.
+// Clicking a dot selects that station; transfer stations show a badge count.
 
 function StationStrip({ stations, selectedId, routeColor, onSelect, routeId }) {
     const scrollRef = React.useRef(null);
 
-    // Horizontally centre the selected station in the strip.
-    // Uses container.scrollTo (horizontal-only) instead of scrollIntoView to avoid
-    // the browser also scrolling the page/dialog vertically on open.
+    // Horizontally centre the selected station without scrolling the dialog vertically.
     React.useEffect(() => {
         const container = scrollRef.current;
         if (!container) return;
@@ -131,52 +51,49 @@ function StationStrip({ stations, selectedId, routeColor, onSelect, routeId }) {
             className="overflow-x-auto"
             style={{ scrollbarWidth: 'thin', paddingBottom: 4 }}
         >
-            <div className="flex justify-between pb-4" style={{ minWidth: '100%'}}>
-                {/*<div className={'text-lg px-3'}>→</div>*/}
+            <div className="flex justify-between" style={{ minWidth: '100%' }}>
                 {stations.map((st, idx) => {
-                    const selected = st.id === selectedId;
+                    const selected       = st.id === selectedId;
                     const transferRoutes = getStationTransferRoutes(st.id, routeId, api);
                     return (
                         <React.Fragment key={st.id}>
-                            {/* Connector line between stations */}
+                            {/* Connector line */}
                             {idx > 0 && (
                                 <div style={{
-                                    minWidth:    36,
-                                    height:      10,
-                                    marginTop:   2, // vertically centred with the 14px dot
-                                    background:  routeColor,
-                                    opacity:     1,
-                                    flexShrink:  0,
-                                    flexGrow:    1,
+                                    minWidth:   36,
+                                    height:     10,
+                                    marginTop:  2,
+                                    background: routeColor,
+                                    flexShrink: 0,
+                                    flexGrow:   1,
                                 }} />
                             )}
 
-                            {/* Station wrapper: dot + label + optional transfer indicator */}
+                            {/* Station dot + label + optional transfer indicator */}
                             <div
                                 data-sid={st.id}
                                 className="flex flex-col items-center"
-                                style={{ flexShrink: 0 }}
+                                style={{flexShrink: 0}}
                             >
-                                {/* Clickable button: dot + name */}
                                 <button
                                     onClick={() => onSelect(st.id)}
                                     className="flex relative flex-col items-center w-full gap-1.5 focus:outline-none text-muted-foreground hover:text-foreground"
                                     title={st.name}
                                 >
                                     <div style={{
-                                        position: 'absolute',
-                                        left:        0,
-                                        right:       0,
-                                        height:      10,
-                                        top:         2, // vertically centred with the 14px dot
-                                        background:  routeColor,
-                                        opacity:     1,
+                                        position:   'absolute',
+                                        left:       0,
+                                        right:      0,
+                                        height:     10,
+                                        top:        2,
+                                        background: routeColor,
+                                        borderRadius: idx === 0 ? '5px 0 0 5px' : idx === (stations.length -1) ? '0 5px 5px 0' :  0,
                                     }} />
                                     <div style={{
                                         width:        10,
                                         height:       10,
                                         borderRadius: '50%',
-                                        outline:       `2px solid ${ selected? 'white' : 'black'}`,
+                                        outline:      `2px solid ${selected ? 'white' : 'black'}`,
                                         background:   selected ? 'black' : 'white',
                                         transition:   'all 0.15s ease',
                                         cursor:       'pointer',
@@ -191,7 +108,7 @@ function StationStrip({ stations, selectedId, routeColor, onSelect, routeId }) {
                                         fontWeight:   selected ? 'bold' : 'normal',
                                         whiteSpace:   'nowrap',
                                         display:      'block',
-                                        color:        selected
+                                        color: selected
                                             ? 'var(--aa-chart-secondary-metric)'
                                             : 'hsl(var(--muted-foreground))',
                                     }}>
@@ -199,13 +116,11 @@ function StationStrip({ stations, selectedId, routeColor, onSelect, routeId }) {
                                     </span>
                                 </button>
 
-                                {/* Transfer indicator — only shown for interchange stations */}
+                                {/* Transfer indicator */}
                                 {transferRoutes.length > 0 && (() => {
                                     const liveRoutes = api.gameState.getRoutes();
                                     return (
-                                        <div
-                                            className="flex items-center gap-1 mt-0.5"
-                                        >
+                                        <div className="flex items-center gap-1 mt-0.5">
                                             <span style={{ color: '#a855f7' }}>
                                                 {React.createElement(icons.Component, { size: 10 })}
                                             </span>
@@ -232,341 +147,6 @@ function StationStrip({ stations, selectedId, routeColor, onSelect, routeId }) {
                         </React.Fragment>
                     );
                 })}
-                {/*<div className={'text-lg px-3'}>↩</div>*/}
-            </div>
-        </div>
-    );
-}
-
-// ── Sankey helpers ────────────────────────────────────────────────────────────
-
-// Build the Recharts Sankey `data` object from aggregated commute counts.
-// Only non-zero flows produce nodes/links so the chart is always valid.
-//
-// Topology:
-//   HW/WH boarding  → [Boarding]  → Station → [Alighting] → HW/WH alighting
-//   prevStation (metro)           → Station →               nextStation (metro)
-//
-// Each link carries a `journey` field ('hw'|'wh'|'metro'|'boarding'|'alighting')
-// used by the link renderer for colour.
-//
-// Station balance:
-//   in  = totalBoard (via Boarding node) + (pt + totalAlight) (metro direct)
-//   out = totalAlight (via Alighting node) + (pt + totalBoard) (metro direct) ✓
-//
-// Node 0 is always the station (center).
-// Returns { nodes, links, meta, viaMetroIn, viaMetroOut }.
-
-function buildSankeyData(
-    { boardingHW, boardingWH, alightingHW, alightingWH, passthroughTotal },
-    stationName,
-    prevStationName,
-    nextStationName,
-    isTransfer = false,
-) {
-    // Node 0 = station (always present)
-    const nodes = [{ name: stationName }];
-    const meta  = [{ side: 'center', journey: null, label: null }];
-    const links = []; // { source, target, value, journey }
-
-    const pt          = passthroughTotal ?? 0;
-    const totalBoard  = boardingHW  + boardingWH;
-    const totalAlight = alightingHW + alightingWH;
-
-    // Train load on the metro as it arrives / departs
-    const viaMetroIn  = pt + totalAlight;
-    const viaMetroOut = pt + totalBoard;
-
-    const labelIn  = prevStationName ? `${prevStationName} →` : 'Prev. Stop →';
-    const labelOut = nextStationName ? `→ ${nextStationName}` : '→ Next Stop';
-
-    // ── "Boarding" aggregator (center-left) ──────────────────────────────────
-    // All HW+WH boarders converge here first, then a single ribbon enters the station.
-    let boardingIdx = null;
-    if (totalBoard > 0) {
-        boardingIdx = nodes.length;
-        nodes.push({ name: 'Boarding' });
-        meta.push({ side: 'center-left', journey: 'boarding', label: isTransfer ? 'Boarding & Transfers' : 'Boarding' });
-        links.push({ source: boardingIdx, target: 0, value: totalBoard, journey: 'boarding' });
-    }
-
-    // ── "Alighting" aggregator (center-right) ────────────────────────────────
-    // Station sends one ribbon here, which then fans out to HW/WH alighting nodes.
-    let alightingIdx = null;
-    if (totalAlight > 0) {
-        alightingIdx = nodes.length;
-        nodes.push({ name: 'Alighting' });
-        meta.push({ side: 'center-right', journey: 'alighting', label: isTransfer ? 'Alighting & Transfers' : 'Alighting' });
-        links.push({ source: 0, target: alightingIdx, value: totalAlight, journey: 'alighting' });
-    }
-
-    // ── Left: HW/WH boarding → Boarding aggregator ───────────────────────────
-    if (boardingIdx !== null) {
-        if (boardingHW > 0) {
-            const i = nodes.length;
-            nodes.push({ name: 'Home → Work' });
-            meta.push({ side: 'left', journey: 'hw', label: 'From Work →' });
-            links.push({ source: i, target: boardingIdx, value: boardingHW, journey: 'hw' });
-        }
-        if (boardingWH > 0) {
-            const i = nodes.length;
-            nodes.push({ name: 'Work → Home' });
-            meta.push({ side: 'left', journey: 'wh', label: 'From Home →' });
-            links.push({ source: i, target: boardingIdx, value: boardingWH, journey: 'wh' });
-        }
-    }
-
-    // ── Left: Metro passthrough → Station (direct, skips Boarding) ───────────
-    if (viaMetroIn > 0) {
-        const i = nodes.length;
-        nodes.push({ name: labelIn });
-        meta.push({ side: 'left', journey: 'metro', label: '' });
-        links.push({ source: i, target: 0, value: viaMetroIn, journey: 'metro' });
-    }
-
-    // ── Right: Alighting aggregator → HW/WH alighting ────────────────────────
-    if (alightingIdx !== null) {
-        if (alightingHW > 0) {
-            const i = nodes.length;
-            nodes.push({ name: 'Home → Work' });
-            meta.push({ side: 'right', journey: 'hw', label: '→ To Work' });
-            links.push({ source: alightingIdx, target: i, value: alightingHW, journey: 'hw' });
-        }
-        if (alightingWH > 0) {
-            const i = nodes.length;
-            nodes.push({ name: 'Work → Home' });
-            meta.push({ side: 'right', journey: 'wh', label: '→ To Home' });
-            links.push({ source: alightingIdx, target: i, value: alightingWH, journey: 'wh' });
-        }
-    }
-
-    // ── Right: Station → Metro passthrough (direct, skips Alighting) ─────────
-    if (viaMetroOut > 0) {
-        const i = nodes.length;
-        nodes.push({ name: labelOut });
-        meta.push({ side: 'right', journey: 'metro', label: '' });
-        links.push({ source: 0, target: i, value: viaMetroOut, journey: 'metro' });
-    }
-
-    return { nodes, links, meta, viaMetroIn, viaMetroOut };
-}
-
-// ── Custom Sankey node renderer ───────────────────────────────────────────────
-
-// Neutral color for the Boarding/Alighting aggregator nodes
-const COLOR_AGGREGATOR = '#64748b'; // slate-500
-
-function makeNodeRenderer(meta, routeColor) {
-    return function SankeyNode({ x, y, width, height, index }) {
-        const m   = meta[index] ?? { side: 'center', journey: null };
-        const w   = Math.max(width,  2);
-        const h   = Math.max(height, 2);
-        const mid = y + h / 2;
-
-        const isCenter     = m.side === 'center';
-        const isAggregator = m.side === 'center-left' || m.side === 'center-right';
-
-        const color = isCenter          ? 'currentColor'
-            : m.journey === 'hw'        ? COLOR_HOME_WORK
-            : m.journey === 'wh'        ? COLOR_WORK_HOME
-            : m.journey === 'metro'     ? routeColor
-            : isAggregator              ? COLOR_AGGREGATOR
-            :                             'currentColor';
-
-        const opacity = isCenter ? 0.95 : 0.8;
-
-        // Station and aggregator labels sit above the bar (centred).
-        // Outer left/right node labels sit beside the bar.
-        let textX, textAnchor, textY, baseline;
-        if (isCenter || isAggregator) {
-            textX      = x + w / 2;
-            textAnchor = 'middle';
-            textY      = y - 8;
-            baseline   = 'auto';
-        } else if (m.side === 'left') {
-            textX      = x - 8;
-            textAnchor = 'end';
-            textY      = mid;
-            baseline   = 'middle';
-        } else { // right
-            textX      = x + w + 8;
-            textAnchor = 'start';
-            textY      = mid;
-            baseline   = 'middle';
-        }
-
-        const name = isCenter ? null : (m.label ?? '');
-
-        return React.createElement('g', {}, [
-            React.createElement('rect', {
-                key: 'r',
-                x, y, width: w, height: h,
-                fill: color, fillOpacity: opacity, rx: 0,
-            }),
-            name && React.createElement('text', {
-                key:              'label',
-                x:                textX,
-                y:                textY,
-                textAnchor,
-                dominantBaseline: baseline,
-                fontSize:         11,
-                fill:             'var(--aa-chart-secondary-metric)',
-            }, name),
-        ].filter(Boolean));
-    };
-}
-
-// ── Custom Sankey link renderer ───────────────────────────────────────────────
-//
-// Colour is read from `link.journey` (set in buildSankeyData):
-//   'hw'        → blue   (Home→Work)
-//   'wh'        → red    (Work→Home)
-//   'metro'     → route colour (passthrough train load)
-//   'boarding'  → slate  (Boarding aggregator → Station)
-//   'alighting' → slate  (Station → Alighting aggregator)
-
-function makeLinkRenderer(links, routeColor) {
-    return function SankeyLink({
-        sourceX, targetX,
-        sourceY, targetY,
-        sourceControlX, targetControlX,
-        linkWidth, index,
-    }) {
-        const link = links[index];
-        if (!link) return null;
-
-        const color = link.journey === 'hw'        ? COLOR_HOME_WORK
-                    : link.journey === 'wh'        ? COLOR_WORK_HOME
-                    : link.journey === 'metro'     ? routeColor
-                    :                                COLOR_AGGREGATOR; // boarding/alighting
-
-        const opacity = link.journey === 'metro'                                    ? 1
-                      : link.journey === 'boarding' || link.journey === 'alighting' ? 0.5
-                      :                                                               0.35; // hw/wh
-
-        const d = [
-            `M ${sourceX},${sourceY}`,
-            `C ${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`,
-        ].join(' ');
-
-        return React.createElement('path', {
-            d,
-            strokeWidth:   Math.max(linkWidth, 1),
-            stroke:        color,
-            fill:          'none',
-            strokeOpacity: opacity,
-        });
-    };
-}
-
-// ── Sankey chart ──────────────────────────────────────────────────────────────
-
-function CommuteSankey({ data, stationName, routeColor, stationIndex, stationsLength, prevStationName, nextStationName, isTransfer }) {
-    const total = data.boardingHW + data.boardingWH + data.alightingHW + data.alightingWH + data.passthroughTotal;
-
-    if (total === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-                {React.createElement(icons.Users, { size: 40, className: 'text-muted-foreground mb-3' })}
-                <p className="text-sm text-muted-foreground">
-                    No completed commute data for this station yet
-                </p>
-            </div>
-        );
-    }
-
-    const { nodes, links, meta, viaMetroIn, viaMetroOut } = buildSankeyData(
-        data, stationName, prevStationName, nextStationName, isTransfer,
-    );
-
-    // Memoize renderers so Recharts doesn't re-mount on every tick
-    const NodeRenderer = React.useMemo(
-        () => makeNodeRenderer(meta, routeColor),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [JSON.stringify(meta), routeColor],
-    );
-    const LinkRenderer = React.useMemo(
-        () => makeLinkRenderer(links, routeColor),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [JSON.stringify(links), routeColor],
-    );
-
-    const totalBoarding  = data.boardingHW  + data.boardingWH;
-    const totalAlighting = data.alightingHW + data.alightingWH;
-    const isLast = stationIndex + 1 === stationsLength;
-
-    return (
-        <div style={{ width: '100%', height: 260, position: 'relative' }}>
-            {/* Single summary row: train load arriving · station · train load departing */}
-            <div
-                className="absolute left-0 right-0 top-4 text-center text-foreground pointer-events-none text-xs whitespace-nowrap"
-                style={{ zIndex: 1 }}
-            >
-                <span class={'font-bold text-sm'}>{stationName}</span>
-            </div>
-            <charts.ResponsiveContainer width="100%" height="100%">
-                <charts.Sankey
-                    data={{ nodes, links }}
-                    nodeWidth={14}
-                    nodePadding={24}
-                    iterations={0}
-                    margin={{ top: 80, right: 160, bottom: 40, left: 160 }}
-                    node={NodeRenderer}
-                    link={LinkRenderer}
-                >
-                    <charts.Tooltip
-                        content={({ active, payload }) => {
-                            if (!active || !payload?.length) return null;
-                            const p = payload[0];
-                            const val = p.value ?? p.payload?.value ?? 0;
-                            return (
-                                <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg text-xs">
-                                    <div className="font-medium mb-1">{p.payload?.name || p.name || ''}</div>
-                                    <div className="text-muted-foreground">{val.toLocaleString()} pops</div>
-                                </div>
-                            );
-                        }}
-                    />
-                </charts.Sankey>
-            </charts.ResponsiveContainer>
-            {/* Single summary row: train load arriving · station · train load departing */}
-            <div
-                className="absolute left-0 right-0 bottom-0 grid text-center text-sm text-foreground pointer-events-none whitespace-nowrap"
-                style={{ zIndex: 1, gridTemplateColumns: '1fr  1.3fr  1fr' }}
-            >
-                <div>
-                    <span>→</span> <small>From</small> <b>{prevStationName}</b>
-                </div>
-                <span/>
-                <div>
-                    <span>{isLast ? '←' : '→'}</span> <small>{isLast ? 'Back to' : 'To'}</small> <b>{nextStationName}</b>
-                    {/*<strong>{viaMetroOut.toLocaleString()}</strong> ↑*/}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Legend ────────────────────────────────────────────────────────────────────
-
-function CommuteLegend({ routeColor, routeName }) {
-    return (
-        <div className="flex items-center gap-6 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_HOME_WORK }} />
-                <span>Home</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_WORK_HOME }} />
-                <span>Work</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_AGGREGATOR }} />
-                <span>Boarding / Alighting</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: routeColor }} />
-                <span>Route: {routeName}</span>
             </div>
         </div>
     );
@@ -577,13 +157,9 @@ function CommuteLegend({ routeColor, routeName }) {
 export function CommuteFlow({ routeId, externalStationId }) {
     const routes = api.gameState.getRoutes();
 
-    const { routeColor, routeTextColor, routeName } = React.useMemo(() => {
+    const { routeColor } = React.useMemo(() => {
         const r = routes.find(r => r.id === routeId);
-        return {
-            routeColor:     r?.color     ?? '#6b7280',
-            routeTextColor: r?.textColor ?? '#ffffff',
-            routeName: r?.bullet ?? 'n/a' ,
-        };
+        return { routeColor: r?.color ?? '#6b7280' };
     }, [routeId, routes]);
 
     const stations = React.useMemo(
@@ -591,33 +167,49 @@ export function CommuteFlow({ routeId, externalStationId }) {
         [routeId],
     );
 
-    const [selectedId, setSelectedId] = React.useState(null);
+    const [selectedId,    setSelectedId]    = React.useState(null);
+    const [hoveredRouteId, setHoveredRouteId] = React.useState(null);
 
     // Auto-select the first station; reset when the route changes
     React.useEffect(() => {
         setSelectedId(stations[0]?.id ?? null);
-    }, [routeId]);
+    }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // When a bar is clicked in StationFlow, honour that selection if the station
-    // belongs to this route (guard against stale ids from a previous route).
+    // Honour an external selection (e.g. from StationFlow bar click)
     React.useEffect(() => {
         if (!externalStationId) return;
         if (stations.some(s => s.id === externalStationId)) {
             setSelectedId(externalStationId);
         }
-    }, [externalStationId]);
+    }, [externalStationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const commuteData       = useCommuteData(routeId, selectedId);
-    const selectedStation   = stations.find(s => s.id === selectedId);
-    const isTransferStation = React.useMemo(
-        () => selectedId ? getStationTransferRoutes(selectedId, routeId, api).length > 0 : false,
-        [selectedId, routeId],
-    );
+    // Clear hover when the selected station changes
+    React.useEffect(() => {
+        setHoveredRouteId(null);
+    }, [selectedId]);
 
-    // Adjacent station names for "From …" / "To …" labels on the Via metro nodes
-    const selectedIdx     = stations.findIndex(s => s.id === selectedId);
-    const prevStationName = selectedIdx > 0                    ? stations[selectedIdx - 1].name : stations[selectedIdx + 1].name;
-    const nextStationName = selectedIdx < stations.length - 1  ? stations[selectedIdx + 1].name : stations[selectedIdx - 1].name;
+    // ── Hub resolution ────────────────────────────────────────────────────────
+    // Zustand: use the full station group so all connecting routes are visible.
+    // Fallback: include the selected station + any nearby transfer station IDs
+    //           (nearbyStations walking-time heuristic).
+    const stationIds = React.useMemo(() => {
+        if (!selectedId) return [];
+
+        if (isZustandAvailable()) {
+            return getGroupForStation(selectedId)?.stationIds ?? [selectedId];
+        }
+
+        // Fallback: gather sibling station IDs via nearbyStations
+        const allStations = api.gameState.getStations();
+        const station     = allStations.find(s => s.id === selectedId);
+        const nearbyIds   = (station?.nearbyStations ?? [])
+            .filter(ns => ns.walkingTime < CONFIG.TRANSFER_WALKING_TIME_THRESHOLD)
+            .map(ns => ns.stationId);
+        return [selectedId, ...nearbyIds];
+    }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const routesData     = useTransferFlowData(stationIds);
+    const selectedStation = stations.find(s => s.id === selectedId);
 
     if (stations.length === 0) {
         return (
@@ -629,30 +221,32 @@ export function CommuteFlow({ routeId, externalStationId }) {
 
     return (
         <div className="space-y-5">
-            {/* ── Legend ── */}
-            <CommuteLegend routeColor={routeColor} routeName={routeName} />
+            {/* ── Legend (top) ── */}
+            {routesData && (
+                <TransferFlowLegend
+                    routesData={routesData}
+                    hoveredRouteId={hoveredRouteId}
+                    onHover={setHoveredRouteId}
+                    onLeave={() => setHoveredRouteId(null)}
+                    currentRouteId={routeId}
+                />
+            )}
 
-            {/* ── Sankey chart ── */}
+            {/* ── Chart + Station Strip ── */}
             <div className="rounded-lg border border-border bg-background/50 p-4">
-                {!commuteData ? (
+                {!routesData ? (
                     <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
                         Loading…
                     </div>
                 ) : (
-                    <CommuteSankey
-                        data={commuteData}
-                        stationName={selectedStation?.name ?? ''}
-                        stationIndex={selectedIdx}
-                        stationsLength={stations.length}
-                        routeColor={routeColor}
-                        prevStationName={prevStationName}
-                        nextStationName={nextStationName}
-                        isTransfer={isTransferStation}
+                    <TransferSankey
+                        routesData={routesData}
+                        groupName={selectedStation?.name ?? ''}
+                        hoveredRouteId={hoveredRouteId}
                     />
                 )}
 
-                <div className="mt-6 pt-8 px-8">
-                    {/* ── Station strip toggler ── */}
+                <div className="pt-8 px-8">
                     <StationStrip
                         stations={stations}
                         selectedId={selectedId}
@@ -662,7 +256,6 @@ export function CommuteFlow({ routeId, externalStationId }) {
                     />
                 </div>
             </div>
-
         </div>
     );
 }
