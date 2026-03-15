@@ -27,6 +27,7 @@ import { getStationGroups, isZustandAvailable } from '../../core/api-support.js'
 import { Dropdown } from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge } from '../../components/route-badge.jsx';
+import { PickerDialog, PICKER_THRESHOLD } from '../../components/picker-dialog.jsx';
 import { getStorage } from '../../core/lifecycle.js';
 import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 import { Portal } from '../../hooks/portal.jsx';
@@ -557,6 +558,56 @@ export function DashboardMap() {
         return ids;
     }, [rawData?.allTransferMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Enriched items for PickerDialog: adds live ridership + hub-count per route.
+    const routePickerItems = React.useMemo(() => {
+        const transferCountByRoute = {};
+        Object.values(rawData?.allTransferMap ?? {}).forEach(hub => {
+            (hub.routeIds ?? []).forEach(id => {
+                transferCountByRoute[id] = (transferCountByRoute[id] ?? 0) + 1;
+            });
+        });
+        return allRoutes
+            .filter(r => transferRouteIds.has(r.id))
+            .map(r => ({
+                id:            r.id,
+                name:          `${r.bullet ?? ''} ${r.name ?? ''}`.trim(),
+                ridership:     (() => { try { return api.gameState.getRouteRidership(r.id)?.total ?? 0; } catch { return 0; } })(),
+                transferCount: transferCountByRoute[r.id] ?? 0,
+            }));
+    }, [allRoutes, rawData?.allTransferMap, transferRouteIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Column definitions for the route PickerDialog.
+    // Defined as a memo so render fns are stable references (avoids table thrash).
+    const routePickerColumns = React.useMemo(() => [
+        {
+            key:    'badge',
+            label:  '',
+            render: item => <RouteBadge routeId={item.id} interactive={false} size="1.2rem" />,
+            sortFn: null,
+            width:  '44px',
+        },
+        {
+            key:    'name',
+            label:  'Route',
+            render: item => <span className="text-sm">{item.name}</span>,
+            sortFn: (a, b) => a.name.localeCompare(b.name),
+        },
+        {
+            key:    'ridership',
+            label:  'Ridership',
+            render: item => <span className="tabular-nums text-sm">{item.ridership.toLocaleString()}</span>,
+            sortFn: (a, b) => a.ridership - b.ridership,
+            width:  '100px',
+        },
+        {
+            key:    'transfers',
+            label:  'Hubs',
+            render: item => <span className="text-sm">{item.transferCount}</span>,
+            sortFn: (a, b) => a.transferCount - b.transferCount,
+            width:  '60px',
+        },
+    ], []); // eslint-disable-line react-hooks/exhaustive-deps
+
     // Prefs load
     React.useEffect(() => {
         if (prefsSaveable.current) return;
@@ -649,21 +700,34 @@ export function DashboardMap() {
             {/* ── Top bar (shown when data is available) ──────── */}
             {mapData && (
                 <div className="flex gap-3">
-                    <Dropdown
-                        togglerText={`${selectedRoutes.length}/${allRouteIds.length}`}
-                        togglerIcon={icons.Route}
-                        togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
-                        menuClasses="min-w-[180px]"
-                        multiselect={true}
-                        value={selectedRoutes}
-                        onChange={setSelectedRoutes}
-                    >
-                        {allRoutes
-                            .filter(route => transferRouteIds.has(route.id))
-                            .map(route => (
-                                <DropdownItem key={route.id} route={route} value={route.id} />
+                    {routePickerItems.length > PICKER_THRESHOLD ? (
+                        <PickerDialog
+                            title="Select Routes"
+                            togglerText={`${selectedRoutes.filter(id => transferRouteIds.has(id)).length}/${routePickerItems.length}`}
+                            togglerIcon={icons.Route}
+                            togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
+                            multiselect={true}
+                            value={selectedRoutes}
+                            onChange={setSelectedRoutes}
+                            items={routePickerItems}
+                            columns={routePickerColumns}
+                        />
+                    ) : (
+                        <Dropdown
+                            togglerText={`${selectedRoutes.filter(id => transferRouteIds.has(id)).length}/${routePickerItems.length}`}
+                            togglerIcon={icons.Route}
+                            togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
+                            menuClasses="min-w-[180px]"
+                            multiselect={true}
+                            value={selectedRoutes}
+                            onChange={setSelectedRoutes}
+                        >
+                            {routePickerItems.map(item => (
+                                <DropdownItem key={item.id} value={item.id}
+                                    route={allRoutes.find(r => r.id === item.id)} />
                             ))}
-                    </Dropdown>
+                        </Dropdown>
+                    )}
 
                     {hasRoutes && (
                         <div className="flex gap-1 flex-wrap">
@@ -678,7 +742,7 @@ export function DashboardMap() {
                                     onMouseEnter={() => { setHoveredRoute(rid); setHoveredTransfer(null); }}
                                     onMouseLeave={() => setHoveredRoute(null)}
                                 >
-                                    <RouteBadge routeId={rid} size={selectedRoutes.length > 10 ? '1rem' : '1.2rem'} interactive={false} />
+                                    <RouteBadge routeId={rid} size={'1rem'} interactive={false} />
                                     <button
                                         onClick={e => removeRoute(e, rid)}
                                         style={{ opacity: hoveredRoute === rid ? 1 : 0.5 }}

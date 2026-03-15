@@ -35,6 +35,7 @@ import { isZustandAvailable, getTransferGroups } from '../core/api-support.js';
 import { Dropdown }                             from '../components/dropdown.jsx';
 import { DropdownItem }                         from '../components/dropdown-item.jsx';
 import { RouteBadge }                           from '../components/route-badge.jsx';
+import { PickerDialog, PICKER_THRESHOLD }       from '../components/picker-dialog.jsx';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons, charts } = api.utils;
@@ -566,7 +567,7 @@ export function TransferFlowLegend({ routesData, hoveredRouteId, onHover, onLeav
                             onMouseEnter={() => !isCurrent && onHover?.(r.routeId)}
                             onMouseLeave={() => onLeave?.()}
                         >
-                            <RouteBadge routeId={r.routeId} size="1.4rem" interactive={!isCurrent} />
+                            <RouteBadge routeId={r.routeId} size="1.2rem" interactive={!isCurrent} />
                         </div>
                     );
                 })}
@@ -599,6 +600,61 @@ export function TransferFlow({ initialHubId }) {
     const selectedHub = hubs.find(h => h.id === selectedHubId) ?? null;
     const routesData  = useTransferFlowData(selectedHub?.stationIds);
 
+    // ── Enriched hub items for PickerDialog ──────────────────────────────────
+    // Derives routeIds per hub from station.routeIds, then sums ridership.
+    const hubPickerItems = React.useMemo(() => {
+        const allStations = api.gameState.getStations();
+        const stationRouteMap = {};
+        allStations.forEach(s => {
+            if (s.routeIds?.length) stationRouteMap[s.id] = s.routeIds;
+        });
+
+        return hubs.map(h => {
+            const routeIdSet = new Set();
+            (h.stationIds ?? []).forEach(sid => {
+                (stationRouteMap[sid] ?? []).forEach(rid => routeIdSet.add(rid));
+            });
+            const routeIds  = Array.from(routeIdSet);
+            const ridership = routeIds.reduce((sum, rid) => {
+                try { return sum + (api.gameState.getRouteRidership(rid)?.total ?? 0); } catch { return sum; }
+            }, 0);
+            return { id: h.id, name: h.name, ridership, routeIds };
+        });
+    }, [hubs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Column definitions for the hub PickerDialog.
+    const hubPickerColumns = React.useMemo(() => [
+        {
+            key:    'name',
+            label:  'Station',
+            render: item => <span className="text-sm font-medium">{item.name}</span>,
+            sortFn: (a, b) => a.name.localeCompare(b.name),
+        },
+        {
+            key:    'ridership',
+            label:  'Ridership',
+            render: item => <span className="tabular-nums text-sm">{item.ridership.toLocaleString()}</span>,
+            sortFn: (a, b) => a.ridership - b.ridership,
+            width:  '100px',
+        },
+        {
+            key:    'routes',
+            label:  'Routes',
+            render: item => (
+                <div className="flex items-center gap-2">
+                    <span className="tabular-nums text-sm text-muted-foreground">{item.routeIds.length}</span>
+                    <div className="flex flex-wrap gap-1">
+                        {item.routeIds.map(rid => (
+                            <RouteBadge key={rid} routeId={rid} interactive={false} size="0.8rem" />
+                        ))}
+                    </div>
+                </div>
+            ),
+            sortFn: (a, b) => a.routeIds.length - b.routeIds.length,
+            width:  '160px',
+        },
+    ], []); // eslint-disable-line react-hooks/exhaustive-deps
+
     // ── Empty state: no transfer hubs in the network yet ─────────────────────
     if (hubs.length === 0) {
         return (
@@ -620,18 +676,31 @@ export function TransferFlow({ initialHubId }) {
                     {React.createElement(icons.Component, { size: 13, className: 'text-purple-500' })}
                     Transfer Hub
                 </span>
-                <Dropdown
-                    value={selectedHubId}
-                    onChange={setSelectedHubId}
-                    togglerContent={
-                        <span className="font-medium">{selectedHub?.name ?? '…'}</span>
-                    }
-                    togglerClasses="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-accent transition-colors"
-                >
-                    {hubs.map(h => (
-                        <DropdownItem key={h.id} value={h.id} text={h.name} />
-                    ))}
-                </Dropdown>
+                {hubs.length > PICKER_THRESHOLD ? (
+                    <PickerDialog
+                        title="Select Transfer Hub"
+                        togglerText={selectedHub?.name ?? '…'}
+                        togglerClasses="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-accent transition-colors font-medium"
+                        multiselect={false}
+                        value={selectedHubId}
+                        onChange={setSelectedHubId}
+                        items={hubPickerItems}
+                        columns={hubPickerColumns}
+                    />
+                ) : (
+                    <Dropdown
+                        value={selectedHubId}
+                        onChange={setSelectedHubId}
+                        togglerContent={
+                            <span className="font-medium">{selectedHub?.name ?? '…'}</span>
+                        }
+                        togglerClasses="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-accent transition-colors"
+                    >
+                        {hubs.map(h => (
+                            <DropdownItem key={h.id} value={h.id} text={h.name} />
+                        ))}
+                    </Dropdown>
+                )}
             </div>
 
             {/* ── Chart + legend ── */}

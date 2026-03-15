@@ -18,6 +18,8 @@ import { ButtonsGroup, ButtonsGroupItem } from '../../components/buttons-group.j
 import { Dropdown } from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge } from '../../components/route-badge.jsx';
+import { PickerDialog, PICKER_THRESHOLD } from '../../components/picker-dialog.jsx';
+import { isZustandAvailable, getStationGroups } from '../../core/api-support.js';
 import { getStorage } from '../../core/lifecycle.js';
 import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 
@@ -75,6 +77,74 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
     const [hoveredRoute,    setHoveredRoute]     = React.useState(null);
 
     const routes = api.gameState.getRoutes();
+
+    // ── Route PickerDialog data ──────────────────────────────────────────────
+    // Compute transfer-hub count per route using Zustand groups (preferred) or
+    // a direct station.routeIds check (fallback).  Also pulls live ridership.
+    const routePickerItems = React.useMemo(() => {
+        const allStations = api.gameState.getStations();
+        const transferCountByRoute = {};
+
+        if (isZustandAvailable()) {
+            getStationGroups().forEach(group => {
+                const routesInGroup = new Set();
+                group.stationIds.forEach(sid => {
+                    const s = allStations.find(st => st.id === sid);
+                    (s?.routeIds ?? []).forEach(rid => routesInGroup.add(rid));
+                });
+                if (routesInGroup.size >= 2) {
+                    routesInGroup.forEach(rid => {
+                        transferCountByRoute[rid] = (transferCountByRoute[rid] ?? 0) + 1;
+                    });
+                }
+            });
+        } else {
+            allStations.forEach(s => {
+                if ((s.routeIds?.length ?? 0) >= 2) {
+                    s.routeIds.forEach(rid => {
+                        transferCountByRoute[rid] = (transferCountByRoute[rid] ?? 0) + 1;
+                    });
+                }
+            });
+        }
+
+        return routes.map(r => ({
+            id:            r.id,
+            name:          `${r.bullet ?? ''} ${r.name ?? ''}`.trim(),
+            ridership:     (() => { try { return api.gameState.getRouteRidership(r.id)?.total ?? 0; } catch { return 0; } })(),
+            transferCount: transferCountByRoute[r.id] ?? 0,
+        }));
+    }, [routes.map(r => r.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const routePickerColumns = React.useMemo(() => [
+        {
+            key:    'badge',
+            label:  '',
+            render: item => <RouteBadge routeId={item.id} interactive={false} size="1.5rem" />,
+            sortFn: null,
+            width:  '44px',
+        },
+        {
+            key:    'name',
+            label:  'Route',
+            render: item => <span className="text-sm">{item.name}</span>,
+            sortFn: (a, b) => a.name.localeCompare(b.name),
+        },
+        {
+            key:    'ridership',
+            label:  'Ridership',
+            render: item => <span className="tabular-nums text-sm">{item.ridership.toLocaleString()}</span>,
+            sortFn: (a, b) => a.ridership - b.ridership,
+            width:  '100px',
+        },
+        {
+            key:    'transfers',
+            label:  'Hubs',
+            render: item => <span className="text-sm">{item.transferCount}</span>,
+            sortFn: (a, b) => a.transferCount - b.transferCount,
+            width:  '60px',
+        },
+    ], []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const storage = getStorage();
     // Ref guard: prevents save effect from firing before the initial load
@@ -218,32 +288,49 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
 
                 {/* Route & Metric selection */}
                 <div className="flex items-center gap-3">
-                    <Dropdown
-                        togglerContent={
-                            selectedRoutes.length === 1
-                                ? <RouteBadge routeId={selectedRoutes[0]} size="1.2rem" interactive={false} />
+                    {routePickerItems.length > PICKER_THRESHOLD ? (
+                        <PickerDialog
+                            title="Select Routes"
+                            togglerText={
+                                selectedRoutes.length === 0 ? 'Select routes'
+                                : `${selectedRoutes.length} selected`
+                            }
+                            togglerIcon={icons.Route}
+                            togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
+                            multiselect={true}
+                            value={selectedRoutes}
+                            onChange={setSelectedRoutes}
+                            items={routePickerItems}
+                            columns={routePickerColumns}
+                        />
+                    ) : (
+                        <Dropdown
+                            togglerContent={
+                                selectedRoutes.length === 1
+                                    ? <RouteBadge routeId={selectedRoutes[0]} size="1.2rem" interactive={false} />
+                                    : null
+                            }
+                            togglerIcon={icons.Route}
+                            togglerText={
+                                selectedRoutes.length === 0 ? 'Select routes'
+                                : selectedRoutes.length > 1  ? `${selectedRoutes.length} selected`
                                 : null
-                        }
-                        togglerIcon={icons.Route}
-                        togglerText={
-                            selectedRoutes.length === 0 ? 'Select routes'
-                            : selectedRoutes.length > 1  ? `${selectedRoutes.length} selected`
-                            : null
-                        }
-                        togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
-                        menuClasses="min-w-[200px] max-h-[300px] overflow-y-auto"
-                        multiselect={true}
-                        value={selectedRoutes}
-                        onChange={setSelectedRoutes}
-                    >
-                        {routes.map(route => (
-                            <DropdownItem
-                                key={route.id}
-                                value={route.id}
-                                route={route}
-                            />
-                        ))}
-                    </Dropdown>
+                            }
+                            togglerClasses="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border bg-background hover:bg-accent border-input"
+                            menuClasses="min-w-[200px] max-h-[300px] overflow-y-auto"
+                            multiselect={true}
+                            value={selectedRoutes}
+                            onChange={setSelectedRoutes}
+                        >
+                            {routes.map(route => (
+                                <DropdownItem
+                                    key={route.id}
+                                    value={route.id}
+                                    route={route}
+                                />
+                            ))}
+                        </Dropdown>
+                    )}
 
                     <Dropdown
                         togglerIcon={icons.LineChart}
