@@ -21,6 +21,9 @@
 
 import { CONFIG }                  from '../../config.js';
 import { getRouteStationsInOrder } from '../../utils/route-utils.js';
+import { getStationTransferRoutes } from '../../utils/transfer-utils.js';
+import { Dropdown }                 from '../../components/dropdown.jsx';
+import { DropdownItem }             from '../../components/dropdown-item.jsx';
 import {RouteDialog} from "./route-dialog";
 
 const api = window.SubwayBuilderAPI;
@@ -107,7 +110,7 @@ function useCommuteData(routeId, stationId) {
 // Horizontal scrollable row of station dots connected by a route-colored line.
 // Clicking a dot selects that station for the Sankey.
 
-function StationStrip({ stations, selectedId, routeColor, onSelect }) {
+function StationStrip({ stations, selectedId, routeColor, onSelect, routeId }) {
     const scrollRef = React.useRef(null);
 
     // Horizontally centre the selected station in the strip.
@@ -116,9 +119,9 @@ function StationStrip({ stations, selectedId, routeColor, onSelect }) {
     React.useEffect(() => {
         const container = scrollRef.current;
         if (!container) return;
-        const btn = container.querySelector(`[data-sid="${selectedId}"]`);
-        if (!btn) return;
-        const target = btn.offsetLeft - container.offsetWidth / 2 + btn.offsetWidth / 2;
+        const el = container.querySelector(`[data-sid="${selectedId}"]`);
+        if (!el) return;
+        const target = el.offsetLeft - container.offsetWidth / 2 + el.offsetWidth / 2;
         container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
     }, [selectedId]);
 
@@ -132,6 +135,7 @@ function StationStrip({ stations, selectedId, routeColor, onSelect }) {
                 {/*<div className={'text-lg px-3'}>→</div>*/}
                 {stations.map((st, idx) => {
                     const selected = st.id === selectedId;
+                    const transferRoutes = getStationTransferRoutes(st.id, routeId, api);
                     return (
                         <React.Fragment key={st.id}>
                             {/* Connector line between stations */}
@@ -147,49 +151,84 @@ function StationStrip({ stations, selectedId, routeColor, onSelect }) {
                                 }} />
                             )}
 
-                            {/* Station dot + label */}
-                            <button
+                            {/* Station wrapper: dot + label + optional transfer indicator */}
+                            <div
                                 data-sid={st.id}
-                                onClick={() => onSelect(st.id)}
-                                className="flex relative flex-col items-center gap-1.5 focus:outline-none text-muted-foreground hover:text-foreground"
+                                className="flex flex-col items-center"
                                 style={{ flexShrink: 0 }}
-                                title={st.name}
                             >
-                                <div style={{
-                                    position: 'absolute',
-                                    left:        0,
-                                    right:       0,
-                                    height:      10,
-                                    top:         2, // vertically centred with the 14px dot
-                                    background:  routeColor,
-                                    opacity:     1,
-                                }} />
-                                <div style={{
-                                    width:        10,
-                                    height:       10,
-                                    borderRadius: '50%',
-                                    outline:       `2px solid ${ selected? 'white' : 'black'}`,
-                                    background:   selected ? 'black' : 'white',
-                                    transition:   'all 0.15s ease',
-                                    cursor:       'pointer',
-                                    marginTop:    2,
-                                    zIndex:       1,
-                                }} />
-                                <span style={{
-                                    fontSize:     12,
-                                    maxWidth:     160,
-                                    overflow:     'hidden',
-                                    textOverflow: 'ellipsis',
-                                    fontWeight:   selected ? 'bold' : 'normal',
-                                    whiteSpace:   'nowrap',
-                                    display:      'block',
-                                    color:        selected
-                                        ? 'var(--aa-chart-secondary-metric)'
-                                        : 'hsl(var(--muted-foreground))',
-                                }}>
-                                    {st.name}
-                                </span>
-                            </button>
+                                {/* Clickable button: dot + name */}
+                                <button
+                                    onClick={() => onSelect(st.id)}
+                                    className="flex relative flex-col items-center w-full gap-1.5 focus:outline-none text-muted-foreground hover:text-foreground"
+                                    title={st.name}
+                                >
+                                    <div style={{
+                                        position: 'absolute',
+                                        left:        0,
+                                        right:       0,
+                                        height:      10,
+                                        top:         2, // vertically centred with the 14px dot
+                                        background:  routeColor,
+                                        opacity:     1,
+                                    }} />
+                                    <div style={{
+                                        width:        10,
+                                        height:       10,
+                                        borderRadius: '50%',
+                                        outline:       `2px solid ${ selected? 'white' : 'black'}`,
+                                        background:   selected ? 'black' : 'white',
+                                        transition:   'all 0.15s ease',
+                                        cursor:       'pointer',
+                                        marginTop:    2,
+                                        zIndex:       1,
+                                    }} />
+                                    <span style={{
+                                        fontSize:     12,
+                                        maxWidth:     160,
+                                        overflow:     'hidden',
+                                        textOverflow: 'ellipsis',
+                                        fontWeight:   selected ? 'bold' : 'normal',
+                                        whiteSpace:   'nowrap',
+                                        display:      'block',
+                                        color:        selected
+                                            ? 'var(--aa-chart-secondary-metric)'
+                                            : 'hsl(var(--muted-foreground))',
+                                    }}>
+                                        {st.name}
+                                    </span>
+                                </button>
+
+                                {/* Transfer indicator — only shown for interchange stations */}
+                                {transferRoutes.length > 0 && (() => {
+                                    const liveRoutes = api.gameState.getRoutes();
+                                    return (
+                                        <div
+                                            className="flex items-center gap-1 mt-0.5"
+                                        >
+                                            <span style={{ color: '#a855f7' }}>
+                                                {React.createElement(icons.Component, { size: 10 })}
+                                            </span>
+                                            <Dropdown
+                                                togglerContent={
+                                                    <span className="text-xs font-semibold tabular-nums">
+                                                        {transferRoutes.length}
+                                                    </span>
+                                                }
+                                                togglerClasses="flex items-center gap-0.5 rounded hover:bg-accent px-0.5 transition-colors"
+                                                onChange={rid => window.AdvancedAnalytics?.openRouteDialog?.(rid)}
+                                            >
+                                                {transferRoutes.map(tr => {
+                                                    const route = liveRoutes.find(r => r.id === tr.routeId);
+                                                    return route
+                                                        ? <DropdownItem key={tr.routeId} value={tr.routeId} route={route} />
+                                                        : null;
+                                                })}
+                                            </Dropdown>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
                         </React.Fragment>
                     );
                 })}
@@ -223,6 +262,7 @@ function buildSankeyData(
     stationName,
     prevStationName,
     nextStationName,
+    isTransfer = false,
 ) {
     // Node 0 = station (always present)
     const nodes = [{ name: stationName }];
@@ -246,7 +286,7 @@ function buildSankeyData(
     if (totalBoard > 0) {
         boardingIdx = nodes.length;
         nodes.push({ name: 'Boarding' });
-        meta.push({ side: 'center-left', journey: 'boarding', label: 'Boarding' });
+        meta.push({ side: 'center-left', journey: 'boarding', label: isTransfer ? 'Boarding & Transfers' : 'Boarding' });
         links.push({ source: boardingIdx, target: 0, value: totalBoard, journey: 'boarding' });
     }
 
@@ -256,7 +296,7 @@ function buildSankeyData(
     if (totalAlight > 0) {
         alightingIdx = nodes.length;
         nodes.push({ name: 'Alighting' });
-        meta.push({ side: 'center-right', journey: 'alighting', label: 'Alighting' });
+        meta.push({ side: 'center-right', journey: 'alighting', label: isTransfer ? 'Alighting & Transfers' : 'Alighting' });
         links.push({ source: 0, target: alightingIdx, value: totalAlight, journey: 'alighting' });
     }
 
@@ -421,7 +461,7 @@ function makeLinkRenderer(links, routeColor) {
 
 // ── Sankey chart ──────────────────────────────────────────────────────────────
 
-function CommuteSankey({ data, stationName, routeColor, stationIndex, stationsLength,  prevStationName, nextStationName }) {
+function CommuteSankey({ data, stationName, routeColor, stationIndex, stationsLength, prevStationName, nextStationName, isTransfer }) {
     const total = data.boardingHW + data.boardingWH + data.alightingHW + data.alightingWH + data.passthroughTotal;
 
     if (total === 0) {
@@ -436,7 +476,7 @@ function CommuteSankey({ data, stationName, routeColor, stationIndex, stationsLe
     }
 
     const { nodes, links, meta, viaMetroIn, viaMetroOut } = buildSankeyData(
-        data, stationName, prevStationName, nextStationName,
+        data, stationName, prevStationName, nextStationName, isTransfer,
     );
 
     // Memoize renderers so Recharts doesn't re-mount on every tick
@@ -567,8 +607,12 @@ export function CommuteFlow({ routeId, externalStationId }) {
         }
     }, [externalStationId]);
 
-    const commuteData     = useCommuteData(routeId, selectedId);
-    const selectedStation = stations.find(s => s.id === selectedId);
+    const commuteData       = useCommuteData(routeId, selectedId);
+    const selectedStation   = stations.find(s => s.id === selectedId);
+    const isTransferStation = React.useMemo(
+        () => selectedId ? getStationTransferRoutes(selectedId, routeId, api).length > 0 : false,
+        [selectedId, routeId],
+    );
 
     // Adjacent station names for "From …" / "To …" labels on the Via metro nodes
     const selectedIdx     = stations.findIndex(s => s.id === selectedId);
@@ -603,6 +647,7 @@ export function CommuteFlow({ routeId, externalStationId }) {
                         routeColor={routeColor}
                         prevStationName={prevStationName}
                         nextStationName={nextStationName}
+                        isTransfer={isTransferStation}
                     />
                 )}
 
@@ -613,6 +658,7 @@ export function CommuteFlow({ routeId, externalStationId }) {
                         selectedId={selectedId}
                         routeColor={routeColor}
                         onSelect={setSelectedId}
+                        routeId={routeId}
                     />
                 </div>
             </div>
