@@ -160,9 +160,9 @@ function StatCard({ label, icon, value, sub, children, valueClass = '' }) {
         <div className="flex gap-3 rounded border bg-muted/20 p-4 pl-3 h-full">
             {icon && React.createElement(icons[icon], { size: 22, className: 'mt-0.5 shrink-0' })}
             <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                {label && <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                     {label}
-                </div>
+                </div>}
                 {value && <div className={`text-xl font-semibold tabular-nums ${valueClass}`}>{value}</div>}
                 {children}
                 {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
@@ -229,17 +229,12 @@ export function RouteContent({ routeId }) {
                     </div>
                     <div className={"col-span-2"}>
                         <StatCard
-                            label="Route Info"
-                            icon="Info"
                         >
-                            <div className="flex flex-col gap-2 pt-1">
+                            <div className="pl-2 flex flex-col gap-2">
 
-                                {/* Route name — or badge fallback */}
-                                <div className="flex items-center gap-1.5">
-                                    {data.routeInfo?.bullet
-                                        ? <span className="text-base font-semibold leading-tight">{data.routeInfo.bullet}</span>
-                                        : <RouteBadge routeId={routeId} size="1.2rem" interactive={false} />
-                                    }
+                                {/* Route name */}
+                                <div className="mb-2 pb-1">
+                                    <RouteBadge routeId={routeId} size="2rem" interactive={false} />
                                 </div>
 
                                 {/* Creation day + time in service */}
@@ -264,24 +259,25 @@ export function RouteContent({ routeId }) {
                                     </div>
                                 )}
 
-                                {/* Train type */}
-                                {data.routeInfo?.trainTypeName && (
-                                    <div className="flex items-center gap-1.5 text-xs">
-                                        <span
-                                            className="w-2 h-2 rounded-full shrink-0"
-                                            style={{ background: data.routeInfo.trainTypeColor }}
-                                        />
-                                        <span className="font-medium">{data.routeInfo.trainTypeName}</span>
-                                    </div>
-                                )}
+                                <div>
+                                    {/* Train type */}
+                                    {data.routeInfo?.trainTypeName && (
+                                        <div className="flex items-center gap-1.5 text-xs mb-2">
+                                            <span
+                                                className="w-2 h-2 rounded-full shrink-0"
+                                                style={{ background: data.routeInfo.trainTypeColor }}
+                                            />
+                                            <span className="font-medium">{data.routeInfo.trainTypeName}</span>
+                                        </div>
+                                    )}
 
-                                {/* Train type description */}
-                                {data.routeInfo?.trainTypeDescription && (
-                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                        {data.routeInfo.trainTypeDescription}
-                                    </p>
-                                )}
-
+                                    {/* Train type description */}
+                                    {data.routeInfo?.trainTypeDescription && (
+                                        <p className="text-xs text-muted-foreground leading-relaxed">
+                                            {data.routeInfo.trainTypeDescription}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         </StatCard>
                     </div>
