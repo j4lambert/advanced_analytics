@@ -143,20 +143,14 @@ export function StationFlow({ routeId, onStationClick }) {
 }
 
 // ---------------------------------------------------------------------------
-// Transfer dot preview (legend)
+// Transfer icon preview (legend)
 // ---------------------------------------------------------------------------
 function TransferDotPreview() {
-    const h = React.createElement;
-    const size = 12;
-    const r    = size / 2;
-    return h('svg', { width: size, height: size, viewBox: `0 0 ${size} ${size}` },
-        h('circle', {
-            cx: r, cy: r, r: r - 1,
-            fill:        'hsla(var(--background))',
-            stroke:      'var(--aa-transfer-color)',
-            strokeWidth: 1.5,
-        })
-    );
+    return React.createElement(icons.Component, {
+        size:        12,
+        color:       'var(--aa-transfer-color)',
+        strokeWidth: 1.5,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -228,16 +222,18 @@ function makeBottomAxisTick(flowData) {
                     fontSize:   12,
                 }, label),
 
-                // Transfer circle — sits right at the text anchor point (cx=0),
-                // appearing as the last "letter" of the label in reading order
-                hasTransfers && h('circle', {
-                    key:         'transfer-circle',
-                    cx:          0,
-                    cy:          DY,
-                    r:           CR,
-                    fill:        'hsl(var(--background))',
-                    stroke:      'var(--aa-transfer-color)',
+                // Transfer icon — sits right at the text anchor point (x=0),
+                // appearing as the last "letter" of the label in reading order.
+                // Nested <svg> is valid inside SVG; x/y position its top-left corner
+                // so the icon is centred at the same point the circle occupied.
+                hasTransfers && h(icons.Component, {
+                    key:         'transfer-icon',
+                    size:        CR * 2,
+                    x:           0,
+                    y:           0,
+                    color:       'var(--aa-transfer-color)',
                     strokeWidth: 1.5,
+                    transform: "rotate(45)",
                 }),
 
             ].filter(Boolean)),
