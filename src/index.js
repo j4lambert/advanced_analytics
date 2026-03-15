@@ -6,9 +6,8 @@
 import { CONFIG } from './config.js';
 import { initLifecycleHooks, getStorage, handleMapReadyFallback } from './core/lifecycle.js';
 import { injectStyles } from './assets/styles.js';
-import { Dashboard }    from './ui/dashboard.jsx';
-import { RouteDialog }  from './ui/route/route-dialog.jsx';
-import { Panel }        from './ui/panel.jsx';
+import { AnalyticsPanel } from './ui/analytics-panel.jsx';
+import { Panel }           from './ui/panel.jsx';
 import { PortalHost }   from './hooks/portal-host.jsx';
 
 // Debug: revenue fluctuation debug
@@ -41,17 +40,11 @@ const AdvancedAnalytics = {
         function registerUI() {
             injectStyles();
 
+            // Single panel — manages both the dashboard and route views.
+            // Replaces the previous Dashboard + RouteDialog dual-panel system.
             api.ui.registerComponent('top-bar', {
-                id: 'aa-dialog-mount',
-                component: Dashboard
-            });
-
-            // RouteDialog — opened by clicking any interactive RouteBadge.
-            // Mounted separately so it is always in the tree (independent of the
-            // main Dashboard dialog being open).
-            api.ui.registerComponent('top-bar', {
-                id: 'aa-route-dialog-mount',
-                component: RouteDialog
+                id: 'aa-analytics-panel',
+                component: AnalyticsPanel
             });
 
             // PortalHost acts as a rendering target for the Portal component:

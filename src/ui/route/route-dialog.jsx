@@ -173,7 +173,7 @@ function StatCard({ label, icon, value, sub, children, valueClass = '' }) {
 
 // ── Route content ──────────────────────────────────────────────────────────────
 
-function RouteContent({ routeId }) {
+export function RouteContent({ routeId }) {
     const data = useRouteData(routeId);
 
     // Tracks which station was last clicked in StationFlow so CommuteFlow can sync.

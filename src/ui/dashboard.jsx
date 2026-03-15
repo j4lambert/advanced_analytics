@@ -22,62 +22,13 @@ import { INITIAL_STATE } from '../config.js';
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-export function Dashboard() {
-    const [isOpen, setIsOpen] = React.useState(false);
-    const [historicalData, setHistoricalData] = React.useState({ days: {} });
-
-    const storage = getStorage();
-
-    // ── Live data (shared between DashboardTable and DashboardTrends) ──────────
-    // We use the default sort from INITIAL_STATE; the table manages its own sort
-    // internally, but for the purpose of sharing we only need the raw route data.
-    // The empty historicalData is memoised so the hook's dependency array is stable.
-    const emptyHistoricalData = React.useMemo(() => ({ days: {} }), []);
-    const { tableData: liveRouteData } = useRouteMetrics({
-        sortState:      INITIAL_STATE.sort,
-        timeframeState: 'last24h',
-        compareMode:    false,
-        historicalData: emptyHistoricalData,
-    });
-
-    // Load historical data when dialog opens
-    React.useEffect(() => {
-        if (!isOpen || !storage) return;
-        
-        const loadData = async () => {
-            const data = await storage.get('historicalData', { days: {} });
-            setHistoricalData(data);
-        };
-        
-        loadData();
-        
-        // Poll for updates while dialog is open
-        const interval = setInterval(loadData, 2000);
-        return () => clearInterval(interval);
-    }, [isOpen, storage]);
-    
-    // Expose global functions to control dialog
-    React.useEffect(() => {
-        window.AdvancedAnalytics = window.AdvancedAnalytics || {};
-        window.AdvancedAnalytics.openDialog = () => setIsOpen(true);
-        window.AdvancedAnalytics.closeDialog = () => setIsOpen(false);
-        window.AdvancedAnalytics.toggleDialog = () => setIsOpen(prev => !prev);
-        
-        return () => {
-            delete window.AdvancedAnalytics.openDialog;
-            delete window.AdvancedAnalytics.closeDialog;
-            delete window.AdvancedAnalytics.toggleDialog;
-        };
-    }, []);
-    
+// ── Dashboard body (no StaticPanel wrapper) ──────────────────────────────────
+// Used by AnalyticsPanel as the "dashboard" view.
+// Also consumed by the legacy Dashboard wrapper below for standalone use.
+export function DashboardContent({ liveRouteData, historicalData }) {
     return (
-        <StaticPanel
-            id="aa-dashboard"
-            title="Advanced Analytics - Dashboard"
-            isOpen={isOpen}
-            onClose={() => setIsOpen(false)}
-        >
-            <section class="flex gap-2 border-b pb-4">
+        <>
+            <section className="flex gap-2 border-b pb-4">
                 <GuideTrigger/>
                 <span className="border-foreground/20 border-r py-3"/>
                 <AboutTrigger/>
@@ -109,7 +60,7 @@ export function Dashboard() {
             />
 
             {/* Chart Section — receives both historical and live data */}
-            <section className="mt-8 mb-6">
+            <section className="py-6">
                 <div className="py-5">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Historical Trends</h3>
                 </div>
@@ -118,9 +69,9 @@ export function Dashboard() {
                     liveRouteData={liveRouteData}
                 />
             </section>
-            
+
             {/* Transfer Hub Flow */}
-            <section className="mt-8 mb-6">
+            <section className="py-6">
                 <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Transfer Hub Flow</h3>
                     <p className="text-xs text-muted-foreground mt-1">Passenger flows through interchange stations</p>
@@ -129,13 +80,65 @@ export function Dashboard() {
             </section>
 
             {/* System Map */}
-            <section className="mt-8 mb-6">
+            <section className="py-6">
                 <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">System Map</h3>
                     <p className="text-xs text-muted-foreground mt-1">Network schematic map</p>
                 </div>
                 <DashboardMap />
             </section>
+        </>
+    );
+}
+
+// ── Legacy standalone wrapper (kept for backward compatibility) ───────────────
+// AnalyticsPanel is now the preferred entry point; this wrapper owns its own
+// data state so it can still be used in isolation if needed.
+export function Dashboard() {
+    const [isOpen, setIsOpen] = React.useState(false);
+    const [historicalData, setHistoricalData] = React.useState({ days: {} });
+
+    const storage = getStorage();
+
+    const emptyHistoricalData = React.useMemo(() => ({ days: {} }), []);
+    const { tableData: liveRouteData } = useRouteMetrics({
+        sortState:      INITIAL_STATE.sort,
+        timeframeState: 'last24h',
+        compareMode:    false,
+        historicalData: emptyHistoricalData,
+    });
+
+    React.useEffect(() => {
+        if (!isOpen || !storage) return;
+        const loadData = async () => {
+            const data = await storage.get('historicalData', { days: {} });
+            setHistoricalData(data);
+        };
+        loadData();
+        const interval = setInterval(loadData, 2000);
+        return () => clearInterval(interval);
+    }, [isOpen, storage]);
+
+    React.useEffect(() => {
+        window.AdvancedAnalytics = window.AdvancedAnalytics || {};
+        window.AdvancedAnalytics.openDialog   = () => setIsOpen(true);
+        window.AdvancedAnalytics.closeDialog  = () => setIsOpen(false);
+        window.AdvancedAnalytics.toggleDialog = () => setIsOpen(prev => !prev);
+        return () => {
+            delete window.AdvancedAnalytics.openDialog;
+            delete window.AdvancedAnalytics.closeDialog;
+            delete window.AdvancedAnalytics.toggleDialog;
+        };
+    }, []);
+
+    return (
+        <StaticPanel
+            id="aa-dashboard"
+            title="Advanced Analytics — Dashboard"
+            isOpen={isOpen}
+            onClose={() => setIsOpen(false)}
+        >
+            <DashboardContent liveRouteData={liveRouteData} historicalData={historicalData} />
         </StaticPanel>
     );
 }
