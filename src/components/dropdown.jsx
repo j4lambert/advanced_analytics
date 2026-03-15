@@ -4,7 +4,7 @@
 import { Portal } from '../hooks/portal.jsx';
 
 const api = window.SubwayBuilderAPI;
-const { React } = api.utils;
+const { React, icons } = api.utils;
 
 const GAP = 4; // px gap between toggler and menu
 
@@ -198,12 +198,16 @@ export function Dropdown({
     const togglerInner = togglerContent
         ? [
             React.createElement('span', { key: 'custom' }, togglerContent),
-            React.createElement('span', { key: 'caret', className: 'text-sm opacity-70' }, '⏷'),
+            React.createElement('span', { key: 'caret', className: 'text-sm opacity-70' },
+                React.createElement(icons.ChevronDown, {size: 12})
+            ),
           ]
         : [
             TogglerIcon && React.createElement(TogglerIcon, { key: 'icon', className: 'w-4 h-4' }),
             togglerText && React.createElement('span', { key: 'text' }, togglerText),
-            React.createElement('span', { key: 'caret', className: 'text-sm opacity-70' }, '⏷'),
+            React.createElement('span', { key: 'caret', className: 'text-sm opacity-70' },
+                React.createElement(icons.ChevronDown, {size: 12})
+            ),
           ].filter(Boolean);
 
     // isMeasuring: menu is in DOM but hidden while we capture its natural height
