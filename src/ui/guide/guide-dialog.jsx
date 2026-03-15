@@ -95,6 +95,93 @@ function Warning({ children }) {
     );
 }
 
+function LoadFactorBar() {
+    const zones = [
+        { flex: 40, bg: '#ef4444', label: 'Under-served', textColor: '#fff' },
+        { flex: 15, bg: '#f59e0b', label: 'Light',        textColor: '#000' },
+        { flex: 25, bg: '#22c55e', label: 'Healthy',      textColor: '#fff' },
+        { flex: 10, bg: '#f59e0b', label: 'Heavy',        textColor: '#000' },
+        { flex: 10, bg: '#ef4444', label: 'Over',         textColor: '#fff' },
+    ];
+    const ticks = [
+        { pct: 0,   label: '0%'   },
+        { pct: 40,  label: '40%'  },
+        { pct: 55,  label: '55%'  },
+        { pct: 80,  label: '80%'  },
+        { pct: 90,  label: '90%'  },
+        { pct: 100, label: '100%' },
+    ];
+    return (
+        <div className="my-4 select-none">
+            <div className="flex h-7 rounded overflow-hidden" style={{ gap: '1px' }}>
+                {zones.map((z, i) => (
+                    <div key={i}
+                         className="flex items-center justify-center text-xs font-semibold overflow-hidden"
+                         style={{ flex: z.flex, backgroundColor: z.bg, color: z.textColor }}>
+                        {z.label}
+                    </div>
+                ))}
+            </div>
+            <div className="relative" style={{ height: 28 }}>
+                {ticks.map((t, i) => (
+                    <div key={i} className="absolute top-0 flex flex-col items-center"
+                         style={{
+                             left: `${t.pct}%`,
+                             transform: i === 0 ? 'none' : i === ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
+                         }}>
+                        <div style={{ width: 1, height: 6, backgroundColor: 'currentColor' }} />
+                        <span className="text-xs text-foreground" style={{ whiteSpace: 'nowrap' }}>{t.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function HealthScoreBar() {
+    // Visual bands map the per-route utilisation ranges to their contribution
+    const bands = [
+        { flex: 40, bg: '#ef4444', label: '≤40%: 0 pts',    textColor: '#fff' },
+        { flex: 15, bg: '#f59e0b', label: '40–55%: ramp',   textColor: '#000' },
+        { flex: 25, bg: '#22c55e', label: '55–80%: full',   textColor: '#fff' },
+        { flex: 10, bg: '#f59e0b', label: '80–90%: −30%',   textColor: '#000' },
+        { flex: 30, bg: '#ef4444', label: '90–120%: −100%', textColor: '#fff' },
+    ];
+    const ticks = [
+        { pct: 0,    label: '0%'   },
+        { pct: 40,   label: '40%'  },
+        { pct: 55,   label: '55%'  },
+        { pct: 80,   label: '80%'  },
+        { pct: 90,   label: '90%'  },
+        { pct: 100,  label: '120%+' },
+    ];
+    return (
+        <div className="my-4 select-none">
+            <div className="flex h-7 rounded overflow-hidden" style={{ gap: '1px' }}>
+                {bands.map((z, i) => (
+                    <div key={i}
+                         className="flex items-center justify-center text-xs font-semibold overflow-hidden"
+                         style={{ flex: z.flex, backgroundColor: z.bg, color: z.textColor }}>
+                        {z.label}
+                    </div>
+                ))}
+            </div>
+            <div className="relative" style={{ height: 28 }}>
+                {ticks.map((t, i) => (
+                    <div key={i} className="absolute top-0 flex flex-col items-center"
+                         style={{
+                             left: `${t.pct}%`,
+                             transform: i === 0 ? 'none' : i === ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
+                         }}>
+                        <div style={{ width: 1, height: 6, backgroundColor: 'currentColor' }} />
+                        <span className="text-xs text-foreground" style={{ whiteSpace: 'nowrap' }}>{t.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function UsageThresholdBar() {
     // Zone widths are proportional to their actual percentage ranges (total = 100)
     const zones = [
@@ -187,6 +274,9 @@ export function GuideDialog({ isOpen, onClose }) {
                         <ul className="space-y-0.5">
                             <NavSection id="aa-guide-intro"       label="Introduction"  scrollTo={scrollTo} />
                             <NavSection id="aa-guide-data-modes"  label="Data Modes"    scrollTo={scrollTo} />
+                            <NavSection id="aa-guide-network"     label="Network Overview" scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-load-factor"    label="Load Factor"     icon="Gauge"        scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-health-score"   label="Health Score"    icon="HeartPulse"   scrollTo={scrollTo} />
                             <NavSection id="aa-guide-metrics"     label="Metrics"       scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-ridership"       label="Ridership"   icon="Route"    scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-throughput"      label="Throughput" icon="Container"     scrollTo={scrollTo} />
@@ -245,6 +335,91 @@ export function GuideDialog({ isOpen, onClose }) {
                         improvement, red means decline (accounting for metric direction —
                         a cost increase is negative, a revenue increase is positive). Routes
                         that were created or deleted between the two days are flagged as <span className="text-purple-500 dark:text-purple-400 font-medium border py-0.5 px-1 mx-1">NEW</span> or <span className="text-gray-400 font-medium border py-0.5 px-1 mx-1">DELETED</span>.
+                    </MetricEntry>
+
+                    {/* ── Network Overview ── */}
+                    <SectionTitle id="aa-guide-network">Network Overview</SectionTitle>
+                    <p className="text-foreground/80 mb-4">
+                        The top of the dashboard shows two system-wide headline metrics that
+                        summarise the health of your entire network at a glance, alongside
+                        quick-stat chips for routes, trains, hubs, ridership, and revenue.
+                    </p>
+
+                    <MetricEntry id="aa-guide-m-load-factor" label="System Load Factor" icon="Gauge">
+                        <p>
+                            The fraction of your network's total seat capacity that is actually
+                            being used, expressed as a percentage:
+                        </p>
+                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold">
+                            <Badge style="text-xs bg-foreground text-background">total ridership</Badge>
+                            <span>÷</span>
+                            <Badge style="text-xs bg-foreground text-background">total capacity</Badge>
+                            <span>× 100</span>
+                        </div>
+                        <p className="pb-1">
+                            This is the standard real-world transit efficiency metric — it answers
+                            the question "of all the seats the network offers today, how many
+                            are being used?" A value in the green zone means your fleet and
+                            your demand are well matched.
+                        </p>
+                        <LoadFactorBar />
+                        <ul className="list-disc pb-1">
+                            <li><span className="text-green-500 font-medium">Green (55–80%)</span> — healthy. Fleet and demand are well balanced.</li>
+                            <li><span className="text-yellow-500 font-medium">Amber (40–55% or 80–90%)</span> — light or getting heavy. Consider rebalancing.</li>
+                            <li><span className="text-red-500 font-medium">Red (&lt;40% or &gt;90%)</span> — fleet is oversized for demand, or the network is overcrowded.</li>
+                        </ul>
+                        <Note>
+                            Load Factor is a ridership-weighted average, so large high-capacity
+                            routes have more influence than small ones. A single very busy route
+                            can pull the figure up even if most routes are under-used.
+                        </Note>
+                    </MetricEntry>
+
+                    <MetricEntry id="aa-guide-m-health-score" label="Network Health Score" icon="HeartPulse">
+                        <p>
+                            A 0–100 score that measures how well your routes are operating
+                            in their ideal utilisation range. Unlike Load Factor (which just
+                            measures overall fill), the Health Score <em>penalises</em> routes
+                            that are either nearly empty or overcrowded.
+                        </p>
+                        <p className="pt-2 pb-1">
+                            Each route earns a score based on its current usage percentage:
+                        </p>
+                        <HealthScoreBar />
+                        <ul className="list-disc pb-1">
+                            <li><strong>55–80% usage</strong>: full score (1.0) — the sweet spot.</li>
+                            <li><strong>40–55% usage</strong>: partial score (ramp from 0 to 0.5) — route is lightly used but improving.</li>
+                            <li><strong>80–90% usage</strong>: mild penalty — route is getting busy.</li>
+                            <li><strong>90–120% usage</strong>: severe penalty — route is overcrowded, suppressing growth.</li>
+                            <li><strong>Below 40% or above 120%</strong>: score of 0 — route is critically under-used or saturated.</li>
+                        </ul>
+                        <p className="pb-1">
+                            Individual route scores are then averaged across the network,
+                            weighted by each route's ridership, so busy routes matter more
+                            than empty ones. The result is multiplied by 100 to give a 0–100
+                            scale.
+                        </p>
+                        <div className="grid grid-cols-5 gap-1 text-xs text-center py-2 select-none">
+                            {[
+                                { range: '0–40',  label: 'Poor',      color: '#ef4444' },
+                                { range: '40–60', label: 'Fair',      color: '#f59e0b' },
+                                { range: '60–75', label: 'Good',      color: '#84cc16' },
+                                { range: '75–90', label: 'Very Good', color: '#22c55e' },
+                                { range: '90–100',label: 'Excellent', color: '#22c55e' },
+                            ].map(b => (
+                                <div key={b.label} className="rounded p-1.5"
+                                     style={{ backgroundColor: `color-mix(in srgb, ${b.color}, transparent 80%)`, border: `1px solid ${b.color}` }}>
+                                    <div className="font-bold" style={{ color: b.color }}>{b.label}</div>
+                                    <div className="text-foreground/60">{b.range}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <Warning>
+                            The Health Score rewards <em>balanced</em> routes — it does not
+                            reward simply maximising ridership. A route at 150% usage scores
+                            zero because it is overcrowded and likely suppressing demand.
+                            Adding trains to an overcrowded route will raise the score.
+                        </Warning>
                     </MetricEntry>
 
                     {/* ── Metrics ── */}

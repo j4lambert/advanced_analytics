@@ -11,6 +11,7 @@ import { StaticPanel } from '../components/static-panel';
 import { AboutTrigger } from './about/about-trigger.jsx';
 import { GuideTrigger } from './guide/guide-trigger.jsx';
 import { StorageTrigger } from './storage/storage-trigger.jsx';
+import { SystemStats } from './dashboard/system-stats.jsx';
 import { DashboardTable } from './dashboard/dashboard-table.jsx';
 import { DashboardTrends } from './dashboard/dashboard-trends.jsx';
 import { DashboardMap } from './dashboard/dashboard-map.jsx';
@@ -52,6 +53,9 @@ export function DashboardContent({ liveRouteData, historicalData }) {
                     <StorageTrigger/>
                 </div>
             </section>
+
+            {/* System Stats — load factor + health score + quick chips */}
+            <SystemStats liveRouteData={liveRouteData} />
 
             {/* Table Section — receives pre-fetched live data */}
             <DashboardTable
