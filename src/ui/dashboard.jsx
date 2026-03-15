@@ -14,6 +14,7 @@ import { StorageTrigger } from './storage/storage-trigger.jsx';
 import { DashboardTable } from './dashboard/dashboard-table.jsx';
 import { DashboardTrends } from './dashboard/dashboard-trends.jsx';
 import { DashboardMap } from './dashboard/dashboard-map.jsx';
+import { TransferFlow } from './transfer-flow.jsx';
 import { getStorage } from '../core/lifecycle.js';
 import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
 import { INITIAL_STATE } from '../config.js';
@@ -118,6 +119,15 @@ export function Dashboard() {
                 />
             </section>
             
+            {/* Transfer Hub Flow */}
+            <section className="mt-8 mb-6">
+                <div className="py-5 flex items-baseline gap-3">
+                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Transfer Hub Flow</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Passenger flows through interchange stations</p>
+                </div>
+                <TransferFlow />
+            </section>
+
             {/* System Map */}
             <section className="mt-8 mb-6">
                 <div className="py-5 flex items-baseline gap-3">
