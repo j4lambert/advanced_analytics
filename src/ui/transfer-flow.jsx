@@ -386,23 +386,37 @@ function makeNodeRenderer(meta, hoveredRouteId) {
             baseline   = 'middle';
         }
 
-        const label = isCenter ? null : (m.label ?? '');
+        const rawLabel = isCenter ? null : (m.label ?? '');
+
+        // Adaptive font size based on node height to prevent label overlap.
+        // Aggregator labels sit above the bar so their height is irrelevant.
+        // For left/right nodes the label is vertically centred on the bar:
+        //   h ≥ 12 → full 11px   h ≥ 7 → compact 9px   h < 7 → hidden
+        // Hidden labels fall back to an SVG <title> for hover tooltip.
+        const fontSize = isAggregator ? 11
+                       : h >= 12      ? 11
+                       : h >= 7       ? 9
+                       : null;   // too thin — suppress text, keep <title>
+
+        const visibleLabel = rawLabel && fontSize != null ? rawLabel : null;
 
         return React.createElement('g', {}, [
+            // SVG tooltip for nodes whose label is suppressed
+            rawLabel && React.createElement('title', { key: 'title' }, rawLabel),
             React.createElement('rect', {
                 key: 'r',
                 x, y, width: w, height: h,
                 fill: color, fillOpacity: opacity, rx: 0,
             }),
-            label && React.createElement('text', {
+            visibleLabel && React.createElement('text', {
                 key:              'label',
                 x:                textX,
                 y:                textY,
                 textAnchor,
                 dominantBaseline: baseline,
-                fontSize:         11,
+                fontSize,
                 fill:             'var(--aa-chart-secondary-metric)',
-            }, label),
+            }, visibleLabel),
         ].filter(Boolean));
     };
 }
@@ -470,6 +484,17 @@ export function TransferSankey({ routesData, groupName, hoveredRouteId }) {
 
     const { nodes, links, meta } = buildTransferSankeyData(routesData, groupName);
 
+    // ── Dynamic sizing ─────────────────────────────────────────────────────────
+    // Each side has: up to 2 HW/WH nodes + 1 node per route.
+    // nodePadding shrinks as node count grows to avoid the chart ballooning;
+    // chartHeight guarantees each node gets at least (14 + nodePadding) px.
+    const sideCount   = routesData.length + 2;   // route nodes + HW + WH
+    const nodePadding = sideCount <= 6  ? 20
+                      : sideCount <= 10 ? 12
+                      : sideCount <= 14 ? 8
+                      : 6;
+    const chartHeight = Math.max(280, sideCount * (14 + nodePadding) + 90);
+
     // Include hoveredRouteId in memo key so renderers rebuild on hover change
     const NodeRenderer = React.useMemo(
         () => makeNodeRenderer(meta, hoveredRouteId),
@@ -483,7 +508,7 @@ export function TransferSankey({ routesData, groupName, hoveredRouteId }) {
     );
 
     return (
-        <div style={{ width: '100%', height: 280, position: 'relative' }}>
+        <div style={{ width: '100%', height: chartHeight, position: 'relative' }}>
             {/* Hub name centred above the station bar */}
             <div
                 className="absolute left-0 right-0 top-3 text-center pointer-events-none"
@@ -496,7 +521,7 @@ export function TransferSankey({ routesData, groupName, hoveredRouteId }) {
                 <charts.Sankey
                     data={{ nodes, links }}
                     nodeWidth={14}
-                    nodePadding={20}
+                    nodePadding={nodePadding}
                     iterations={0}
                     margin={{ top: 60, right: 200, bottom: 30, left: 200 }}
                     node={NodeRenderer}
