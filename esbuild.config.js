@@ -19,7 +19,7 @@ const buildOptions = {
   minify: false,
   sourcemap: false,
   banner: {
-    js: '// Advanced Analytics v1.2.0 - Built with  esbuild'
+    js: '// Advanced Analytics v1.2.1 - Built with  esbuild'
   },
   footer: {
     js: '\nif (window.SubwayBuilderAPI) { AdvancedAnalytics.init(); }'

@@ -1,6 +1,6 @@
 {
   "name": "advanced-analytics",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Advanced route analytics for Subway Builder",
   "scripts": {
     "build": "node esbuild.config.js",
