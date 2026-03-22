@@ -45,7 +45,9 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
     if (view === 'dashboard') {
         return (
             <span className="flex items-center gap-1.5">
-                Advanced Analytics — Dashboard
+                <span className="text-muted-foreground text-xs">Advanced Analytics</span>
+                <span class="border-foreground/20 border-r py-20 mx-4"/>
+                <span className="text-xs text-muted-foreground">Dashboard</span>
             </span>
         );
     }
@@ -55,7 +57,7 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
     return (
         <span className="flex items-center gap-1.5">
             <span className="text-muted-foreground text-xs">Advanced Analytics</span>
-            <span className="text-muted-foreground text-xs">—</span>
+            <span class="border-foreground/20 border-r py-20 mx-4"/>
 
             {/* Clickable "Dashboard" crumb */}
             <button
@@ -67,7 +69,7 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
 
             {/* Separator */}
             {React.createElement(icons.ChevronRight, {
-                size: 12,
+                size: 20,
                 className: 'text-muted-foreground shrink-0',
             })}
 
