@@ -122,7 +122,11 @@ async function _pruneFutureHistoricalData(storage, api) {
         let   pruned         = false;
 
         for (const day of Object.keys(historicalData.days)) {
-            if (parseInt(day) >= currentDay) {
+            // Use strict greater-than: the current day may already have a completed
+            // snapshot (onDayChange fires before getCurrentDay() advances), so we
+            // must NOT prune it.  Only days strictly beyond currentDay are future
+            // data that can appear after a save-rewind.
+            if (parseInt(day) > currentDay) {
                 delete historicalData.days[day];
                 pruned = true;
             }
