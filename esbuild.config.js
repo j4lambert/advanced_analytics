@@ -1,5 +1,5 @@
 const esbuild = require('esbuild');
-const { version } = require('./package.json');
+const { version } = require('./manifest.json');
 
 // Check if --watch flag is present
 const isWatch = process.argv.includes('--watch');
