@@ -293,7 +293,13 @@ export class Storage {
         const day        = api.gameState.getCurrentDay();
 
         const meta = await _getMeta();
-        meta[save] = { cityCode, routeCount: routes.length, day, stationCount: stations.length };
+        meta[save] = {
+            cityCode,
+            routeCount:   routes.length,
+            day,
+            stationCount: stations.length,
+            modVersion:   __MOD_VERSION__,   // stored for future migration checks
+        };
 
         workingEntries[Keys.meta()] = meta;
 

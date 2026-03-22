@@ -1,4 +1,5 @@
 const esbuild = require('esbuild');
+const { version } = require('./package.json');
 
 // Check if --watch flag is present
 const isWatch = process.argv.includes('--watch');
@@ -15,11 +16,17 @@ const buildOptions = {
   loader: {
     '.jsx': 'jsx'
   },
+  // Inject the mod version from package.json as a compile-time constant.
+  // Use __MOD_VERSION__ anywhere in source code; esbuild replaces it with
+  // the literal string at build time. To bump the version, edit package.json only.
+  define: {
+    __MOD_VERSION__: JSON.stringify(version),
+  },
   external: [],
   minify: false,
   sourcemap: false,
   banner: {
-    js: '// Advanced Analytics v1.2.1 - Built with  esbuild'
+    js: `// Advanced Analytics v${version} - Built with esbuild`
   },
   footer: {
     js: '\nif (window.SubwayBuilderAPI) { AdvancedAnalytics.init(); }'

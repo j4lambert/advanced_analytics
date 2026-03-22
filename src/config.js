@@ -1,7 +1,9 @@
 // Configuration constants for Advanced Analytics
+// __MOD_VERSION__ is injected at build time by esbuild from package.json.
+// To bump the version, edit "version" in package.json only.
 
 export const CONFIG = {
-    VERSION: '1.2.1',
+    VERSION: __MOD_VERSION__,
     
     UTILIZATION_THRESHOLDS: {
         CRITICAL_LOW: 30,

@@ -44,6 +44,7 @@ export async function handleMapReadyFallback(api) {
     }
 
     await storage.restore();
+    await _runMigrations(currentSaveName, storage);
 
     // Prune historical entries that belong to days in the future
     // (can appear when a save file is rewound to an earlier day)
@@ -168,6 +169,7 @@ export function initLifecycleHooks(api) {
         }
 
         await storage.restore();
+        await _runMigrations(currentSaveName, storage);
 
         // Prune stale future-day historical data
         await _pruneFutureHistoricalData(storage, api);
@@ -291,6 +293,43 @@ async function _setRouteStatus(routeId, status, day, storage, creationTime = nul
     }
 
     await storage.set('routeStatuses', statuses);
+}
+
+/**
+ * Run data migrations for a save that was last written by an older mod version.
+ *
+ * Called once after restore() on every game load, before any other processing.
+ * Read the stored modVersion from metadata, compare to __MOD_VERSION__, and
+ * apply any necessary transformations to persisted data.
+ *
+ * Pattern for future migrations:
+ *   if (!storedVersion || compareVersions(storedVersion, '2.0.0') < 0) {
+ *       await _migrateToV2(storage);
+ *   }
+ *
+ * @param {string} saveName
+ * @param {Object} storageInstance
+ */
+async function _runMigrations(saveName, storageInstance) {
+    try {
+        const saves         = await Storage.getAllSaves();
+        const storedVersion = saves[saveName]?.modVersion ?? null;
+
+        if (storedVersion === __MOD_VERSION__) return;  // nothing to do
+
+        // ── Future migration blocks go here ─────────────────────────────────
+        // Example:
+        // if (!storedVersion || compareVersions(storedVersion, '2.0.0') < 0) {
+        //     await _migrateToV2(storageInstance);
+        // }
+        // ────────────────────────────────────────────────────────────────────
+
+        if (storedVersion !== __MOD_VERSION__) {
+            console.log(`${CONFIG.LOG_PREFIX} [Migration] ${storedVersion ?? 'pre-versioning'} → ${__MOD_VERSION__} (no data changes needed)`);
+        }
+    } catch (e) {
+        console.error(`${CONFIG.LOG_PREFIX} [Migration] Failed:`, e);
+    }
 }
 
 /**

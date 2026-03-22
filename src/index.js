@@ -1,4 +1,5 @@
-// Advanced Analytics v1.2.1
+// Advanced Analytics
+// Version is injected at build time — see package.json and esbuild.config.js
 //
 // Historical per-route advanced analytics to Subway Builder
 // https://github.com/stefanorigano/advanced_analytics
