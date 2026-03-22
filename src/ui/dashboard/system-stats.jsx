@@ -91,12 +91,12 @@ const getCityName = (cityCode) => {
 // and ends at the right (110, 62) when score = 100.
 
 function GaugeArc({ score }) {
-    const cx = 60, cy = 62, r = 48, sw = 9;
+    const cx = 60, cy = 62, r = 48, sw = 6;
     const s  = Math.max(0, Math.min(1, score / 100));
     const c  = healthColor(score);
 
-    // Background: full semi-circle  M left A r r 0 1 0 right
-    const bg = `M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy}`;
+    // Background: full semi-circle
+    const bg = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
 
     // Fill arc for score s (clockwise from left, through top, to score-angle)
     let fill = null;
@@ -112,25 +112,25 @@ function GaugeArc({ score }) {
             {/* Zone ticks at 40 / 55 / 80 / 90 */}
             {[40, 55, 80, 90].map(t => {
                 const a = Math.PI * (1 - t / 100);
-                const x1 = cx + (r - sw / 2 - 2) * Math.cos(a);
-                const y1 = cy - (r - sw / 2 - 2) * Math.sin(a);
-                const x2 = cx + (r + sw / 2 + 2) * Math.cos(a);
-                const y2 = cy - (r + sw / 2 + 2) * Math.sin(a);
+                const x1 = cx + (r - sw / 2 ) * Math.cos(a);
+                const y1 = cy - (r - sw / 2 ) * Math.sin(a);
+                const x2 = cx + (r + sw / 2 ) * Math.cos(a);
+                const y2 = cy - (r + sw / 2 ) * Math.sin(a);
                 return (
                     <line
                         key={t}
                         x1={x1.toFixed(1)} y1={y1.toFixed(1)}
                         x2={x2.toFixed(1)} y2={y2.toFixed(1)}
-                        stroke="var(--background, #fff)"
+                        stroke="currentColor"
                         strokeWidth="1.5"
-                        opacity="0.7"
+                        opacity="0.25"
                     />
                 );
             })}
 
             {/* Background arc */}
-            {/*<path d={bg} fill="none" stroke="#94a3b8" strokeWidth={sw}*/}
-            {/*      strokeLinecap="round" opacity="0.25" />*/}
+            <path d={bg} fill="none" stroke="#94a3b8" strokeWidth={sw}
+                  strokeLinecap="round" opacity="0.25" />
 
             {/* Filled arc */}
             {fill && (
@@ -188,7 +188,7 @@ function LoadFactorBar({ pct }) {
             </div>
 
             {/* Zoned progress bar */}
-            <div className="relative h-3 rounded-full overflow-hidden">
+            <div className="relative h-3 rounded-sm overflow-hidden">
                 {/* Zone backgrounds */}
                 <div className="absolute inset-0 flex">
                     {ZONE_SEGMENTS.map((z, i) => (
@@ -197,7 +197,7 @@ function LoadFactorBar({ pct }) {
                     ))}
                 </div>
                 {/* Fill */}
-                <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                <div className="absolute inset-y-0 left-0 rounded-sm transition-all duration-700"
                      style={{ width: `${fillPct}%`, background: color, opacity: 0.85 }} />
                 {/* Over-capacity hatch */}
                 {overCap && (
