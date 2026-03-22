@@ -260,7 +260,7 @@ export function GuideDialog({ isOpen, onClose }) {
         <Dialog
             id="aa-guide-dialog"
             title="User Guide"
-            size={980}
+            size={1180}
             noPadding={true}
             isOpen={isOpen}
             onClose={onClose}
