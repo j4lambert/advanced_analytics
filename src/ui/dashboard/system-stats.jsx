@@ -3,15 +3,16 @@
 // Shows two headline metrics + a row of quick-stat chips.
 //
 // ── SYSTEM LOAD FACTOR ───────────────────────────────────────────────────────
-//   total_ridership / total_capacity  (= ridership-weighted mean utilisation)
-//   The most common real-world transit metric. A single number that answers
-//   "of all the seats the network offers today, how many are being used?"
+//   Ridership-weighted average of per-route load factors.
+//   Each route's load factor = peak segment load ÷ train capacity, so this
+//   answers "across the whole network, how full are trains at their busiest
+//   point on each route, weighted by how many people ride each route?"
 //   Zones: <40% under-served · 40–55% light · 55–80% healthy · 80–90% heavy
 //          >90% overcrowded
 //
 // ── NETWORK HEALTH SCORE ─────────────────────────────────────────────────────
 //   Ridership-weighted average of a per-route "health" function that rewards
-//   utilisation in the 55–80% sweet spot and penalises both waste and crowding:
+//   load factor in the 55–80% sweet spot and penalises both waste and crowding:
 //
 //     score(u) = 0               u ≤ 40%
 //              = (u-40)/15 × 0.5  40 < u ≤ 55%   (ramp up)
@@ -250,13 +251,14 @@ export function SystemStats({ liveRouteData }) {
         const totalTrains    = routes.reduce((s, r) => s + (r.totalTrains ?? 0), 0);
         const totalRevenue   = routes.reduce((s, r) => s + (r.dailyRevenue ?? 0), 0);
 
-        const loadFactor = totalCapacity > 0
-            ? (totalRidership / totalCapacity) * 100
+        // Ridership-weighted average of per-route load factors (each already 0–100)
+        const loadFactor = totalRidership > 0
+            ? routes.reduce((s, r) => s + (r.ridership ?? 0) * (r.loadFactor ?? 0), 0) / totalRidership
             : 0;
 
         const healthScore = totalRidership > 0
             ? routes.reduce((s, r) =>
-                s + (r.ridership ?? 0) * routeHealthScore(r.utilization ?? 0)
+                s + (r.ridership ?? 0) * routeHealthScore(r.loadFactor ?? 0)
               , 0) / totalRidership * 100
             : 0;
 
@@ -311,7 +313,7 @@ export function SystemStats({ liveRouteData }) {
                             System Load Factor
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                            Total ridership ÷ total capacity
+                            Ridership-weighted avg. peak segment load
                         </p>
                     </div>
                     <LoadFactorBar pct={stats.loadFactor} />
@@ -324,7 +326,7 @@ export function SystemStats({ liveRouteData }) {
                             Network Health Score
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                            Ridership-weighted utilisation quality (0–100)
+                            Ridership-weighted load factor quality (0–100)
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
@@ -337,8 +339,8 @@ export function SystemStats({ liveRouteData }) {
                                 {healthLabel(stats.healthScore)}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                                Routes in the 55–80% range score highest.<br/>
-                                Empty or overcrowded routes lower the score.
+                                Routes with load factor 55–80% score highest.<br/>
+                                Under-served or overcrowded routes lower the score.
                             </p>
                         </div>
                     </div>

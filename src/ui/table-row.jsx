@@ -86,7 +86,27 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                 />
             )}
             
-            {/* Utilization - performance */}
+            {/* Load Factor (primary efficiency metric) - performance */}
+            {isColumnVisible('performance') && (
+                row.isComparison ? (
+                    <ComparisonCell
+                        columnKey="loadFactor"
+                        value={row.loadFactor}
+                        primaryValue={row.primaryValues?.loadFactor}
+                        secondaryValue={row.secondaryValues?.loadFactor}
+                        showPercentages={true}
+                        sortState={sortState}
+                        groupState={groupState}
+                        group="performance"
+                    />
+                ) : (
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getUtilizationClasses(row.loadFactor)} ${getCellClasses('loadFactor', sortState, groupState, 'performance')}`}>
+                        {row.loadFactor > 0 ? `${row.loadFactor}%` : '—'}
+                    </td>
+                )
+            )}
+
+            {/* Utilization (secondary: throughput-based) - performance */}
             {isColumnVisible('performance') && (
                 row.isComparison ? (
                     <ComparisonCell
@@ -100,7 +120,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         group="performance"
                     />
                 ) : (
-                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getUtilizationClasses(row.utilization)} ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
                         {row.utilization}%
                     </td>
                 )

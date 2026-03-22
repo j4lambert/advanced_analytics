@@ -96,8 +96,8 @@ function getUtilLabel(u) {
 
 // ── Usage gauge (hero metric) ──────────────────────────────────────────────────
 
-function UsageGauge({ utilization, ridership, capacity }) {
-    const pct      = Math.max(utilization || 0, 0);
+function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
+    const pct      = Math.max(loadFactor || 0, 0);
     const barWidth = Math.min(pct, 100);
     const overflow = pct > 100;
     const colors   = getUtilColors(pct);
@@ -108,14 +108,14 @@ function UsageGauge({ utilization, ridership, capacity }) {
         <div className="rounded flex flex-col border bg-muted/30 px-6 py-5">
             {/* Header row */}
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                Usage
+                Load Factor
             </div>
             <div className={"my-auto"}>
-                <div className="flex justify-between">
-                    <div className={`font-bold ${colors.text}`}>{label}</div>
+                <div className="flex justify-between items-start">
+                    <div className={`font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
                     <div className={`text-5xl font-bold tabular-nums leading-none ${colors.text}`}>
-                        {pct.toFixed(1)}
-                        <span className="text-2xl font-medium ml-0.5">%</span>
+                        {pct > 0 ? pct.toFixed(1) : '—'}
+                        {pct > 0 && <span className="text-2xl font-medium ml-0.5">%</span>}
                     </div>
                 </div>
 
@@ -145,8 +145,11 @@ function UsageGauge({ utilization, ridership, capacity }) {
 
                 {/* Footer */}
                 <div className="flex justify-between text-xs text-muted-foreground mt-3">
-                    <span>Healthy range: {WARNING_LOW}–{WARNING_HIGH}%</span>
-                    <span>{Math.round(ridership || 0).toLocaleString()} riders {' / '} {(capacity || 0).toLocaleString()} capacity</span>
+                    <span>Peak train load ÷ train capacity</span>
+                    <span className="text-right">
+                        Throughput: {utilization}%
+                        <span className="ml-1 opacity-60">({Math.round(ridership || 0).toLocaleString()} / {(capacity || 0).toLocaleString()})</span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -204,8 +207,9 @@ export function RouteContent({ routeId }) {
     return (
         <div className={"pb-6"}>
             <section className={'grid grid-cols-2 gap-4'}>
-                {/* ── Usage (hero) ── */}
+                {/* ── Load Factor (hero) ── */}
                 <UsageGauge
+                    loadFactor={data.loadFactor}
                     utilization={data.utilization}
                     ridership={Math.round(data.ridership)}
                     capacity={data.capacity}

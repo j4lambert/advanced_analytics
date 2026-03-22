@@ -100,6 +100,7 @@ export function calculateRouteMetrics(route, trainType, ridership, dailyRevenue)
     return {
         capacity,
         utilization,
+        loadFactor: 0, // requires segment load data — computed in accumulator
         stations,
         trainsLow: trainCounts.low,
         trainsMedium: trainCounts.medium,

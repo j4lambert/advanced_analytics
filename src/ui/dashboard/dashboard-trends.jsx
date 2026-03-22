@@ -31,6 +31,7 @@ const { React, icons, charts } = api.utils;
 const CHART_METRICS = [
     { key: 'ridership',   label: 'Ridership',      color: '#3b82f6' },
     { key: 'capacity',    label: 'Throughput',     color: '#8b5cf6' },
+    { key: 'loadFactor',  label: 'Load Factor %',  color: '#f97316' },
     { key: 'utilization', label: 'Usage %',        color: '#22c55e' },
     { key: 'dailyCost',   label: 'Daily Cost',     color: '#ef4444' },
     { key: 'dailyRevenue',label: 'Daily Revenue',  color: '#10b981' },
@@ -72,7 +73,7 @@ function buildTodayPoint(liveRouteData, metricKey) {
 export function DashboardTrends({ historicalData, liveRouteData = [] }) {
     const [chartType,       setChartType]       = React.useState('line');
     const [selectedRoutes,  setSelectedRoutes]  = React.useState([]);
-    const [selectedMetric,  setSelectedMetric]  = React.useState('utilization');
+    const [selectedMetric,  setSelectedMetric]  = React.useState('loadFactor');
     const [timeframe,       setTimeframe]        = React.useState('7');
     const [hoveredRoute,    setHoveredRoute]     = React.useState(null);
 
@@ -414,7 +415,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
             if (value >= 1_000)     return `$${(value / 1_000).toFixed(0)}k`;
             return `$${value}`;
         }
-        if (metricKey === 'utilization') return `${value}%`;
+        if (['utilization', 'loadFactor'].includes(metricKey)) return `${value}%`;
         if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
         return value.toLocaleString();
     };
@@ -424,7 +425,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
         if (['dailyCost', 'dailyRevenue', 'dailyProfit'].includes(metricKey)) {
             return `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
         }
-        if (metricKey === 'utilization') return `${value}%`;
+        if (['utilization', 'loadFactor'].includes(metricKey)) return `${value}%`;
         return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
     };
 

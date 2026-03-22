@@ -38,6 +38,7 @@
 
 import { CONFIG } from '../config.js';
 import { calculateTransfers } from './transfers.js';
+import { getRouteStationsInOrder, isCircularRoute, computeMaxSegmentLoadFraction } from '../utils/route-utils.js';
 
 const TAG                 = '[AA:ACC]';
 const POLL_INTERVAL_MS    = 500;
@@ -60,9 +61,10 @@ let _lastRevWeights  = {}; // routeId → proportion  (values sum to 1)
 let _lastCostWeights = {}; // routeId → proportion  (values sum to 1)
 
 // Poll-refreshed caches
-let _routesCache     = null; // current routes array
-let _trainTypesCache = null; // { trainTypeId: trainType }
-let _transfersCache  = null; // { routeId: { count, routes, routeIds, stationIds } }
+let _routesCache        = null; // current routes array
+let _trainTypesCache    = null; // { trainTypeId: trainType }
+let _transfersCache     = null; // { routeId: { count, routes, routeIds, stationIds } }
+let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 
 // Timers
 let _pollTimer       = null;
@@ -79,6 +81,7 @@ function _emptyStats() {
         ridership:          0,
         capacity:           0,
         utilization:        0,
+        loadFactor:         0,
         stations:           0,
         transfers:          { count: 0, routes: [], routeIds: [], stationIds: [] },
         trainsHigh:         0,
@@ -238,10 +241,18 @@ function _computeStatsForWindow(routeId, cutoff, now) {
 
     let capacity    = 0;
     let utilization = 0;
+    let loadFactor  = 0;
 
     if (trainType) {
         capacity    = _computeStaticCapacity(route, trainType);
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
+
+        // loadFactor = (fraction of ridership on the busiest segment) × utilization
+        // The fraction is scale-invariant (normalises cumulative commute counts).
+        const maxSegmentFraction = _segmentLoadsCache[routeId] ?? 0;
+        loadFactor = capacity > 0 && maxSegmentFraction > 0
+            ? Math.round(maxSegmentFraction * (ridership / capacity) * 100)
+            : 0;
     }
 
     const profit            = revenue - cost;
@@ -254,6 +265,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         ridership,
         capacity,
         utilization,
+        loadFactor,
         stations,
         transfers,
         trainsHigh:     trainCounts.high,
@@ -308,11 +320,28 @@ function _tick() {
     _routesCache     = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
 
-    // ── Refresh transfers cache every N ticks ───────────────────────────
+    // ── Refresh transfers + segment loads cache every N ticks ───────────
     _transfersTick++;
     if (_transfersTick % TRANSFERS_REFRESH_N === 0) {
         try {
             _transfersCache = calculateTransfers(routes, _api);
+        } catch (_) {
+            // Non-critical — retain previous cache
+        }
+
+        try {
+            const commutes    = _api.gameState.getCompletedCommutes?.() ?? [];
+            const allStations = _api.gameState.getStations();
+            const newLoads    = {};
+            for (const route of routes) {
+                const ordered    = getRouteStationsInOrder(route.id, _api);
+                const orderedIds = ordered.map(s => s.id);
+                const circular   = isCircularRoute(route, allStations);
+                newLoads[route.id] = computeMaxSegmentLoadFraction(
+                    route.id, orderedIds, commutes, circular
+                );
+            }
+            _segmentLoadsCache = newLoads;
         } catch (_) {
             // Non-critical — retain previous cache
         }
@@ -367,14 +396,15 @@ export function stopAccumulating() {
  * Call BEFORE restoreEvents when loading a save, to discard stale in-memory data.
  */
 export function clearAccumulatorState() {
-    _revEvents       = [];
-    _costEvents      = [];
-    _lastRevWeights  = {};
-    _lastCostWeights = {};
-    _routesCache     = null;
-    _trainTypesCache = null;
-    _transfersCache  = null;
-    _transfersTick   = 0;
+    _revEvents          = [];
+    _costEvents         = [];
+    _lastRevWeights     = {};
+    _lastCostWeights    = {};
+    _routesCache        = null;
+    _trainTypesCache    = null;
+    _transfersCache     = null;
+    _segmentLoadsCache  = {};
+    _transfersTick      = 0;
 }
 
 // ── Live rolling queries ───────────────────────────────────────────────────

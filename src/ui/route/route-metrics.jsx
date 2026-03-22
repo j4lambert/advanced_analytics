@@ -26,15 +26,16 @@ const { React, icons, charts } = api.utils;
 const METRICS = [
     { key: 'ridership',    label: 'Ridership',     color: '#3b82f6', unit: 'people'    },
     { key: 'capacity',     label: 'Throughput',    color: '#8b5cf6', unit: 'people'    },
-    { key: 'dailyProfit',  label: 'Profit',  color: '#06b6d4', unit: 'currency'  },
-    { key: 'dailyRevenue', label: 'Revenue', color: '#10b981', unit: 'currency'  },
-    { key: 'dailyCost',    label: 'Cost',    color: '#ef4444', unit: 'currency'  },
-    { key: 'utilization',  label: 'Usage',       color: '#22c55e', unit: 'percent'   },
+    { key: 'dailyProfit',  label: 'Profit',        color: '#06b6d4', unit: 'currency'  },
+    { key: 'dailyRevenue', label: 'Revenue',       color: '#10b981', unit: 'currency'  },
+    { key: 'dailyCost',    label: 'Cost',          color: '#ef4444', unit: 'currency'  },
+    { key: 'loadFactor',   label: 'Load Factor',   color: '#f97316', unit: 'percent'   },
+    { key: 'utilization',  label: 'Throughput %',  color: '#22c55e', unit: 'percent'   },
     { key: 'transfers',    label: 'Transfers',     color: '#f59e0b', unit: 'transfers' },
     { key: 'totalTrains',  label: 'Trains',        color: '#a78bfa', unit: 'trains'    },
 ];
 
-const DEFAULT_METRICS = ['ridership', 'utilization', 'dailyProfit'];
+const DEFAULT_METRICS = ['ridership', 'loadFactor', 'dailyProfit'];
 
 // Priority order for axis slot assignment (index 0 = highest priority = left axis)
 const UNIT_PRIORITY = ['people', 'currency', 'percent', 'transfers', 'trains'];

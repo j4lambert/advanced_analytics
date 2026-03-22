@@ -139,7 +139,7 @@ function LoadFactorBar() {
 }
 
 function HealthScoreBar() {
-    // Visual bands map the per-route utilisation ranges to their contribution
+    // Visual bands map the per-route load factor ranges to their score contribution
     const bands = [
         { flex: 40, bg: '#ef4444', label: '≤40%: 0 pts',    textColor: '#fff' },
         { flex: 15, bg: '#f59e0b', label: '40–55%: ramp',   textColor: '#000' },
@@ -280,7 +280,8 @@ export function GuideDialog({ isOpen, onClose }) {
                             <NavSection id="aa-guide-metrics"     label="Metrics"       scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-ridership"       label="Ridership"   icon="Route"    scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-throughput"      label="Throughput" icon="Container"     scrollTo={scrollTo} />
-                            <NavItem    id="aa-guide-m-usage"           label="Usage" icon="Scale"          scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-load-factor-route" label="Load Factor" icon="Gauge"  scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-usage"           label="Usage (cap.)" icon="Scale"   scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-trains"          label="Trains" icon="TramFront"         scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-stations"        label="Stations" icon="Building2"       scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-transfers"       label="Transfers" icon="Component"     scrollTo={scrollTo} />
@@ -347,59 +348,70 @@ export function GuideDialog({ isOpen, onClose }) {
 
                     <MetricEntry id="aa-guide-m-load-factor" label="System Load Factor" icon="Gauge">
                         <p>
-                            The fraction of your network's total seat capacity that is actually
-                            being used, expressed as a percentage:
+                            A system-wide view of train crowding — how full trains are at their
+                            busiest point across every route in your network. Computed as a
+                            ridership-weighted average of each route's individual Load Factor:
                         </p>
-                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold">
+                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold flex-wrap">
+                            <span>Σ (</span>
+                            <Badge style="text-xs bg-foreground text-background">route ridership</Badge>
+                            <span>×</span>
+                            <Badge style="text-xs bg-foreground text-background">route load factor</Badge>
+                            <span>) ÷</span>
                             <Badge style="text-xs bg-foreground text-background">total ridership</Badge>
-                            <span>÷</span>
-                            <Badge style="text-xs bg-foreground text-background">total capacity</Badge>
-                            <span>× 100</span>
                         </div>
                         <p className="pb-1">
-                            This is the standard real-world transit efficiency metric — it answers
-                            the question "of all the seats the network offers today, how many
-                            are being used?" A value in the green zone means your fleet and
-                            your demand are well matched.
+                            Because it is ridership-weighted, routes that carry more passengers
+                            have more influence on the result. A single very busy and crowded route
+                            will pull the figure up even if other routes are lightly loaded.
+                        </p>
+                        <p className="pb-1">
+                            This metric measures actual <em>crowding</em>, not schedule fill.
+                            It answers the question: "across the whole network, how packed are
+                            trains at their busiest point?" See the per-route{' '}
+                            <button
+                                onClick={() => document.getElementById('aa-guide-m-load-factor-route')
+                                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                                className="underline text-foreground hover:text-foreground/70"
+                            >Load Factor</button> metric for how each route's value is computed.
                         </p>
                         <LoadFactorBar />
                         <ul className="list-disc pb-1">
-                            <li><span className="text-green-500 font-medium">Green (55–80%)</span> — healthy. Fleet and demand are well balanced.</li>
-                            <li><span className="text-yellow-500 font-medium">Amber (40–55% or 80–90%)</span> — light or getting heavy. Consider rebalancing.</li>
-                            <li><span className="text-red-500 font-medium">Red (&lt;40% or &gt;90%)</span> — fleet is oversized for demand, or the network is overcrowded.</li>
+                            <li><span className="text-green-500 font-medium">Green (55–80%)</span> — healthy. Trains are well-loaded without overcrowding.</li>
+                            <li><span className="text-yellow-500 font-medium">Amber (40–55%)</span> — light. Trains are running with plenty of spare room.</li>
+                            <li><span className="text-yellow-500 font-medium">Amber (80–90%)</span> — heavy. Some routes are getting crowded at peak.</li>
+                            <li><span className="text-red-500 font-medium">Red (&lt;40%)</span> — under-served. Trains are mostly empty; consider fewer or smaller trains.</li>
+                            <li><span className="text-red-500 font-medium">Red (&gt;90%)</span> — overcrowded. Passengers are being left behind; add trains or capacity.</li>
                         </ul>
-                        <Note>
-                            Load Factor is a ridership-weighted average, so large high-capacity
-                            routes have more influence than small ones. A single very busy route
-                            can pull the figure up even if most routes are under-used.
-                        </Note>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-health-score" label="Network Health Score" icon="HeartPulse">
                         <p>
                             A 0–100 score that measures how well your routes are operating
-                            in their ideal utilisation range. Unlike Load Factor (which just
-                            measures overall fill), the Health Score <em>penalises</em> routes
-                            that are either nearly empty or overcrowded.
+                            in their ideal crowding range. Unlike System Load Factor (which reports
+                            average crowding), the Health Score <em>penalises</em> routes that
+                            are either nearly empty or overcrowded, rewarding balanced,
+                            well-utilised service.
                         </p>
                         <p className="pt-2 pb-1">
-                            Each route earns a score based on its current usage percentage:
+                            Each route earns a score based on its <strong>Load Factor</strong> — how full
+                            trains are at their busiest segment:
                         </p>
                         <HealthScoreBar />
                         <ul className="list-disc pb-1">
-                            <li><strong>55–80% usage</strong>: full score (1.0) — the sweet spot.</li>
-                            <li><strong>40–55% usage</strong>: partial score (ramp from 0 to 0.5) — route is lightly used but improving.</li>
-                            <li><strong>80–90% usage</strong>: mild penalty — route is getting busy.</li>
-                            <li><strong>90–120% usage</strong>: severe penalty — route is overcrowded, suppressing growth.</li>
-                            <li><strong>Below 40% or above 120%</strong>: score of 0 — route is critically under-used or saturated.</li>
+                            <li><strong>55–80% load factor</strong>: full score (1.0) — trains are well-loaded without crowding.</li>
+                            <li><strong>40–55% load factor</strong>: partial score (ramp 0 → 0.5) — route is lightly loaded but functional.</li>
+                            <li><strong>80–90% load factor</strong>: mild penalty — peak trains are getting crowded.</li>
+                            <li><strong>90–120% load factor</strong>: severe penalty — trains are overcrowded at peak, likely suppressing demand.</li>
+                            <li><strong>Below 40% or above 120%</strong>: score of 0 — trains are critically empty or severely overcrowded.</li>
                         </ul>
                         <p className="pb-1">
                             Individual route scores are then averaged across the network,
                             weighted by each route's ridership, so busy routes matter more
-                            than empty ones. The result is multiplied by 100 to give a 0–100
+                            than quiet ones. The result is multiplied by 100 to give a 0–100
                             scale.
                         </p>
-                        <div className="grid grid-cols-5 gap-1 text-xs text-center py-2 select-none">
+                        <div className="grid grid-cols-5 gap-2 text-xs text-center py-2 select-none">
                             {[
                                 { range: '0–40',  label: 'Poor',      color: '#ef4444' },
                                 { range: '40–60', label: 'Fair',      color: '#f59e0b' },
@@ -416,9 +428,10 @@ export function GuideDialog({ isOpen, onClose }) {
                         </div>
                         <Warning>
                             The Health Score rewards <em>balanced</em> routes — it does not
-                            reward simply maximising ridership. A route at 150% usage scores
-                            zero because it is overcrowded and likely suppressing demand.
-                            Adding trains to an overcrowded route will raise the score.
+                            reward simply maximising ridership. A route whose busiest train is
+                            at 150% capacity scores zero because overcrowding suppresses
+                            further demand growth. Adding trains or capacity to those routes
+                            will raise the score.
                         </Warning>
                     </MetricEntry>
 
@@ -467,31 +480,152 @@ export function GuideDialog({ isOpen, onClose }) {
                         </Note>
                     </MetricEntry>
 
-                    <MetricEntry id="aa-guide-m-usage" label="Usage" icon="Scale">
-                        <p className='pb-1'>
-                            Ridership as a percentage of throughput — how full the route is relative
-                            to its capacity. Color-coded for quick reading:
+                    <MetricEntry id="aa-guide-m-load-factor-route" label="Load Factor" icon="Gauge">
+                        <p className="pb-1">
+                            The primary crowding metric. It measures how full trains are at
+                            the <em>busiest segment</em> on the route — the stretch of track
+                            between two consecutive stations where the most passengers are on
+                            board simultaneously:
                         </p>
+                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold flex-wrap">
+                            <Badge style="text-xs bg-foreground text-background">peak segment load</Badge>
+                            <span>÷</span>
+                            <Badge style="text-xs bg-foreground text-background">train capacity</Badge>
+                            <span>× 100</span>
+                        </div>
+                        <p className="pb-1">
+                            A value of 100% means trains are exactly at capacity at their
+                            busiest point. Values above 100% indicate overcrowding.
+                        </p>
+                        <LoadFactorBar />
+
+                        <p className="font-semibold pt-1 pb-1">How direction affects the calculation</p>
+                        <p className="pb-2">
+                            Subway Builder routes come in two shapes, and the calculation
+                            handles them differently:
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 pb-3">
+                            <div className="rounded-lg border border-border p-3 space-y-1">
+                                <p className="font-semibold text-foreground">Back-and-forth (pendulum)</p>
+                                <p className="text-foreground/70 text-xs">
+                                    Trains go A → B → A. Passengers travel in both directions
+                                    through the same stations, so HW and WH commuters are
+                                    counted separately. The peak load in each direction is found
+                                    independently, and the higher of the two is used.
+                                    This prevents outbound and inbound passengers from
+                                    cancelling each other out in the maths.
+                                </p>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 space-y-1">
+                                <p className="font-semibold text-foreground">Loop (circular)</p>
+                                <p className="text-foreground/70 text-xs">
+                                    Trains always travel in one direction around the loop.
+                                    All passengers are flowing the same way, so no direction
+                                    split is needed — the peak segment load is read directly
+                                    from the cumulative journey data.
+                                </p>
+                            </div>
+                        </div>
+
+                        <p className="font-semibold pt-1 pb-1">Data source and accuracy</p>
+                        <p className="pb-2">
+                            Load Factor is derived from the game's completed-commutes records,
+                            which accumulate over all game days. To avoid values growing with
+                            game time, the calculation normalises the peak segment load as a
+                            fraction of total boardings on that route, then scales it against
+                            the current Usage figure. The result is a stable percentage that
+                            does not inflate as the game progresses.
+                        </p>
+                        <Note>
+                            Because the commute data has no timestamps, Load Factor reflects
+                            an <em>average</em> picture across the whole day — not the literal
+                            instantaneous peak. A route that is completely packed only during
+                            rush hour will show a lower Load Factor than the rush-hour crowd
+                            alone would suggest.
+                        </Note>
+
+                        <p className="font-semibold pt-3 pb-1">Load Factor vs Usage (cap.) — when to use each</p>
+                        <div className="grid grid-cols-2 gap-3 pb-1">
+                            <div className="rounded-lg border border-border p-3 space-y-1.5">
+                                <p className="font-semibold text-foreground">Use Load Factor when…</p>
+                                <ul className="list-disc text-foreground/70 text-xs space-y-1">
+                                    <li>Checking whether passengers are being left behind at stops.</li>
+                                    <li>Deciding if you need to add trains or longer consists to a specific segment.</li>
+                                    <li>Comparing two routes' actual service quality.</li>
+                                    <li>Looking at the Network Health Score, which is also based on Load Factor.</li>
+                                </ul>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 space-y-1.5">
+                                <p className="font-semibold text-foreground">Use Usage (cap.) when…</p>
+                                <ul className="list-disc text-foreground/70 text-xs space-y-1">
+                                    <li>Evaluating overall schedule efficiency (are you running too many trains?).</li>
+                                    <li>Doing financial analysis — cost scales with trains, not with crowding at one segment.</li>
+                                    <li>Comparing how well two routes fill their <em>whole</em> schedule, not just their peak.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </MetricEntry>
+
+                    <MetricEntry id="aa-guide-m-usage" label="Usage (cap.)" icon="Scale">
+                        <p className='pb-1'>
+                            Daily ridership as a percentage of total 24-hour throughput capacity —
+                            how much of the route's full schedule is being filled:
+                        </p>
+                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold flex-wrap">
+                            <Badge style="text-xs bg-foreground text-background">daily ridership</Badge>
+                            <span>÷</span>
+                            <Badge style="text-xs bg-foreground text-background">24 h throughput ceiling</Badge>
+                            <span>× 100</span>
+                        </div>
                         <UsageThresholdBar />
                         <ul className="list-disc pb-1">
                             <li>
-                                <span className="text-green-600 dark:text-green-400 font-medium">Green</span> (45–85%): healthy usage range.
+                                <span className="text-green-600 dark:text-green-400 font-medium">Green</span> (45–85%): healthy — ridership fills a good share of scheduled capacity.
                             </li>
                             <li>
-                                <span className="text-yellow-500 font-medium">Yellow</span>: the route is getting busy (85–95%) or under-used (30–45%).
+                                <span className="text-yellow-500 font-medium">Yellow</span>: under-used (30–45%) or getting busy (85–95%); consider adjusting the schedule.
                             </li>
                             <li>
-                                <span className="text-red-500 font-medium">Red</span>: near or over capacity (above 95%) or critically under-used (below 30%).
+                                <span className="text-red-500 font-medium">Red</span>: critically under-used (&lt;30%) or near/over capacity (&gt;95%).
                             </li>
                         </ul>
-                        <p className="pt-1">
-                            Very low usage is not inherently bad since a new route takes time to attract
-                            passengers. Give new routes time to grow. Very high usage is a service quality risk and may suppress
-                            further ridership growth.
-                        </p>
+
+                        <p className="font-semibold pt-2 pb-1">Strengths</p>
+                        <ul className="list-disc pb-1">
+                            <li>Good for <strong>schedule efficiency</strong>: tells you whether you're running more trains than demand warrants.</li>
+                            <li>Directly tied to financials — a low Usage route is likely losing money on operational costs.</li>
+                            <li>Stable over time: it normalises automatically as ridership and capacity both grow.</li>
+                        </ul>
+
+                        <p className="font-semibold pt-2 pb-1">Limitations</p>
+                        <ul className="list-disc pb-2">
+                            <li>
+                                <strong>Hides uneven passenger distribution.</strong> A route where everyone
+                                travels the same two stations will show a high Usage, but only one
+                                segment is crowded — passengers at other stops experience an empty train.
+                                Load Factor exposes this asymmetry; Usage does not.
+                            </li>
+                            <li>
+                                <strong>Day-averaged, not peak-sensitive.</strong> A route that is packed
+                                during rush hour and nearly empty overnight can still read as
+                                “healthy" on Usage. Load Factor is a better signal when
+                                overcrowding at specific times matters.
+                            </li>
+                            <li>
+                                <strong>Not a crowding indicator.</strong> Usage approaching 100% means
+                                you are filling your schedule efficiently — it does not
+                                directly tell you whether any individual train is overloaded.
+                                Use Load Factor for that.
+                            </li>
+                        </ul>
                         <Warning>
-                            <b>Use this value as a performance indicator rather than an overload warning.</b>
-                            The value is a median computed for the entire day. A route might experience overload during rush hours and be underutilized during the night, yet still be ranked as “healthy.”
+                            A route can have a high Usage <em>and</em> a low Load Factor — or
+                            vice versa. For example: a route where passengers spread evenly
+                            across all segments throughout the day will show high Usage and
+                            moderate Load Factor. A commuter route where everyone boards at
+                            the terminus and rides to the end will show a lower Usage (many
+                            seats empty on the return leg) but a high Load Factor at peak.
+                            Use both metrics together for a complete picture.
                         </Warning>
                     </MetricEntry>
 

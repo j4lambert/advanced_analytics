@@ -13,13 +13,22 @@ A mod for [Subway Builder](https://www.subwaybuilder.com) that adds detailed per
 
 Advanced Analytics sits alongside the game UI and gives you data the base game doesn't expose:
 
-- **Per-route metrics** — ridership, throughput, capacity usage, transfer connections, revenue, cost, profit, and profit per train
+- **Per-route metrics** — ridership, throughput, load factor, capacity usage, transfer connections, revenue, cost, profit, and profit per train
 - **Three data modes** — live (last 24h), historical (end-of-day snapshots), and side-by-side day comparison
 - **Trend charts** — visualize how any route evolved over time
 - **System map** — schematic overview of your entire network
 - **Storage manager** — export, import, and manage analytics data across saves
 
 All data is stored in IndexedDB and persists across game restarts. No save file is modified.
+
+### Metrics explained
+
+| Metric | What it measures |
+|---|---|
+| **Load Factor** | Peak passengers on the busiest segment ÷ train capacity. The primary crowding indicator. Values above 100% mean trains are overcrowded at their peak. For back-and-forth (pendulum) routes, the combined load is halved to get a per-direction figure; for circular (one-way loop) routes the load is already directional. Shows `—` until commute data is available. |
+| **Usage (cap.)** | Daily ridership ÷ 24 h throughput ceiling. A throughput efficiency measure — how much of the route's scheduling capacity is being filled each day. Different from Load Factor: a route can have low Load Factor (trains never packed) but moderate Usage (many trips made). |
+| **Throughput** | Total passenger-trips the route *could* carry in 24 hours given its current train schedule and loop time. |
+| **Ridership** | Total passenger-trips recorded on the route in the last rolling 24 hours. |
 
 [![Liberapay](https://img.shields.io/badge/Liberapay-Support-F6C915?logo=liberapay&logoColor=black)](https://liberapay.com/Steno)
 <a href='https://ko-fi.com/Q5Q61VIM68' target='_blank'><img height='20' style='border:0px;height:40px;' src='https://storage.ko-fi.com/cdn/kofi3.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>

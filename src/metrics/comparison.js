@@ -81,6 +81,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             name: row.name,
             ridership: 'NEW',
             capacity: 'NEW',
+            loadFactor: 'NEW',
             utilization: 'NEW',
             stations: 'NEW',
             trainSchedule: 'NEW',
@@ -92,6 +93,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             primaryValues: {
                 ridership: primaryRoute.ridership,
                 capacity: primaryRoute.capacity,
+                loadFactor: primaryRoute.loadFactor || 0,
                 utilization: primaryRoute.utilization,
                 stations: primaryRoute.stations,
                 trainSchedule: calculateTotalTrains(primaryRoute),
@@ -104,6 +106,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             secondaryValues: {
                 ridership: secondaryRoute?.ridership || 0,
                 capacity: secondaryRoute?.capacity || 0,
+                loadFactor: secondaryRoute?.loadFactor || 0,
                 utilization: secondaryRoute?.utilization || 0,
                 stations: secondaryRoute?.stations || 0,
                 trainSchedule: calculateTotalTrains(secondaryRoute),
@@ -118,7 +121,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             isComparison: true
         };
     }
-    
+
     // DELETED route (was deleted on primary day OR missing from primary)
     if (isDeletedOnPrimaryDay || (!primaryRoute && secondaryRoute)) {
         return {
@@ -126,6 +129,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             name: row.name,
             ridership: 'DELETED',
             capacity: 'DELETED',
+            loadFactor: 'DELETED',
             utilization: 'DELETED',
             stations: 'DELETED',
             trainSchedule: 'DELETED',
@@ -137,6 +141,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             primaryValues: {
                 ridership: 0,
                 capacity: 0,
+                loadFactor: 0,
                 utilization: 0,
                 stations: 0,
                 trainSchedule: 0,
@@ -149,6 +154,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             secondaryValues: {
                 ridership: secondaryRoute.ridership,
                 capacity: secondaryRoute.capacity,
+                loadFactor: secondaryRoute.loadFactor || 0,
                 utilization: secondaryRoute.utilization,
                 stations: secondaryRoute.stations,
                 trainSchedule: calculateTotalTrains(secondaryRoute),
@@ -163,11 +169,12 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             isComparison: true
         };
     }
-    
+
     // Normal comparison - calculate percentages for all metrics
     const metrics = {
         ridership: calculatePercentageChange(primaryRoute.ridership, secondaryRoute.ridership, 'ridership'),
         capacity: calculatePercentageChange(primaryRoute.capacity, secondaryRoute.capacity, 'capacity'),
+        loadFactor: calculatePercentageChange(primaryRoute.loadFactor || 0, secondaryRoute.loadFactor || 0, 'loadFactor'),
         utilization: calculatePercentageChange(primaryRoute.utilization, secondaryRoute.utilization, 'utilization'),
         stations: calculatePercentageChange(primaryRoute.stations, secondaryRoute.stations, 'stations'),
         trainSchedule: calculatePercentageChange(
@@ -176,20 +183,20 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             'trainSchedule'
         ),
         transfers: calculatePercentageChange(
-            primaryRoute.transfers?.count || 0, 
-            secondaryRoute.transfers?.count || 0, 
+            primaryRoute.transfers?.count || 0,
+            secondaryRoute.transfers?.count || 0,
             'transfers'
         ),
         dailyCost: calculatePercentageChange(primaryRoute.dailyCost, secondaryRoute.dailyCost, 'dailyCost'),
         dailyRevenue: calculatePercentageChange(primaryRoute.dailyRevenue, secondaryRoute.dailyRevenue, 'dailyRevenue'),
         dailyProfit: calculatePercentageChange(primaryRoute.dailyProfit, secondaryRoute.dailyProfit, 'dailyProfit'),
         profitPerTrain: calculatePercentageChange(
-            primaryRoute.profitPerTrain, 
-            secondaryRoute.profitPerTrain, 
+            primaryRoute.profitPerTrain,
+            secondaryRoute.profitPerTrain,
             'profitPerTrain'
         )
     };
-    
+
     return {
         id: row.id,
         name: row.name,
@@ -197,6 +204,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
         primaryValues: {
             ridership: primaryRoute.ridership,
             capacity: primaryRoute.capacity,
+            loadFactor: primaryRoute.loadFactor || 0,
             utilization: primaryRoute.utilization,
             stations: primaryRoute.stations,
             trainSchedule: calculateTotalTrains(primaryRoute),
@@ -209,6 +217,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
         secondaryValues: {
             ridership: secondaryRoute.ridership,
             capacity: secondaryRoute.capacity,
+            loadFactor: secondaryRoute.loadFactor || 0,
             utilization: secondaryRoute.utilization,
             stations: secondaryRoute.stations,
             trainSchedule: calculateTotalTrains(secondaryRoute),
