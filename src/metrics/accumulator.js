@@ -17,10 +17,11 @@
 //   restoreEvents(storage, currentElapsed) — load + prune stale events from IDB
 //
 // Architecture:
-//   onMoneyChanged  → append { t, amount, weights } to _revEvents / _costEvents
-//   poll (500ms)    → update _lastRevWeights, _lastCostWeights, refresh caches
-//   prune (60s)     → drop events older than 24 h + grace period
-//   transfers (~5s) → refresh _transfersCache via calculateTransfers
+//   onMoneyChanged       → append { t, amount, weights } to _revEvents / _costEvents
+//   poll (500ms wall)    → update _lastRevWeights, _lastCostWeights, refresh caches
+//   prune (60s wall)     → drop events older than 24 h + grace period
+//   gameTiming (5 game min) → refresh _transfersCache + _segmentLoadsCache
+//                             scales correctly with game speed (fast/ultrafast)
 //
 // Capacity:
 //   Static full-day throughput ceiling — same formula as calculateRouteMetrics.
@@ -39,12 +40,13 @@
 import { CONFIG } from '../config.js';
 import { calculateTransfers } from './transfers.js';
 import { getRouteStationsInOrder, isCircularRoute, computeMaxSegmentLoadFraction } from '../utils/route-utils.js';
+import { gameTiming } from '../core/game-timing.js';
 
-const TAG                 = '[AA:ACC]';
-const POLL_INTERVAL_MS    = 500;
-const PRUNE_INTERVAL_MS   = 60_000;
-const TRANSFERS_REFRESH_N = 10;   // every N poll ticks ≈ 5 s
-const GRACE_SECONDS       = 300;  // keep 5 min extra past the 24 h cutoff
+const TAG                        = '[AA:ACC]';
+const POLL_INTERVAL_MS           = 500;
+const PRUNE_INTERVAL_MS          = 60_000;
+const CACHES_REFRESH_GAME_SEC    = 300;  // refresh transfers/loads every 5 game minutes
+const GRACE_SECONDS              = 300;  // keep 5 min extra past the 24 h cutoff
 const PERSIST_KEY         = 'accumulatorEvents';
 
 // ── Module-level state ─────────────────────────────────────────────────────
@@ -67,9 +69,8 @@ let _transfersCache     = null; // { routeId: { count, routes, routeIds, station
 let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 
 // Timers
-let _pollTimer       = null;
-let _pruneTimer      = null;
-let _transfersTick   = 0;
+let _pollTimer  = null;
+let _pruneTimer = null;
 
 // ── Helper: empty stats shape ──────────────────────────────────────────────
 
@@ -298,7 +299,9 @@ function _registerMoneyHook(api) {
     });
 }
 
-// ── Poll tick ──────────────────────────────────────────────────────────────
+// ── Poll tick (wall-clock, 500 ms) ─────────────────────────────────────────
+// Updates weight caches on every real-time tick so that onMoneyChanged
+// events are always attributed with up-to-date per-route proportions.
 
 function _tick() {
     if (!_api || _api.gameState.isPaused()) return;
@@ -316,35 +319,43 @@ function _tick() {
     const costRates  = _computeCostRates(elapsed, routes);
     _lastCostWeights = _buildWeights(costRates, _lastCostWeights);
 
-    // ── Refresh caches ──────────────────────────────────────────────────
+    // ── Refresh route/train-type caches ─────────────────────────────────
     _routesCache     = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
+}
 
-    // ── Refresh transfers + segment loads cache every N ticks ───────────
-    _transfersTick++;
-    if (_transfersTick % TRANSFERS_REFRESH_N === 0) {
-        try {
-            _transfersCache = calculateTransfers(routes, _api);
-        } catch (_) {
-            // Non-critical — retain previous cache
-        }
+// ── Cache refresh (game-time, every CACHES_REFRESH_GAME_SEC) ───────────────
+// Refreshes expensive derived caches (transfers, segment loads) based on
+// game-elapsed-seconds rather than wall-clock time, so the refresh cadence
+// scales correctly with game speed (normal / fast / ultrafast).
 
-        try {
-            const commutes    = _api.gameState.getCompletedCommutes?.() ?? [];
-            const allStations = _api.gameState.getStations();
-            const newLoads    = {};
-            for (const route of routes) {
-                const ordered    = getRouteStationsInOrder(route.id, _api);
-                const orderedIds = ordered.map(s => s.id);
-                const circular   = isCircularRoute(route, allStations);
-                newLoads[route.id] = computeMaxSegmentLoadFraction(
-                    route.id, orderedIds, commutes, circular
-                );
-            }
-            _segmentLoadsCache = newLoads;
-        } catch (_) {
-            // Non-critical — retain previous cache
+function _refreshCaches() {
+    if (!_api) return;
+    console.log('[AA:TIMING] cache refresh fired', _api.gameState.getElapsedSeconds())
+
+    const routes = _routesCache ?? _api.gameState.getRoutes();
+
+    try {
+        _transfersCache = calculateTransfers(routes, _api);
+    } catch (_) {
+        // Non-critical — retain previous cache
+    }
+
+    try {
+        const commutes    = _api.gameState.getCompletedCommutes?.() ?? [];
+        const allStations = _api.gameState.getStations();
+        const newLoads    = {};
+        for (const route of routes) {
+            const ordered    = getRouteStationsInOrder(route.id, _api);
+            const orderedIds = ordered.map(s => s.id);
+            const circular   = isCircularRoute(route, allStations);
+            newLoads[route.id] = computeMaxSegmentLoadFraction(
+                route.id, orderedIds, commutes, circular
+            );
         }
+        _segmentLoadsCache = newLoads;
+    } catch (_) {
+        // Non-critical — retain previous cache
     }
 }
 
@@ -378,6 +389,10 @@ export function initAccumulator(api) {
 
     _pollTimer  = setInterval(_tick,        POLL_INTERVAL_MS);
     _pruneTimer = setInterval(_pruneEvents, PRUNE_INTERVAL_MS);
+
+    // Game-time-aware cache refresh — scales with game speed.
+    gameTiming.init(api);
+    gameTiming.onEveryNGameSeconds(CACHES_REFRESH_GAME_SEC, _refreshCaches);
 }
 
 /**
@@ -389,6 +404,7 @@ export function initAccumulator(api) {
 export function stopAccumulating() {
     if (_pollTimer)  { clearInterval(_pollTimer);  _pollTimer  = null; }
     if (_pruneTimer) { clearInterval(_pruneTimer); _pruneTimer = null; }
+    gameTiming.stop();
 }
 
 /**
@@ -396,15 +412,15 @@ export function stopAccumulating() {
  * Call BEFORE restoreEvents when loading a save, to discard stale in-memory data.
  */
 export function clearAccumulatorState() {
-    _revEvents          = [];
-    _costEvents         = [];
-    _lastRevWeights     = {};
-    _lastCostWeights    = {};
-    _routesCache        = null;
-    _trainTypesCache    = null;
-    _transfersCache     = null;
-    _segmentLoadsCache  = {};
-    _transfersTick      = 0;
+    _revEvents         = [];
+    _costEvents        = [];
+    _lastRevWeights    = {};
+    _lastCostWeights   = {};
+    _routesCache       = null;
+    _trainTypesCache   = null;
+    _transfersCache    = null;
+    _segmentLoadsCache = {};
+    gameTiming.reset();
 }
 
 // ── Live rolling queries ───────────────────────────────────────────────────
