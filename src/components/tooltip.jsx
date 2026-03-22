@@ -67,7 +67,7 @@ export function Tooltip({ children, content, side = 'bottom', delayDuration = 30
             {visible && pos && (
                 <Portal>
                     <div
-                        className="aa-tooltip fixed z-[10000] px-3 py-1.5 text-sm rounded-md bg-popover text-popover-foreground border border-border shadow-md pointer-events-none"
+                        className="aa-tooltip fixed z-[10000] px-3 py-1.5 text-sm rounded-md bg-popover text-popover-foreground border border-border shadow-md pointer-events-none leading-snug"
                         style={{ top: pos.top, left: pos.left, transform: pos.transform, maxWidth: 400 }}
                     >
                         {content}

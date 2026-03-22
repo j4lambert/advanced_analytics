@@ -72,7 +72,7 @@ export function SortableTable({
                                         side="top"
                                         delayDuration={200}
                                         content={
-                                            <div className="text-sm text-left space-y-1">
+                                            <div>
                                                 {header.description.split('|').map((line, i) => (
                                                     <p key={i}>{line}</p>
                                                 ))}
