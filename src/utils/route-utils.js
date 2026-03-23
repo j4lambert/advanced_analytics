@@ -138,7 +138,47 @@ export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commut
     const n = orderedStationIds.length;
     const stationIdxMap = new Map(orderedStationIds.map((id, i) => [id, i]));
 
-    // Separate forward (bi <= ai) and reverse (bi > ai) passengers
+    if (isCircular) {
+        // For circular routes, directly accumulate segment loads.
+        // There are n segments (0→1, 1→2, …, (n-2)→(n-1), (n-1)→0).
+        //
+        // We cannot use the boarding/alighting cumulative scan here because
+        // getRouteStationsInOrder() deduplicates the terminus, so the station
+        // list is [A, B, C, D] (not [A, B, C, D, A]). A passenger travelling
+        // D→A therefore gets bi=3, ai=0 — which the bi>ai check misclassifies
+        // as "reverse", silently dropping all passengers whose journey ends at
+        // the terminus. Direct accumulation handles the wrap-around correctly.
+        const segLoad      = new Array(n).fill(0);
+        let totalBoarding  = 0;
+
+        for (const c of commutes) {
+            if (!c.stationRoutes) continue;
+            const size = c.size || 1;
+            const seg  = c.stationRoutes.find(s => s.routeId === routeId);
+            if (!seg?.stationIds?.length) continue;
+
+            const bi = stationIdxMap.get(seg.stationIds[0]);
+            const ai = stationIdxMap.get(seg.stationIds[seg.stationIds.length - 1]);
+            if (bi === undefined || ai === undefined || bi === ai) continue;
+
+            totalBoarding += size;
+
+            if (bi < ai) {
+                // Normal forward: segments bi → bi+1 → … → ai
+                for (let i = bi; i < ai; i++) segLoad[i] += size;
+            } else {
+                // Wrap-around: bi → … → n-1 (→ terminus) → 0 → … → ai
+                for (let i = bi; i < n; i++) segLoad[i] += size;
+                for (let i = 0; i < ai; i++) segLoad[i] += size;
+            }
+        }
+
+        const maxLoad = segLoad.length > 0 ? Math.max(...segLoad) : 0;
+        return totalBoarding > 0 ? maxLoad / totalBoarding : 0;
+    }
+
+    // ── Pendulum route ────────────────────────────────────────────────────────
+    // Separate forward (bi <= ai) and reverse (bi > ai) passengers.
     const fwdBoarding  = new Array(n).fill(0);
     const fwdAlighting = new Array(n).fill(0);
     const revBoarding  = new Array(n).fill(0);
@@ -171,8 +211,6 @@ export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commut
     }
     const fwdTotal    = fwdBoarding.reduce((s, b) => s + b, 0);
     const fwdFraction = fwdTotal > 0 ? fwdMaxLoad / fwdTotal : 0;
-
-    if (isCircular) return fwdFraction;
 
     // Reverse cumulative load (high → low index) for pendulum return leg
     let revLoad = 0, revMaxLoad = 0;
