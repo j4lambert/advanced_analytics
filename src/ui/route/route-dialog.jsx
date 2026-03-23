@@ -147,7 +147,7 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
                 <div className="flex justify-between text-xs text-muted-foreground mt-3">
                     <span>Peak train load ÷ train capacity</span>
                     <span className="text-right">
-                        Throughput: {utilization}%
+                        Usage: {utilization}%
                         <span className="ml-1 opacity-60">({Math.round(ridership || 0).toLocaleString()} / {(capacity || 0).toLocaleString()})</span>
                     </span>
                 </div>
