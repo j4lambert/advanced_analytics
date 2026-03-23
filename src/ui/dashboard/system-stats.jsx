@@ -27,6 +27,7 @@
 
 import { isZustandAvailable, getTransferGroups } from '../../core/api-support.js';
 import { formatCurrencyCompact } from '../../utils/formatting.js';
+import { getCurrentPhaseName } from '../../core/lifecycle.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
@@ -298,6 +299,11 @@ export function SystemStats({ liveRouteData }) {
                     <div className={'text-xs text-muted-foregound'}>
                         Day {api.gameState.getCurrentDay() + 1}
                     </div>
+                    {getCurrentPhaseName() && (
+                        <div className={'text-xs text-muted-foreground'}>
+                            {getCurrentPhaseName()}
+                        </div>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <StatChip Icon={icons.Route}     label="Routes"    value={stats.routeCount} />

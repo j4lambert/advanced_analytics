@@ -19,6 +19,44 @@ let storage = null;
 // Global variable to track current save name
 let currentSaveName = null;
 
+// ── Demand phase helpers ───────────────────────────────────────────────────
+
+const _HIGH_PHASE_KEYS = new Set(['PeakMorningRush', 'PeakEveningRush']);
+const _LOW_PHASE_KEYS  = new Set(['LateNight', 'Night', 'Evening']);
+
+function _applyDemandPhasesFromAPI(api) {
+    if (!api.popTiming?.getCommuteTimeRanges) return;
+    try {
+        const ranges = api.popTiming.getCommuteTimeRanges();
+        if (!ranges?.length) return;
+
+        CONFIG.DEMAND_PHASES = ranges.map(r => {
+            let type;
+            if      (_HIGH_PHASE_KEYS.has(r.key)) type = 'high';
+            else if (_LOW_PHASE_KEYS.has(r.key))  type = 'low';
+            else                                   type = 'medium';
+            return { type, startHour: r.start, endHour: r.end, name: r.name };
+        });
+
+        const hours = { high: 0, medium: 0, low: 0 };
+        for (const p of CONFIG.DEMAND_PHASES) hours[p.type] += (p.endHour - p.startHour);
+        CONFIG.DEMAND_HOURS = hours;
+
+        console.log(`${CONFIG.LOG_PREFIX} Demand phases loaded from API:`, CONFIG.DEMAND_PHASES);
+    } catch (e) {
+        console.warn(`${CONFIG.LOG_PREFIX} Could not load demand phases from API, using defaults:`, e);
+    }
+}
+
+export function getCurrentPhaseName() {
+    const elapsed     = window.SubwayBuilderAPI.gameState.getElapsedSeconds();
+    const currentHour = Math.floor((elapsed % 86400) / 3600);
+    const phase       = CONFIG.DEMAND_PHASES.find(
+        p => currentHour >= p.startHour && currentHour < p.endHour
+    );
+    return phase?.name ?? null;
+}
+
 /**
  * Fallback handler for subsequent loads where onGameLoaded does not fire.
  *
@@ -49,6 +87,8 @@ export async function handleMapReadyFallback(api) {
     // Prune historical entries that belong to days in the future
     // (can appear when a save file is rewound to an earlier day)
     await _pruneFutureHistoricalData(storage, api);
+
+    _applyDemandPhasesFromAPI(api);
 
     // Accumulator: clear stale in-memory state, restore persisted events, restart
     clearAccumulatorState();
@@ -149,6 +189,7 @@ export function initLifecycleHooks(api) {
 
     // ── onGameInit ──────────────────────────────────────────────────────────
     api.hooks.onGameInit(() => {
+        _applyDemandPhasesFromAPI(api);
         // New game: no persisted events to restore
         clearAccumulatorState();
         initAccumulator(api);
@@ -173,6 +214,8 @@ export function initLifecycleHooks(api) {
 
         // Prune stale future-day historical data
         await _pruneFutureHistoricalData(storage, api);
+
+        _applyDemandPhasesFromAPI(api);
 
         // Accumulator: discard stale data, restore from IDB, restart
         clearAccumulatorState();

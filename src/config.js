@@ -24,14 +24,15 @@ export const CONFIG = {
     
     // Demand phases with precise hour boundaries
     // Used for accurate cost calculation based on when trains actually ran
+    // Defaults — overwritten at init by popTiming.getCommuteTimeRanges()
     DEMAND_PHASES: [
-        { type: 'low', startHour: 0, endHour: 5 },      // midnight-5am (5h)
-        { type: 'medium', startHour: 5, endHour: 6 },   // 5am-6am (1h)
-        { type: 'high', startHour: 6, endHour: 9 },     // 6am-9am (3h)
-        { type: 'medium', startHour: 9, endHour: 16 },  // 9am-4pm (7h)
-        { type: 'high', startHour: 16, endHour: 19 },   // 4pm-7pm (3h)
-        { type: 'medium', startHour: 19, endHour: 20 }, // 7pm-8pm (1h)
-        { type: 'low', startHour: 20, endHour: 24 }     // 8pm-midnight (4h)
+        { type: 'low',    startHour: 0,  endHour: 5,  name: 'Night' },
+        { type: 'medium', startHour: 5,  endHour: 6,  name: 'Early Morning' },
+        { type: 'high',   startHour: 6,  endHour: 9,  name: 'Morning Rush' },
+        { type: 'medium', startHour: 9,  endHour: 16, name: 'Midday' },
+        { type: 'high',   startHour: 16, endHour: 19, name: 'Evening Rush' },
+        { type: 'medium', startHour: 19, endHour: 20, name: 'Late Evening' },
+        { type: 'low',    startHour: 20, endHour: 24, name: 'Late Night' },
     ],
     
     TRANSFER_WALKING_TIME_THRESHOLD: 100,  // seconds
