@@ -209,8 +209,7 @@ export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commut
         fwdLoad += fwdBoarding[i] - fwdAlighting[i];
         if (fwdLoad > fwdMaxLoad) fwdMaxLoad = fwdLoad;
     }
-    const fwdTotal    = fwdBoarding.reduce((s, b) => s + b, 0);
-    const fwdFraction = fwdTotal > 0 ? fwdMaxLoad / fwdTotal : 0;
+    const fwdTotal = fwdBoarding.reduce((s, b) => s + b, 0);
 
     // Reverse cumulative load (high → low index) for pendulum return leg
     let revLoad = 0, revMaxLoad = 0;
@@ -218,8 +217,23 @@ export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commut
         revLoad += revBoarding[i] - revAlighting[i];
         if (revLoad > revMaxLoad) revMaxLoad = revLoad;
     }
-    const revTotal    = revBoarding.reduce((s, b) => s + b, 0);
-    const revFraction = revTotal > 0 ? revMaxLoad / revTotal : 0;
+    const revTotal = revBoarding.reduce((s, b) => s + b, 0);
 
-    return Math.max(fwdFraction, revFraction);
+    // For pendulum routes, per-direction capacity = total_capacity / 2 (trains serve
+    // both directions symmetrically). To get the true directional load factor we must
+    // normalise the dominant direction's peak load against ALL boardings (both
+    // directions) and multiply by 2 — which cancels the implicit /2 in capacity.
+    //
+    //   fraction = 2 × dominantMaxLoad / (fwdTotal + revTotal)
+    //
+    // For symmetric routes this equals max(fwdMaxLoad/fwdTotal, revMaxLoad/revTotal)
+    // (the ×2 and the doubled denominator cancel). For asymmetric routes it correctly
+    // amplifies the dominant direction, e.g. Route A: 2 × 0.967 × 0.785 × util = 10.2%
+    // instead of the previous 7% (which underestimated by treating both directions as
+    // equally loaded). The fraction can exceed 1.0 for very asymmetric routes — that
+    // is intentional and means loadFactor > utilization (correct: the peak direction
+    // is more loaded than the overall average implies).
+    const dominantMaxLoad = fwdMaxLoad > revMaxLoad ? fwdMaxLoad : revMaxLoad;
+    const totalBoardings  = fwdTotal + revTotal;
+    return totalBoardings > 0 ? (2 * dominantMaxLoad) / totalBoardings : 0;
 }
