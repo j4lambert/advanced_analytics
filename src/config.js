@@ -88,7 +88,7 @@ export const CONFIG = {
         { key: 'name', label: 'Route', align: 'right'},
         { key: 'ridership', label: 'Ridership', align: 'right', group: 'performance' },
         { key: 'capacity', label: 'Throughput', align: 'right', group: 'trains', description: 'Daily Capacity: total passengers this route can carry in 24 hours' },
-        { key: 'loadFactor', label: 'Load Factor', align: 'right', group: 'performance', description: 'Peak segment load ÷ train capacity|How full trains are at their busiest point|Values above 100% indicate overcrowding|Halved for back-and-forth routes; direct for circular/loop routes' },
+        { key: 'loadFactor', label: 'Load Factor', align: 'right', group: 'performance', description: 'Peak segment load ÷ train capacity|How full trains are at their busiest point on average|Time-averaged: short rush-hour spikes may not be reflected|Values above 100% indicate sustained overcrowding|For real-time overloads check the game Capacity Warnings' },
         { key: 'utilization', label: 'Usage', small: '(cap.)', align: 'right', group: 'performance', description: 'Daily ridership ÷ 24 h throughput ceiling|Measures how much of total schedule capacity is filled|Not the same as how full individual trains are' },
         { key: 'stations', label: 'Stops', align: 'right', group: 'trains' },
         { key: 'trainType', label: 'Type', align: 'right', group: 'trains', description: 'Train Type' },
