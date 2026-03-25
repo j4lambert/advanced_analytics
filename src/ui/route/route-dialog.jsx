@@ -107,12 +107,13 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
     return (
         <div className="rounded flex flex-col border bg-muted/30 px-6 py-5">
             {/* Header row */}
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                Load Factor
+            <div className="mb-1">
+                <div className={"uppercase text-sm tracking-wider"}>Load Factor</div>
+                <span className={"text-xs text-muted-foreground"}>Peak train load ÷ train capacity</span>
             </div>
             <div className={"my-auto"}>
                 <div className="flex justify-between items-start">
-                    <div className={`font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
+                    <div className={`text-xl font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
                     <div className={`text-5xl font-bold tabular-nums leading-none ${colors.text}`}>
                         {pct > 0 ? pct.toFixed(1) : '—'}
                         {pct > 0 && <span className="text-2xl font-medium ml-0.5">%</span>}
@@ -145,7 +146,6 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
 
                 {/* Footer */}
                 <div className="flex justify-between text-xs text-muted-foreground mt-3">
-                    <span>Peak train load ÷ train capacity</span>
                     <span className="text-right">
                         Usage: {utilization}%
                         <span className="ml-1 opacity-60">({Math.round(ridership || 0).toLocaleString()} / {(capacity || 0).toLocaleString()})</span>

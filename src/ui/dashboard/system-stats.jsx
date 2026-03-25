@@ -298,12 +298,12 @@ export function SystemStats({ liveRouteData }) {
                     </div>
                     <div className={'text-xs text-muted-foregound'}>
                         Day {api.gameState.getCurrentDay() + 1}
+                        {getCurrentPhaseName() && (
+                            <span className={'text-xs text-muted-foreground ml-1'}>
+                                - {getCurrentPhaseName()}
+                            </span>
+                        )}
                     </div>
-                    {getCurrentPhaseName() && (
-                        <div className={'text-xs text-muted-foreground'}>
-                            {getCurrentPhaseName()}
-                        </div>
-                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <StatChip Icon={icons.Route}     label="Routes"    value={stats.routeCount} />

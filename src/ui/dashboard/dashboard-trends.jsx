@@ -630,10 +630,9 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
             const rectY      = height < 0 ? y + height : y;
             const rectHeight = Math.abs(height);
 
-            const liveFillOpacity = payload?.isLive ? 0.2 : 0.3;
-            const fillOpacity     = hoveredRoute && hoveredRoute !== routeId ? 0.1 : liveFillOpacity;
-            const strokeDasharray = payload?.isLive ? '3 3' : undefined;
-            const opacity         = hoveredRoute && hoveredRoute !== routeId ? 0.2 : 1;
+            const liveFillOpacity = payload?.isLive ? 0.3 : 1;
+            const fillOpacity     = hoveredRoute && hoveredRoute !== routeId ? 0.4 : liveFillOpacity;
+            const opacity         = hoveredRoute && hoveredRoute !== routeId ? 0.4 : 1;
 
             return h('rect', {
                 x, y: rectY, width, height: rectHeight,
@@ -644,7 +643,6 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
                 strokeWidth:   1,
                 opacity,
                 fillOpacity,
-                strokeDasharray,
             });
         };
     };
