@@ -339,6 +339,21 @@ async function _setRouteStatus(routeId, status, day, storage, creationTime = nul
 }
 
 /**
+ * Compare two semver strings (major.minor.patch).
+ * Returns -1 if a < b, 0 if equal, +1 if a > b.
+ */
+function _compareVersions(a, b) {
+    const pa = (a || '0.0.0').split('.').map(Number);
+    const pb = (b || '0.0.0').split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        const na = pa[i] || 0, nb = pb[i] || 0;
+        if (na < nb) return -1;
+        if (na > nb) return  1;
+    }
+    return 0;
+}
+
+/**
  * Run data migrations for a save that was last written by an older mod version.
  *
  * Called once after restore() on every game load, before any other processing.
@@ -346,8 +361,8 @@ async function _setRouteStatus(routeId, status, day, storage, creationTime = nul
  * apply any necessary transformations to persisted data.
  *
  * Pattern for future migrations:
- *   if (!storedVersion || compareVersions(storedVersion, '2.0.0') < 0) {
- *       await _migrateToV2(storage);
+ *   if (!storedVersion || _compareVersions(storedVersion, '2.0.0') < 0) {
+ *       await _migrateToV2(storageInstance);
  *   }
  *
  * @param {string} saveName
@@ -360,18 +375,48 @@ async function _runMigrations(saveName, storageInstance) {
 
         if (storedVersion === __MOD_VERSION__) return;  // nothing to do
 
-        // ── Future migration blocks go here ─────────────────────────────────
-        // Example:
-        // if (!storedVersion || compareVersions(storedVersion, '2.0.0') < 0) {
-        //     await _migrateToV2(storageInstance);
-        // }
+        // ── v1.2.8: clear stale loadFactor from historical snapshots ─────────
+        // Versions before 1.2.8 may have captured historical loadFactor values
+        // using a ×2 multiplier that was briefly and incorrectly applied to
+        // pendulum routes. The correct values cannot be recalculated from stored
+        // data, so we zero them out — showing a gap is less misleading than
+        // showing 2× inflated figures in the Historical Trends chart.
+        if (!storedVersion || _compareVersions(storedVersion, '1.2.8') < 0) {
+            await _migrateLoadFactorV1_2_8(storageInstance);
+        }
         // ────────────────────────────────────────────────────────────────────
 
-        if (storedVersion !== __MOD_VERSION__) {
-            console.log(`${CONFIG.LOG_PREFIX} [Migration] ${storedVersion ?? 'pre-versioning'} → ${__MOD_VERSION__} (no data changes needed)`);
-        }
+        console.log(`${CONFIG.LOG_PREFIX} [Migration] ${storedVersion ?? 'pre-versioning'} → ${__MOD_VERSION__}`);
     } catch (e) {
         console.error(`${CONFIG.LOG_PREFIX} [Migration] Failed:`, e);
+    }
+}
+
+/**
+ * v1.2.8 migration: zero out loadFactor fields in all historical snapshots.
+ * Cannot recalculate — just clear so the trends chart shows a gap instead of
+ * potentially 2× inflated values from the brief ×2 era in v1.2.7.
+ */
+async function _migrateLoadFactorV1_2_8(storageInstance) {
+    const historicalData = await storageInstance.get('historicalData', { days: {} });
+    let changed = false;
+
+    for (const daySnapshot of Object.values(historicalData.days)) {
+        if (!Array.isArray(daySnapshot.routes)) continue;
+        for (const route of daySnapshot.routes) {
+            if (route.loadFactor || route.loadFactorHigh || route.loadFactorMedium || route.loadFactorLow) {
+                route.loadFactor       = 0;
+                route.loadFactorHigh   = 0;
+                route.loadFactorMedium = 0;
+                route.loadFactorLow    = 0;
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) {
+        await storageInstance.set('historicalData', historicalData);
+        console.log(`${CONFIG.LOG_PREFIX} [Migration v1.2.8] Cleared stale loadFactor values from historical snapshots.`);
     }
 }
 

@@ -219,21 +219,24 @@ export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commut
     }
     const revTotal = revBoarding.reduce((s, b) => s + b, 0);
 
-    // For pendulum routes, per-direction capacity = total_capacity / 2 (trains serve
-    // both directions symmetrically). To get the true directional load factor we must
-    // normalise the dominant direction's peak load against ALL boardings (both
-    // directions) and multiply by 2 — which cancels the implicit /2 in capacity.
+    // `_computeStaticCapacity` uses loopTimeSec = timings[last] - timings[0], which
+    // for a pendulum spans the full round trip (A→…→Z→…→A). It then computes
+    // loopsPerHour × capacityPerTrain — one seat-slot per round trip. A train
+    // physically carries passengers in both directions per round trip, but the
+    // formula credits only one direction's worth of seats. Therefore the capacity
+    // it returns is already a per-direction figure for pendulum routes.
     //
-    //   fraction = 2 × dominantMaxLoad / (fwdTotal + revTotal)
+    // With per-direction capacity in the denominator, the load factor becomes:
     //
-    // For symmetric routes this equals max(fwdMaxLoad/fwdTotal, revMaxLoad/revTotal)
-    // (the ×2 and the doubled denominator cancel). For asymmetric routes it correctly
-    // amplifies the dominant direction, e.g. Route A: 2 × 0.967 × 0.785 × util = 10.2%
-    // instead of the previous 7% (which underestimated by treating both directions as
-    // equally loaded). The fraction can exceed 1.0 for very asymmetric routes — that
-    // is intentional and means loadFactor > utilization (correct: the peak direction
-    // is more loaded than the overall average implies).
+    //   loadFactor = fraction × (ridership / capacity)
+    //              = (dominantMaxLoad / totalBoardings) × (ridership / capacity)
+    //              ≈ dominantMaxLoad / capacity
+    //
+    // No ×2 adjustment is needed. For symmetric routes (fwdMaxLoad ≈ revMaxLoad)
+    // this equals fwdMaxLoad / fwdTotal, the natural per-direction peak fraction.
+    // For asymmetric routes, dominantMaxLoad / totalBoardings < 1 but correctly
+    // reflects that the peak direction is more loaded than the average implies.
     const dominantMaxLoad = fwdMaxLoad > revMaxLoad ? fwdMaxLoad : revMaxLoad;
     const totalBoardings  = fwdTotal + revTotal;
-    return totalBoardings > 0 ? (2 * dominantMaxLoad) / totalBoardings : 0;
+    return totalBoardings > 0 ? dominantMaxLoad / totalBoardings : 0;
 }
