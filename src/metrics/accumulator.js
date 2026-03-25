@@ -68,6 +68,10 @@ let _trainTypesCache    = null; // { trainTypeId: trainType }
 let _transfersCache     = null; // { routeId: { count, routes, routeIds, stationIds } }
 let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 
+// Per-hour ridership tracking (sampled from ridersPerHour in _refreshCaches)
+let _ridershipHourly = {};  // { routeId: number[24] } — average ridersPerHour for each game hour
+let _ridershipAccum  = {};  // { routeId: { hour, sum, count } } — in-progress accumulator for current game hour
+
 // Timers
 let _pollTimer  = null;
 let _pruneTimer = null;
@@ -83,6 +87,9 @@ function _emptyStats() {
         capacity:           0,
         utilization:        0,
         loadFactor:         0,
+        loadFactorHigh:     0,
+        loadFactorMedium:   0,
+        loadFactorLow:      0,
         stations:           0,
         transfers:          { count: 0, routes: [], routeIds: [], stationIds: [] },
         trainsHigh:         0,
@@ -151,6 +158,44 @@ function _buildWeights(rates, prevWeights) {
         if (r > 0) weights[id] = r / total;
     }
     return weights;
+}
+
+// ── Helper: phase-hour index map (built once from CONFIG) ─────────────────
+
+let _phaseHours = null; // { high: number[], medium: number[], low: number[] }
+
+function _getPhaseHours() {
+    if (_phaseHours) return _phaseHours;
+    const map = { high: [], medium: [], low: [] };
+    for (const phase of CONFIG.DEMAND_PHASES) {
+        for (let h = phase.startHour; h < phase.endHour; h++) {
+            map[phase.type].push(h);
+        }
+    }
+    _phaseHours = map;
+    return _phaseHours;
+}
+
+// ── Helper: per-phase capacities ──────────────────────────────────────────
+
+function _computePhaseCapacities(route, trainType) {
+    if (!route.stComboTimings?.length) return { high: 0, medium: 0, low: 0 };
+    const timings     = route.stComboTimings;
+    const loopTimeSec = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
+    if (loopTimeSec <= 0) return { high: 0, medium: 0, low: 0 };
+    const loopsPerHour     = 3600 / loopTimeSec;
+    const carsPerTrain     = route.carsPerTrain ?? trainType.stats.carsPerCarSet;
+    const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
+    const counts = {
+        high:   route.trainSchedule?.highDemand   || 0,
+        medium: route.trainSchedule?.mediumDemand || 0,
+        low:    route.trainSchedule?.lowDemand    || 0,
+    };
+    return {
+        high:   Math.round(counts.high   * CONFIG.DEMAND_HOURS.high   * loopsPerHour * capacityPerTrain),
+        medium: Math.round(counts.medium * CONFIG.DEMAND_HOURS.medium * loopsPerHour * capacityPerTrain),
+        low:    Math.round(counts.low    * CONFIG.DEMAND_HOURS.low    * loopsPerHour * capacityPerTrain),
+    };
 }
 
 // ── Helper: static full-day capacity ──────────────────────────────────────
@@ -240,9 +285,12 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     const totalTrains = trainCounts.high + trainCounts.medium + trainCounts.low;
     const stations    = route.stNodes?.length > 0 ? route.stNodes.length - 1 : 0;
 
-    let capacity    = 0;
-    let utilization = 0;
-    let loadFactor  = 0;
+    let capacity         = 0;
+    let utilization      = 0;
+    let loadFactor       = 0;
+    let loadFactorHigh   = 0;
+    let loadFactorMedium = 0;
+    let loadFactorLow    = 0;
 
     if (trainType) {
         capacity    = _computeStaticCapacity(route, trainType);
@@ -254,6 +302,28 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         loadFactor = capacity > 0 && maxSegmentFraction > 0
             ? Math.round(maxSegmentFraction * (ridership / capacity) * 100)
             : 0;
+
+        const hourly = _ridershipHourly[routeId];
+        if (maxSegmentFraction > 0 && ridership > 0 && hourly) {
+            const ph = _getPhaseHours();
+            const sumHours = (hours) => hours.reduce((s, h) => s + (hourly[h] || 0), 0);
+            const rHigh   = sumHours(ph.high);
+            const rMedium = sumHours(ph.medium);
+            const rLow    = sumHours(ph.low);
+            const totalSampled = rHigh + rMedium + rLow;
+            if (totalSampled > 0) {
+                const pc = _computePhaseCapacities(route, trainType);
+                // Use ridersPerHour as a distribution weight only — its unit is unknown,
+                // but the relative proportions between phases reflect the true demand split.
+                // Multiply by total ridership (24h) to derive absolute phase ridership.
+                const pHigh   = ridership * rHigh   / totalSampled;
+                const pMedium = ridership * rMedium / totalSampled;
+                const pLow    = ridership * rLow    / totalSampled;
+                if (pc.high   > 0) loadFactorHigh   = Math.round(maxSegmentFraction * pHigh   / pc.high   * 100);
+                if (pc.medium > 0) loadFactorMedium = Math.round(maxSegmentFraction * pMedium / pc.medium * 100);
+                if (pc.low    > 0) loadFactorLow    = Math.round(maxSegmentFraction * pLow    / pc.low    * 100);
+            }
+        }
     }
 
     const profit            = revenue - cost;
@@ -267,6 +337,9 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         capacity,
         utilization,
         loadFactor,
+        loadFactorHigh,
+        loadFactorMedium,
+        loadFactorLow,
         stations,
         transfers,
         trainsHigh:     trainCounts.high,
@@ -331,9 +404,33 @@ function _tick() {
 
 function _refreshCaches() {
     if (!_api) return;
-    console.log('[AA:TIMING] cache refresh fired', _api.gameState.getElapsedSeconds())
 
-    const routes = _routesCache ?? _api.gameState.getRoutes();
+    const elapsed     = _api.gameState.getElapsedSeconds();
+    const currentHour = Math.floor((elapsed % 86400) / 3600);
+    const routes      = _routesCache ?? _api.gameState.getRoutes();
+
+    // ── Per-hour ridership sampling ─────────────────────────────────────
+    try {
+        const lineMetrics = _api.gameState.getLineMetrics();
+        lineMetrics.forEach(lm => {
+            const id  = lm.routeId;
+            const val = lm.ridersPerHour || 0;
+            if (!_ridershipHourly[id]) _ridershipHourly[id] = new Array(24).fill(0);
+            if (!_ridershipAccum[id])  _ridershipAccum[id]  = { hour: currentHour, sum: 0, count: 0 };
+            const acc = _ridershipAccum[id];
+            if (acc.hour !== currentHour) {
+                const finalisedAvg = acc.count > 0 ? acc.sum / acc.count : 0;
+                if (acc.count > 0) _ridershipHourly[id][acc.hour] = finalisedAvg;
+                acc.hour  = currentHour;
+                acc.sum   = 0;
+                acc.count = 0;
+            }
+            acc.sum   += val;
+            acc.count += 1;
+        });
+    } catch (e) {
+        console.warn('[AA:hourly] sampling error', e);
+    }
 
     try {
         _transfersCache = calculateTransfers(routes, _api);
@@ -420,6 +517,8 @@ export function clearAccumulatorState() {
     _trainTypesCache   = null;
     _transfersCache    = null;
     _segmentLoadsCache = {};
+    _ridershipHourly   = {};
+    _ridershipAccum    = {};
     gameTiming.reset();
 }
 
@@ -470,8 +569,9 @@ export async function persistEvents(storage) {
     if (!storage) return;
     try {
         await storage.set(PERSIST_KEY, {
-            revEvents:  _revEvents,
-            costEvents: _costEvents,
+            revEvents:       _revEvents,
+            costEvents:      _costEvents,
+            ridershipHourly: _ridershipHourly,
         });
     } catch (e) {
         console.error(`${TAG} Failed to persist events:`, e);
@@ -501,6 +601,9 @@ export async function restoreEvents(storage, currentElapsed) {
         // Keep only events in [cutoff, currentElapsed]
         _revEvents  = (saved.revEvents  || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
         _costEvents = (saved.costEvents || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
+
+        // Restore per-hour ridership distribution (no pruning needed — it's a fixed 24-slot array per route)
+        if (saved.ridershipHourly) _ridershipHourly = saved.ridershipHourly;
     } catch (e) {
         console.error(`${TAG} Failed to restore events:`, e);
     }

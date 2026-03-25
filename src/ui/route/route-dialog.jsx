@@ -4,6 +4,7 @@
 // Exposed globally as window.AdvancedAnalytics.openRouteDialog(routeId).
 
 import { StaticPanel }  from '../../components/static-panel.jsx';
+import { Tooltip }      from '../../components/tooltip.jsx';
 import { Dropdown }     from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge }   from '../../components/route-badge.jsx';
@@ -96,7 +97,7 @@ function getUtilLabel(u) {
 
 // ── Usage gauge (hero metric) ──────────────────────────────────────────────────
 
-function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
+function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHigh, loadFactorMedium, loadFactorLow }) {
     const pct      = Math.max(loadFactor || 0, 0);
     const barWidth = Math.min(pct, 100);
     const overflow = pct > 100;
@@ -107,8 +108,8 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
     return (
         <div className="rounded flex flex-col border bg-muted/30 px-6 py-5">
             {/* Header row */}
-            <div className="mb-1">
-                <div className={"uppercase text-sm tracking-wider"}>Load Factor</div>
+            <div className="mb-1 flex text-muted-foreground justify-between">
+                <div className={"uppercase text-sm font-semibold tracking-wider"}>Load Factor</div>
                 <span className={"text-xs text-muted-foreground"}>Peak train load ÷ train capacity</span>
             </div>
             <div className={"my-auto"}>
@@ -143,6 +144,41 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity }) {
                     <div className="absolute inset-y-0 w-px bg-foreground/25" style={{left: `${WARNING_LOW}%`}}/>
                     <div className="absolute inset-y-0 w-px bg-foreground/25" style={{left: `${WARNING_HIGH}%`}}/>
                 </div>
+
+                {/* Phase breakdown bars */}
+                {(loadFactorHigh > 0 || loadFactorMedium > 0 || loadFactorLow > 0) && (
+                    <div className="grid gap-2 mt-2 mb-1"
+                         style={{gridTemplateColumns: `${CONFIG.DEMAND_HOURS.medium}fr ${CONFIG.DEMAND_HOURS.high}fr ${CONFIG.DEMAND_HOURS.low}fr`}}>
+                        {[
+                            { key: 'MED',  pct: loadFactorMedium, iconName: 'Sun',       title: 'Medium Demand', desc: 'How full trains run during daytime hours relative to the capacity scheduled for that period.' },
+                            { key: 'HIGH', pct: loadFactorHigh,   iconName: 'Briefcase', title: 'High Demand',   desc: 'How full trains run during peak hours relative to the capacity scheduled for that period.' },
+                            { key: 'LOW',  pct: loadFactorLow,    iconName: 'Moon',      title: 'Low Demand',    desc: 'How full trains run during overnight hours relative to the capacity scheduled for that period.' },
+                        ].map(({ key, pct, iconName, title, desc }) => {
+                            const c = getUtilColors(pct);
+                            const tip = (
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="font-semibold">{title}</span>
+                                    <span className={c.text}>{pct}%</span>
+                                    <span className="text-xs opacity-70">{desc}</span>
+                                </div>
+                            );
+                            return (
+                                <Tooltip key={key} side="top" delayDuration={150} content={tip}>
+                                    <div className="flex items-center gap-1.5 cursor-default">
+                                        <span className="text-muted-foreground shrink-0">
+                                            {React.createElement(icons[iconName], { size: 11 })}
+                                        </span>
+                                        <div className="relative flex-1 h-1.5 rounded overflow-hidden"
+                                             style={{backgroundColor: 'rgba(128,128,128,0.15)'}}>
+                                            <div className={`absolute inset-y-0 left-0 rounded ${c.bar}`}
+                                                 style={{width: `${Math.min(pct, 100)}%`}} />
+                                        </div>
+                                    </div>
+                                </Tooltip>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Footer */}
                 <div className="flex justify-between text-xs text-muted-foreground mt-3">
@@ -213,6 +249,9 @@ export function RouteContent({ routeId }) {
                     utilization={data.utilization}
                     ridership={Math.round(data.ridership)}
                     capacity={data.capacity}
+                    loadFactorHigh={data.loadFactorHigh}
+                    loadFactorMedium={data.loadFactorMedium}
+                    loadFactorLow={data.loadFactorLow}
                 />
 
                 {/* ── Operational stats --- First row ── */}
