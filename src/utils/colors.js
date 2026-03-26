@@ -4,20 +4,30 @@
 import { CONFIG } from '../config.js';
 
 /**
- * Get utilization status classes based on percentage
- * @param {number} utilization - Utilization percentage
+ * Get load factor status classes based on percentage (0–100+)
+ * @param {number} loadFactor - Load factor percentage
  * @returns {string} CSS color classes
  */
-export function getUtilizationClasses(utilization) {
-    const thresholds = CONFIG.UTILIZATION_THRESHOLDS;
-    const colors = CONFIG.COLORS.UTILIZATION;
-    
-    if (utilization < thresholds.CRITICAL_LOW || utilization > thresholds.CRITICAL_HIGH) {
-        return colors.CRITICAL;
-    } else if ((utilization >= thresholds.CRITICAL_LOW && utilization < thresholds.WARNING_LOW) || 
-               (utilization >= thresholds.WARNING_HIGH && utilization <= thresholds.CRITICAL_HIGH)) {
-        return colors.WARNING;
-    }
+export function getLoadFactorClasses(loadFactor) {
+    const { CRITICAL_LOW, WARNING_LOW, WARNING_HIGH, CRITICAL_HIGH } = CONFIG.LOAD_FACTOR_THRESHOLDS;
+    const colors = CONFIG.COLORS.EFFICIENCY; // same 3-class palette
+
+    if (loadFactor < CRITICAL_LOW || loadFactor > CRITICAL_HIGH) return colors.CRITICAL;
+    if (loadFactor < WARNING_LOW  || loadFactor > WARNING_HIGH)  return colors.WARNING;
+    return colors.GOOD;
+}
+
+/**
+ * Get efficiency status classes based on multiplier value (e.g. 1.3 = 1.3×)
+ * @param {number} efficiency - Efficiency multiplier (ridership / 2× capacity)
+ * @returns {string} CSS color classes
+ */
+export function getEfficiencyClasses(efficiency) {
+    const { CRITICAL_LOW, WARNING_LOW } = CONFIG.EFFICIENCY_THRESHOLDS;
+    const colors = CONFIG.COLORS.EFFICIENCY;
+
+    if (efficiency < CRITICAL_LOW) return colors.CRITICAL;
+    if (efficiency < WARNING_LOW)  return colors.WARNING;
     return colors.GOOD;
 }
 

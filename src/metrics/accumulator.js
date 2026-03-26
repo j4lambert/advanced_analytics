@@ -86,6 +86,7 @@ function _emptyStats() {
         ridership:          0,
         capacity:           0,
         utilization:        0,
+        efficiency:         0,
         loadFactor:         0,
         loadFactorHigh:     0,
         loadFactorMedium:   0,
@@ -287,6 +288,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
 
     let capacity         = 0;
     let utilization      = 0;
+    let efficiency       = 0;
     let loadFactor       = 0;
     let loadFactorHigh   = 0;
     let loadFactorMedium = 0;
@@ -295,6 +297,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     if (trainType) {
         capacity    = _computeStaticCapacity(route, trainType);
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
+        efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
 
         // loadFactor = (fraction of ridership on the busiest segment) × utilization
         // The fraction is scale-invariant (normalises cumulative commute counts).
@@ -336,6 +339,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         ridership,
         capacity,
         utilization,
+        efficiency,
         loadFactor,
         loadFactorHigh,
         loadFactorMedium,

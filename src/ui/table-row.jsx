@@ -5,7 +5,7 @@ import { CONFIG } from '../config.js';
 import { RouteBadge } from '../components/route-badge.jsx';
 import { formatCurrency, formatCurrencyCompact, formatCurrencyFull, calculateTotalTrains } from '../utils/formatting.js';
 import { getCellClasses } from '../utils/sorting.js';
-import { getUtilizationClasses, getComparisonColorClass, getComparisonArrow } from '../utils/colors.js';
+import { getLoadFactorClasses, getEfficiencyClasses, getComparisonColorClass, getComparisonArrow } from '../utils/colors.js';
 
 import { Tooltip } from '../components/tooltip.jsx';
 
@@ -100,28 +100,28 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         group="performance"
                     />
                 ) : (
-                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getUtilizationClasses(row.loadFactor)} ${getCellClasses('loadFactor', sortState, groupState, 'performance')}`}>
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getLoadFactorClasses(row.loadFactor)} ${getCellClasses('loadFactor', sortState, groupState, 'performance')}`}>
                         {row.loadFactor > 0 ? `${row.loadFactor}%` : '—'}
                     </td>
                 )
             )}
 
-            {/* Utilization (secondary: throughput-based) - performance */}
+            {/* Efficiency (Performance) - performance */}
             {isColumnVisible('performance') && (
                 row.isComparison ? (
                     <ComparisonCell
-                        columnKey="utilization"
-                        value={row.utilization}
-                        primaryValue={row.primaryValues?.utilization}
-                        secondaryValue={row.secondaryValues?.utilization}
+                        columnKey="efficiency"
+                        value={row.efficiency}
+                        primaryValue={row.primaryValues?.efficiency}
+                        secondaryValue={row.secondaryValues?.efficiency}
                         showPercentages={true}
                         sortState={sortState}
                         groupState={groupState}
                         group="performance"
                     />
                 ) : (
-                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses('utilization', sortState, groupState, 'performance')}`}>
-                        {row.utilization}%
+                    <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getEfficiencyClasses(row.efficiency || 0)} ${getCellClasses('efficiency', sortState, groupState, 'performance')}`}>
+                        {row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : '—'}
                     </td>
                 )
             )}

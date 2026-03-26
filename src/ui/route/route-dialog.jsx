@@ -10,6 +10,7 @@ import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge }   from '../../components/route-badge.jsx';
 import { CONFIG }       from '../../config.js';
 import { formatCurrencyCompact, calculateTotalTrains } from '../../utils/formatting.js';
+import { getEfficiencyClasses } from '../../utils/colors.js';
 import { getStorage }   from '../../core/lifecycle.js';
 import { getRoute24hStats } from '../../metrics/accumulator.js';
 import { getRouteStationsInOrder } from '../../utils/route-utils.js';
@@ -77,33 +78,33 @@ function useRouteData(routeId) {
     return data;
 }
 
-// ── Utilization helpers ────────────────────────────────────────────────────────
+// ── Load Factor helpers ────────────────────────────────────────────────────────
 
-function getUtilColors(u) {
-    const { CRITICAL_LOW, WARNING_LOW, WARNING_HIGH, CRITICAL_HIGH } = CONFIG.UTILIZATION_THRESHOLDS;
-    if (u < CRITICAL_LOW || u > CRITICAL_HIGH) return { bar: 'bg-red-500',   text: 'text-red-500'   };
-    if (u < WARNING_LOW  || u > WARNING_HIGH)  return { bar: 'bg-amber-500', text: 'text-amber-500' };
-    return                                            { bar: 'bg-green-500', text: 'text-green-600 dark:text-green-400' };
+function getLoadFactorColors(pct) {
+    const { CRITICAL_LOW, WARNING_LOW, WARNING_HIGH, CRITICAL_HIGH } = CONFIG.LOAD_FACTOR_THRESHOLDS;
+    if (pct < CRITICAL_LOW || pct > CRITICAL_HIGH) return { bar: 'bg-red-500',   text: 'text-red-500'   };
+    if (pct < WARNING_LOW  || pct > WARNING_HIGH)  return { bar: 'bg-amber-500', text: 'text-amber-500' };
+    return                                                { bar: 'bg-green-500', text: 'text-green-600 dark:text-green-400' };
 }
 
-function getUtilLabel(u) {
-    const { CRITICAL_LOW, WARNING_LOW, WARNING_HIGH, CRITICAL_HIGH } = CONFIG.UTILIZATION_THRESHOLDS;
-    if (u < CRITICAL_LOW)  return 'Critically Underused';
-    if (u < WARNING_LOW)   return 'Underused';
-    if (u > CRITICAL_HIGH) return 'Overcrowded';
-    if (u > WARNING_HIGH)  return 'Near Capacity';
+function getLoadFactorLabel(pct) {
+    const { CRITICAL_LOW, WARNING_LOW, WARNING_HIGH, CRITICAL_HIGH } = CONFIG.LOAD_FACTOR_THRESHOLDS;
+    if (pct < CRITICAL_LOW)  return 'Critically Underused';
+    if (pct < WARNING_LOW)   return 'Underused';
+    if (pct > CRITICAL_HIGH) return 'Overcrowded';
+    if (pct > WARNING_HIGH)  return 'Near Capacity';
     return 'Healthy';
 }
 
-// ── Usage gauge (hero metric) ──────────────────────────────────────────────────
+// ── Load Factor gauge (hero metric) ───────────────────────────────────────────
 
-function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHigh, loadFactorMedium, loadFactorLow }) {
+function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow }) {
     const pct      = Math.max(loadFactor || 0, 0);
     const barWidth = Math.min(pct, 100);
     const overflow = pct > 100;
-    const colors   = getUtilColors(pct);
-    const label    = getUtilLabel(pct);
-    const { WARNING_LOW, WARNING_HIGH } = CONFIG.UTILIZATION_THRESHOLDS;
+    const colors   = getLoadFactorColors(pct);
+    const label    = getLoadFactorLabel(pct);
+    const { WARNING_LOW, WARNING_HIGH } = CONFIG.LOAD_FACTOR_THRESHOLDS;
 
     return (
         <div className="rounded flex flex-col border bg-muted/30 px-6 py-5">
@@ -113,7 +114,7 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHi
                 <span className={"text-xs text-muted-foreground"}>Peak train load ÷ train capacity</span>
             </div>
             <div className={"my-auto"}>
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start mb-2">
                     <div className={`text-xl font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
                     <div className={`text-5xl font-bold tabular-nums leading-none ${colors.text}`}>
                         {pct > 0 ? pct.toFixed(1) : '—'}
@@ -124,7 +125,7 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHi
                 {/* Progress bar — bar fills to 100 %; a striped overflow indicator
                     appears on the right edge when the route is over capacity. */}
                 <div
-                    className="relative h-3 rounded overflow-hidden mb-2"
+                    className="relative h-3 rounded overflow-hidden mb-5"
                     style={{backgroundColor: 'rgba(128,128,128,0.15)'}}
                 >
                     <div
@@ -147,14 +148,14 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHi
 
                 {/* Phase breakdown bars */}
                 {(loadFactorHigh > 0 || loadFactorMedium > 0 || loadFactorLow > 0) && (
-                    <div className="grid gap-2 mt-2 mb-1"
+                    <div className="grid gap-8 mt-2 mb-1"
                          style={{gridTemplateColumns: `${CONFIG.DEMAND_HOURS.medium}fr ${CONFIG.DEMAND_HOURS.high}fr ${CONFIG.DEMAND_HOURS.low}fr`}}>
                         {[
                             { key: 'MED',  pct: loadFactorMedium, iconName: 'Sun',       title: 'Medium Demand', desc: 'How full trains run during daytime hours relative to the capacity scheduled for that period.' },
                             { key: 'HIGH', pct: loadFactorHigh,   iconName: 'Briefcase', title: 'High Demand',   desc: 'How full trains run during peak hours relative to the capacity scheduled for that period.' },
                             { key: 'LOW',  pct: loadFactorLow,    iconName: 'Moon',      title: 'Low Demand',    desc: 'How full trains run during overnight hours relative to the capacity scheduled for that period.' },
                         ].map(({ key, pct, iconName, title, desc }) => {
-                            const c = getUtilColors(pct);
+                            const c = getLoadFactorColors(pct);
                             const tip = (
                                 <div className="flex flex-col gap-0.5">
                                     <span className="font-semibold">{title}</span>
@@ -163,7 +164,7 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHi
                                 </div>
                             );
                             return (
-                                <Tooltip key={key} side="top" delayDuration={150} content={tip}>
+                                <Tooltip key={key} side="bottom" delayDuration={150} content={tip}>
                                     <div className="flex items-center gap-1.5 cursor-default">
                                         <span className="text-muted-foreground shrink-0">
                                             {React.createElement(icons[iconName], { size: 11 })}
@@ -180,13 +181,6 @@ function UsageGauge({ loadFactor, utilization, ridership, capacity, loadFactorHi
                     </div>
                 )}
 
-                {/* Footer */}
-                <div className="flex justify-between text-xs text-muted-foreground mt-3">
-                    <span className="text-right">
-                        Usage: {utilization}%
-                        <span className="ml-1 opacity-60">({Math.round(ridership || 0).toLocaleString()} / {(capacity || 0).toLocaleString()})</span>
-                    </span>
-                </div>
             </div>
         </div>
     );
@@ -246,9 +240,6 @@ export function RouteContent({ routeId }) {
                 {/* ── Load Factor (hero) ── */}
                 <UsageGauge
                     loadFactor={data.loadFactor}
-                    utilization={data.utilization}
-                    ridership={Math.round(data.ridership)}
-                    capacity={data.capacity}
                     loadFactorHigh={data.loadFactorHigh}
                     loadFactorMedium={data.loadFactorMedium}
                     loadFactorLow={data.loadFactorLow}
@@ -256,7 +247,6 @@ export function RouteContent({ routeId }) {
 
                 {/* ── Operational stats --- First row ── */}
                 <div className="grid grid-cols-3 gap-3">
-                    <div className={"flex flex-col gap-3"}>
                         <StatCard
                             label="Ridership"
                             icon="Route"
@@ -264,69 +254,122 @@ export function RouteContent({ routeId }) {
                             sub="/ last 24h"
                         />
                         <StatCard
+                            label="Performance"
+                            icon="Zap"
+                            value={data.efficiency > 0 ? `${data.efficiency.toFixed(2)}×` : '—'}
+                            sub={data.efficiency >= 1 ? 'High turnover' : data.efficiency > 0 ? 'Room to grow' : 'No data yet'}
+                            valueClass={getEfficiencyClasses(data.efficiency || 0)}
+                        />
+                        <StatCard
+                            label="Trains"
+                            icon="TramFront"
+                            value={totalTrains}
+                            sub={`${data.trainsHigh}H · ${data.trainsMedium}M · ${data.trainsLow}L`}
+                        />
+                        <StatCard
                             label="Throughput"
                             icon="Container"
                             value={(data.capacity || 0).toLocaleString()}
                             sub="daily capacity"
                         />
-                    </div>
-                    <div className={"col-span-2"}>
                         <StatCard
+                            label="Stops"
+                            icon="FlagTriangleRight"
+                            value={data.stations || '–'}
+                            sub={`${data.routeInfo?.stationCount ?? '–'} station${data.routeInfo?.stationCount !== 1 ? 's' : ''}`}
+                        />
+                        <StatCard
+                            label="Transfers"
+                            icon="Component"
+                            sub="Connection Hubs"
                         >
-                            <div className="pl-2 flex flex-col gap-2">
-
-                                {/* Route name */}
-                                <div className="mb-2 pb-1">
-                                    <RouteBadge routeId={routeId} size="2rem" interactive={false} />
-                                </div>
-
-                                {/* Creation day + time in service */}
-                                {data.routeInfo?.createdDay != null && (
-                                    <div className="flex gap-4 text-xs pt-1 mb-3">
-                                        <span className="text-muted-foreground">
-                                            Created&nbsp;
-                                            <span className="text-foreground font-medium">
-                                                Day {data.routeInfo.createdDay}
+                            {(() => {
+                                const routeIds = data.transfers?.routeIds ?? [];
+                                if (routeIds.length === 0) {
+                                    return <div className="text-xl font-semibold tabular-nums">0</div>;
+                                }
+                                const allRoutes = api.gameState.getRoutes();
+                                return (
+                                    <Dropdown
+                                        togglerContent={
+                                            <span className="text-xl font-semibold tabular-nums">
+                                                {routeIds.length}
                                             </span>
-                                        </span>
-                                        {data.routeInfo.daysInService != null && (
+                                        }
+                                        togglerClasses="flex items-center gap-1 rounded hover:bg-accent px-1 -ml-1 transition-colors"
+                                        onChange={(rid) => window.AdvancedAnalytics?.openRouteDialog?.(rid)}
+                                    >
+                                        {routeIds.map(rid => {
+                                            const route = allRoutes.find(r => r.id === rid);
+                                            return route
+                                                ? <DropdownItem key={rid} value={rid} route={route} />
+                                                : null;
+                                        })}
+                                    </Dropdown>
+                                );
+                            })()}
+                        </StatCard>
+
+                </div>
+
+                {/* ── Info ── */}
+                <StatCard
+                >
+                    <div className="pl-2 flex gap-6">
+
+                        {/* Route name */}
+                        <div className="shrink-0">
+                            <RouteBadge routeId={routeId} size="1.4rem" interactive={false} />
+                        </div>
+                        <div>
+
+                            {/* Creation day + time in service */}
+                            {data.routeInfo?.createdDay != null && (
+                                <div className="flex gap-4 text-xs pt-1 mb-3">
                                             <span className="text-muted-foreground">
-                                                In service&nbsp;
+                                                Created&nbsp;
                                                 <span className="text-foreground font-medium">
-                                                    {data.routeInfo.daysInService > 0
-                                                        ? `${data.routeInfo.daysInService} day${data.routeInfo.daysInService !== 1 ? 's' : ''}`
-                                                        : 'since today'}
+                                                    Day {data.routeInfo.createdDay}
                                                 </span>
                                             </span>
-                                        )}
+                                    {data.routeInfo.daysInService != null && (
+                                        <span className="text-muted-foreground">
+                                                    In service&nbsp;
+                                            <span className="text-foreground font-medium">
+                                                        {data.routeInfo.daysInService > 0
+                                                            ? `${data.routeInfo.daysInService} day${data.routeInfo.daysInService !== 1 ? 's' : ''}`
+                                                            : 'since today'}
+                                                    </span>
+                                                </span>
+                                    )}
+                                </div>
+                            )}
+
+                            <div>
+                                {/* Train type */}
+                                {data.routeInfo?.trainTypeName && (
+                                    <div className="flex items-center gap-1.5 text-xs mb-2">
+                                                <span
+                                                    className="w-2 h-2 rounded-full shrink-0"
+                                                    style={{ background: data.routeInfo.trainTypeColor }}
+                                                />
+                                        <span className="font-medium">{data.routeInfo.trainTypeName}</span>
                                     </div>
                                 )}
 
-                                <div>
-                                    {/* Train type */}
-                                    {data.routeInfo?.trainTypeName && (
-                                        <div className="flex items-center gap-1.5 text-xs mb-2">
-                                            <span
-                                                className="w-2 h-2 rounded-full shrink-0"
-                                                style={{ background: data.routeInfo.trainTypeColor }}
-                                            />
-                                            <span className="font-medium">{data.routeInfo.trainTypeName}</span>
-                                        </div>
-                                    )}
-
-                                    {/* Train type description */}
-                                    {data.routeInfo?.trainTypeDescription && (
-                                        <p className="text-xs text-muted-foreground leading-relaxed">
-                                            {data.routeInfo.trainTypeDescription}
-                                        </p>
-                                    )}
-                                </div>
+                                {/* Train type description */}
+                                {data.routeInfo?.trainTypeDescription && (
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {data.routeInfo.trainTypeDescription}
+                                    </p>
+                                )}
                             </div>
-                        </StatCard>
+                        </div>
                     </div>
-                </div>
+                </StatCard>
+
                 {/* ── Financial stats ── */}
-                <div className="grid grid-cols-3 gap-3 pt-2">
+                <div className="grid grid-cols-3 gap-3">
                     <StatCard
                         label="Revenue"
                         icon="ArrowBigUpDash"
@@ -347,54 +390,6 @@ export function RouteContent({ routeId }) {
                         valueClass={profitClass}
                     />
                 </div>
-                {/* ── Infrastructure ── */}
-                <div className="grid grid-cols-3 gap-3 pt-2">
-                    <StatCard
-                        label="Trains"
-                        icon="TramFront"
-                        value={totalTrains}
-                        sub={`${data.trainsHigh}H · ${data.trainsMedium}M · ${data.trainsLow}L`}
-                    />
-                    <StatCard
-                        label="Stops"
-                        icon="FlagTriangleRight"
-                        value={data.stations || '–'}
-                        sub={`${data.routeInfo?.stationCount ?? '–'} station${data.routeInfo?.stationCount !== 1 ? 's' : ''}`}
-                    />
-                    <StatCard
-                        label="Transfers"
-                        icon="Component"
-                    >
-                        {(() => {
-                            const routeIds = data.transfers?.routeIds ?? [];
-                            if (routeIds.length === 0) {
-                                return <div className="text-xl font-semibold tabular-nums">0</div>;
-                            }
-                            const allRoutes = api.gameState.getRoutes();
-                            return (
-                                <Dropdown
-                                    togglerContent={
-                                        <span className="text-xl font-semibold tabular-nums">
-                                            {routeIds.length}
-                                        </span>
-                                    }
-                                    togglerClasses="flex items-center gap-1 rounded hover:bg-accent px-1 -ml-1 transition-colors"
-                                    onChange={(rid) => window.AdvancedAnalytics?.openRouteDialog?.(rid)}
-                                >
-                                    {routeIds.map(rid => {
-                                        const route = allRoutes.find(r => r.id === rid);
-                                        return route
-                                            ? <DropdownItem key={rid} value={rid} route={route} />
-                                            : null;
-                                    })}
-                                </Dropdown>
-                            );
-                        })()}
-                    </StatCard>
-                </div>
-
-
-
             </section>
 
             {/* ── Route Metrics chart ── */}

@@ -3,6 +3,14 @@
 
 import { calculateTotalTrains, wasRouteNewOnDay, wasRouteDeletedOnDay } from '../utils/formatting.js';
 
+// Derive efficiency from a stored route, falling back for old snapshots that
+// pre-date the efficiency field being added to the accumulator output.
+function getEfficiency(route) {
+    if (!route) return 0;
+    if (route.efficiency != null) return route.efficiency;
+    return route.capacity > 0 ? route.ridership / (2 * route.capacity) : 0;
+}
+
 /**
  * Determine if a metric is good when high (vs good when low like costs)
  * @param {string} metricKey - Metric identifier
@@ -82,7 +90,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             ridership: 'NEW',
             capacity: 'NEW',
             loadFactor: 'NEW',
-            utilization: 'NEW',
+            efficiency: 'NEW',
             stations: 'NEW',
             trainSchedule: 'NEW',
             transfers: 'NEW',
@@ -94,7 +102,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 ridership: primaryRoute.ridership,
                 capacity: primaryRoute.capacity,
                 loadFactor: primaryRoute.loadFactor || 0,
-                utilization: primaryRoute.utilization,
+                efficiency: getEfficiency(primaryRoute),
                 stations: primaryRoute.stations,
                 trainSchedule: calculateTotalTrains(primaryRoute),
                 transfers: primaryRoute.transfers,
@@ -107,7 +115,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 ridership: secondaryRoute?.ridership || 0,
                 capacity: secondaryRoute?.capacity || 0,
                 loadFactor: secondaryRoute?.loadFactor || 0,
-                utilization: secondaryRoute?.utilization || 0,
+                efficiency: getEfficiency(secondaryRoute),
                 stations: secondaryRoute?.stations || 0,
                 trainSchedule: calculateTotalTrains(secondaryRoute),
                 transfers: secondaryRoute?.transfers || { count: 0, routes: [], stationIds: [] },
@@ -130,7 +138,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             ridership: 'DELETED',
             capacity: 'DELETED',
             loadFactor: 'DELETED',
-            utilization: 'DELETED',
+            efficiency: 'DELETED',
             stations: 'DELETED',
             trainSchedule: 'DELETED',
             transfers: 'DELETED',
@@ -142,7 +150,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 ridership: 0,
                 capacity: 0,
                 loadFactor: 0,
-                utilization: 0,
+                efficiency: 0,
                 stations: 0,
                 trainSchedule: 0,
                 transfers: { count: 0, routes: [], stationIds: [] },
@@ -155,7 +163,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
                 ridership: secondaryRoute.ridership,
                 capacity: secondaryRoute.capacity,
                 loadFactor: secondaryRoute.loadFactor || 0,
-                utilization: secondaryRoute.utilization,
+                efficiency: getEfficiency(secondaryRoute),
                 stations: secondaryRoute.stations,
                 trainSchedule: calculateTotalTrains(secondaryRoute),
                 transfers: secondaryRoute.transfers,
@@ -175,7 +183,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
         ridership: calculatePercentageChange(primaryRoute.ridership, secondaryRoute.ridership, 'ridership'),
         capacity: calculatePercentageChange(primaryRoute.capacity, secondaryRoute.capacity, 'capacity'),
         loadFactor: calculatePercentageChange(primaryRoute.loadFactor || 0, secondaryRoute.loadFactor || 0, 'loadFactor'),
-        utilization: calculatePercentageChange(primaryRoute.utilization, secondaryRoute.utilization, 'utilization'),
+        efficiency: calculatePercentageChange(getEfficiency(primaryRoute), getEfficiency(secondaryRoute), 'efficiency'),
         stations: calculatePercentageChange(primaryRoute.stations, secondaryRoute.stations, 'stations'),
         trainSchedule: calculatePercentageChange(
             calculateTotalTrains(primaryRoute),
@@ -205,7 +213,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             ridership: primaryRoute.ridership,
             capacity: primaryRoute.capacity,
             loadFactor: primaryRoute.loadFactor || 0,
-            utilization: primaryRoute.utilization,
+            efficiency: getEfficiency(primaryRoute),
             stations: primaryRoute.stations,
             trainSchedule: calculateTotalTrains(primaryRoute),
             transfers: primaryRoute.transfers,
@@ -218,7 +226,7 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             ridership: secondaryRoute.ridership,
             capacity: secondaryRoute.capacity,
             loadFactor: secondaryRoute.loadFactor || 0,
-            utilization: secondaryRoute.utilization,
+            efficiency: getEfficiency(secondaryRoute),
             stations: secondaryRoute.stations,
             trainSchedule: calculateTotalTrains(secondaryRoute),
             transfers: secondaryRoute.transfers,

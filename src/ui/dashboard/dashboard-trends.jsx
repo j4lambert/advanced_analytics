@@ -9,7 +9,7 @@
 //   • tooltip showing both raw (partial day) and projected (extrapolated to 24h)
 //     values for time-dependent metrics (cost, revenue, profit, capacity)
 //
-// Metrics that are NOT time-dependent (ridership, utilization, stations,
+// Metrics that are NOT time-dependent (ridership, efficiency, stations,
 // transfers) show only the raw live value — extrapolation would be misleading.
 
 import { CONFIG } from '../../config.js';
@@ -32,7 +32,7 @@ const CHART_METRICS = [
     { key: 'ridership',   label: 'Ridership',      color: '#3b82f6' },
     { key: 'capacity',    label: 'Throughput',     color: '#8b5cf6' },
     { key: 'loadFactor',  label: 'Load Factor %',  color: '#f97316' },
-    { key: 'utilization', label: 'Usage %',        color: '#22c55e' },
+    { key: 'efficiency',  label: 'Efficiency',      color: '#22c55e' },
     { key: 'dailyCost',   label: 'Daily Cost',     color: '#ef4444' },
     { key: 'dailyRevenue',label: 'Daily Revenue',  color: '#10b981' },
     { key: 'dailyProfit', label: 'Daily Profit',   color: '#06b6d4' },
@@ -178,7 +178,13 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
             const point = { day, isLive: false };
             selectedRoutes.forEach(routeId => {
                 const routeData = dayData.routes.find(r => r.id === routeId);
-                point[routeId] = routeData?.[selectedMetric] ?? null;
+                let value = routeData?.[selectedMetric] ?? null;
+                // efficiency may be absent in snapshots written before this metric was added —
+                // derive it from the stored ridership / capacity pair
+                if (value == null && selectedMetric === 'efficiency' && routeData?.capacity > 0) {
+                    value = routeData.ridership / (2 * routeData.capacity);
+                }
+                point[routeId] = value;
                 // No projected key for historical — they are complete days
             });
             return point;
@@ -415,7 +421,8 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
             if (value >= 1_000)     return `$${(value / 1_000).toFixed(0)}k`;
             return `$${value}`;
         }
-        if (['utilization', 'loadFactor'].includes(metricKey)) return `${value}%`;
+        if (metricKey === 'efficiency') return `${value.toFixed(2)}×`;
+        if (metricKey === 'loadFactor') return `${value}%`;
         if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
         return value.toLocaleString();
     };
@@ -425,7 +432,8 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
         if (['dailyCost', 'dailyRevenue', 'dailyProfit'].includes(metricKey)) {
             return `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
         }
-        if (['utilization', 'loadFactor'].includes(metricKey)) return `${value}%`;
+        if (metricKey === 'efficiency') return `${value.toFixed(2)}×`;
+        if (metricKey === 'loadFactor') return `${value}%`;
         return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
     };
 

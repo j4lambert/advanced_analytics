@@ -251,8 +251,8 @@ export function SystemStats({ liveRouteData }) {
         const totalCapacity  = routes.reduce((s, r) => s + (r.capacity   ?? 0), 0);
         const totalTrains    = routes.reduce((s, r) => s + (r.totalTrains ?? 0), 0);
         const totalRevenue   = routes.reduce((s, r) => s + (r.dailyRevenue ?? 0), 0);
-        const totalUsage = totalCapacity > 0
-            ? (totalRidership / totalCapacity) * 100
+        const totalEfficiency = totalCapacity > 0
+            ? totalRidership / (2 * totalCapacity)
             : 0;
 
 
@@ -280,7 +280,7 @@ export function SystemStats({ liveRouteData }) {
             hubCount,
             totalRidership,
             totalRevenue,
-            totalUsage,
+            totalEfficiency,
             loadFactor,
             healthScore,
         };

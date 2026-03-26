@@ -8,7 +8,7 @@
 //       people > currency > percent > transfers > trains
 //     The top 2 unit types among selected metrics become left/right axes.
 //     Metrics of a 3rd+ type fold into the closer axis.
-//   • Default selection: Ridership, Usage %, Daily Profit
+//   • Default selection: Ridership, Load Factor, Daily Profit
 
 import { CONFIG } from '../../config.js';
 import { getAvailableDays } from '../../utils/formatting.js';
@@ -30,7 +30,7 @@ const METRICS = [
     { key: 'dailyRevenue', label: 'Revenue',       color: '#10b981', unit: 'currency'  },
     { key: 'dailyCost',    label: 'Cost',          color: '#ef4444', unit: 'currency'  },
     { key: 'loadFactor',   label: 'Load Factor',   color: '#f97316', unit: 'percent'   },
-    { key: 'utilization',  label: 'Throughput %',  color: '#22c55e', unit: 'percent'   },
+    { key: 'efficiency',   label: 'Efficiency',    color: '#22c55e', unit: 'multiplier' },
     { key: 'transfers',    label: 'Transfers',     color: '#f59e0b', unit: 'transfers' },
     { key: 'totalTrains',  label: 'Trains',        color: '#a78bfa', unit: 'trains'    },
 ];
@@ -38,7 +38,7 @@ const METRICS = [
 const DEFAULT_METRICS = ['ridership', 'loadFactor', 'dailyProfit'];
 
 // Priority order for axis slot assignment (index 0 = highest priority = left axis)
-const UNIT_PRIORITY = ['people', 'currency', 'percent', 'transfers', 'trains'];
+const UNIT_PRIORITY = ['people', 'currency', 'percent', 'multiplier', 'transfers', 'trains'];
 
 const TIMEFRAMES = [
     { key: '7',   label: '7 Days'  },
@@ -81,18 +81,20 @@ const AXIS_FORMATTERS = {
         if (Math.abs(v) >= 1_000)     return `$${(v / 1_000).toFixed(0)}k`;
         return `$${v.toLocaleString()}`;
     },
-    percent:   (v) => v == null ? '' : `${v}%`,
-    transfers: (v) => v == null ? '' : String(Math.round(v)),
-    trains:    (v) => v == null ? '' : String(Math.round(v)),
+    percent:     (v) => v == null ? '' : `${v}%`,
+    multiplier:  (v) => v == null ? '' : `${v.toFixed(2)}×`,
+    transfers:   (v) => v == null ? '' : String(Math.round(v)),
+    trains:      (v) => v == null ? '' : String(Math.round(v)),
 };
 
 // Tooltip / legend values (full precision)
 const VALUE_FORMATTERS = {
     people:    (v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 }),
     currency:  (v) => `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-    percent:   (v) => `${v.toFixed(1)}%`,
-    transfers: (v) => String(Math.round(v)),
-    trains:    (v) => String(Math.round(v)),
+    percent:     (v) => `${v.toFixed(1)}%`,
+    multiplier:  (v) => `${v.toFixed(2)}×`,
+    transfers:   (v) => String(Math.round(v)),
+    trains:      (v) => String(Math.round(v)),
 };
 
 function formatMetricValue(metricKey, value) {
@@ -219,6 +221,11 @@ export function RouteMetrics({ routeId }) {
             METRICS.forEach(m => { point[m.key] = routeEntry[m.key] ?? null; });
             // transfers is stored as { count, routes, stationIds } — extract the number
             point.transfers  = routeEntry.transfers?.count ?? null;
+            // efficiency may be absent in snapshots written before this metric was added —
+            // derive it from the stored ridership / capacity pair
+            if (point.efficiency == null && routeEntry.capacity > 0) {
+                point.efficiency = routeEntry.ridership / (2 * routeEntry.capacity);
+            }
             // totalTrains is not stored directly — derive from the three period counts
             point.totalTrains = routeEntry.trainsLow != null
                 ? (routeEntry.trainsLow || 0) + (routeEntry.trainsMedium || 0) + (routeEntry.trainsHigh || 0)

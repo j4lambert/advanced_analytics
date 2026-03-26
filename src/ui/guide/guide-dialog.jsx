@@ -182,57 +182,6 @@ function HealthScoreBar() {
     );
 }
 
-function UsageThresholdBar() {
-    // Zone widths are proportional to their actual percentage ranges (total = 100)
-    const zones = [
-        { bg: '#ef4444', flex: 30, text: 'Critical',   textColor: 'rgb(255,255,255)' },
-        { bg: '#eab308', flex: 15, text: 'Under-used', textColor: 'rgb(0,0,0)'      },
-        { bg: '#16a34a', flex: 40, text: 'Healthy',    textColor: 'rgb(255,255,255)' },
-        { bg: '#eab308', flex: 10, text: 'Busy',       textColor: 'rgb(0,0,0)'      },
-        { bg: '#ef4444', flex: 5,  text: '!',          textColor: 'rgb(255,255,255)' },
-    ];
-    const ticks = [
-        { pct: 0,  label: '0%'   },
-        { pct: 30, label: '30%'  },
-        { pct: 45, label: '45%'  },
-        { pct: 85, label: '85%'  },
-        { pct: 97.4, label: '95%+' },
-    ];
-    return (
-        <div className="my-4 select-none">
-            {/* Colored bar */}
-            <div className="flex h-7 rounded overflow-hidden" style={{ gap: '1px' }}>
-                {zones.map((z, i) => (
-                    <div
-                        key={i}
-                        className="flex items-center justify-center text-xs font-semibold overflow-hidden"
-                        style={{ flex: z.flex, backgroundColor: z.bg, color: z.textColor }}
-                    >
-                        {z.text}
-                    </div>
-                ))}
-            </div>
-            {/* Tick marks + threshold labels */}
-            <div className="relative" style={{ height: '28px' }}>
-                {ticks.map((t, i) => (
-                    <div
-                        key={i}
-                        className="absolute top-0 flex flex-col items-center"
-                        style={{
-                            left: `${t.pct}%`,
-                            transform: i === 0 ? 'none' : i === ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
-                        }}
-                    >
-                        <div style={{ width: 1, height: 6, backgroundColor: 'currentColor' }} />
-                        <span className="text-xs text-foreground" style={{ whiteSpace: 'nowrap' }}>
-                            {t.label}
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
 
 function Badge({ style, children }) {
     return (
@@ -281,7 +230,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             <NavItem    id="aa-guide-m-ridership"       label="Ridership"   icon="Route"    scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-throughput"      label="Throughput" icon="Container"     scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-load-factor-route" label="Load Factor" icon="Gauge"  scrollTo={scrollTo} />
-                            <NavItem    id="aa-guide-m-usage"           label="Usage (cap.)" icon="Scale"   scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-usage"           label="Performance"  icon="Zap"     scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-trains"          label="Trains" icon="TramFront"         scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-stations"        label="Stations" icon="Building2"       scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-transfers"       label="Transfers" icon="Component"     scrollTo={scrollTo} />
@@ -533,7 +482,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             which accumulate over all game days. To avoid values growing with
                             game time, the calculation normalises the peak segment load as a
                             fraction of total boardings on that route, then scales it against
-                            the current Usage figure. The result is a stable percentage that
+                            the current ridership/capacity ratio. The result is a stable percentage that
                             does not inflate as the game progresses.
                         </p>
                         <Note>
@@ -544,7 +493,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             alone would suggest.
                         </Note>
 
-                        <p className="font-semibold pt-3 pb-1">Load Factor vs Usage (cap.) — when to use each</p>
+                        <p className="font-semibold pt-3 pb-1">Load Factor vs Performance — when to use each</p>
                         <div className="grid grid-cols-2 gap-3 pb-1">
                             <div className="rounded-lg border border-border p-3 space-y-1.5">
                                 <p className="font-semibold text-foreground">Use Load Factor when…</p>
@@ -556,75 +505,82 @@ export function GuideDialog({ isOpen, onClose }) {
                                 </ul>
                             </div>
                             <div className="rounded-lg border border-border p-3 space-y-1.5">
-                                <p className="font-semibold text-foreground">Use Usage (cap.) when…</p>
+                                <p className="font-semibold text-foreground">Use Performance when…</p>
                                 <ul className="list-disc text-foreground/70 text-xs space-y-1">
-                                    <li>Evaluating overall schedule efficiency (are you running too many trains?).</li>
+                                    <li>Evaluating how well ridership justifies your schedule (are you running too many trains?).</li>
                                     <li>Doing financial analysis — cost scales with trains, not with crowding at one segment.</li>
-                                    <li>Comparing how well two routes fill their <em>whole</em> schedule, not just their peak.</li>
+                                    <li>Identifying routes with high passenger turnover that generate a lot of ridership relative to their capacity.</li>
                                 </ul>
                             </div>
                         </div>
                     </MetricEntry>
 
-                    <MetricEntry id="aa-guide-m-usage" label="Usage (cap.)" icon="Scale">
+                    <MetricEntry id="aa-guide-m-usage" label="Performance" icon="Zap">
                         <p className='pb-1'>
-                            Daily ridership as a percentage of total 24-hour throughput capacity —
-                            how much of the route's full schedule is being filled:
+                            A dimensionless multiplier that measures how much ridership a route generates
+                            relative to its bidirectional throughput capacity:
                         </p>
                         <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold flex-wrap">
                             <Badge style="text-xs bg-foreground text-background">daily ridership</Badge>
                             <span>÷</span>
+                            <span>(</span>
                             <Badge style="text-xs bg-foreground text-background">24 h throughput ceiling</Badge>
-                            <span>× 100</span>
+                            <span>× 2)</span>
                         </div>
-                        <UsageThresholdBar />
                         <ul className="list-disc pb-1">
                             <li>
-                                <span className="text-green-600 dark:text-green-400 font-medium">Green</span> (45–85%): healthy — ridership fills a good share of scheduled capacity.
+                                <strong>1.0×</strong> — every seat is filled end-to-end in both directions.
+                                This is the baseline for a simple two-terminal route at full utilisation.
                             </li>
                             <li>
-                                <span className="text-yellow-500 font-medium">Yellow</span>: under-used (30–45%) or getting busy (85–95%); consider adjusting the schedule.
+                                <strong className="text-green-600 dark:text-green-400">Above 1.0×</strong> — high passenger turnover: more people board and alight at intermediate stops,
+                                multiplying the effective ridership beyond the raw seat count.
+                                A value of <strong>2.3×</strong> is excellent, not a warning sign.
                             </li>
                             <li>
-                                <span className="text-red-500 font-medium">Red</span>: critically under-used (&lt;30%) or near/over capacity (&gt;95%).
+                                <strong className="text-yellow-500">Below 1.0×</strong> — some capacity is going unused on at least one direction or time period.
+                            </li>
+                            <li>
+                                <strong className="text-red-500">Below 0.3×</strong> — route is significantly underperforming relative to its schedule cost.
                             </li>
                         </ul>
 
+                        <p className="font-semibold pt-3 pb-1">Why ÷ 2?</p>
+                        <p className="pb-2 text-foreground/70 text-xs">
+                            The throughput ceiling counts <em>one-directional</em> seat capacity.
+                            A train running A → B → A serves passengers in both directions, so the
+                            true bidirectional ceiling is twice that figure. Dividing by 2 × capacity
+                            anchors the metric at 1.0× for a route where every seat is filled
+                            end-to-end in each direction — a natural, intuitive baseline.
+                        </p>
+
                         <p className="font-semibold pt-2 pb-1">Strengths</p>
                         <ul className="list-disc pb-1">
-                            <li>Good for <strong>schedule efficiency</strong>: tells you whether you're running more trains than demand warrants.</li>
-                            <li>Directly tied to financials — a low Usage route is likely losing money on operational costs.</li>
+                            <li>Directly tied to financials — a low Performance route is likely losing money on operational costs.</li>
+                            <li>Rewards long routes serving many transfer hubs: high turnover pushes the multiplier well above 1×.</li>
                             <li>Stable over time: it normalises automatically as ridership and capacity both grow.</li>
+                            <li>No artificial cap — high values are always good and reflect genuine ridership generation.</li>
                         </ul>
 
                         <p className="font-semibold pt-2 pb-1">Limitations</p>
                         <ul className="list-disc pb-2">
                             <li>
-                                <strong>Hides uneven passenger distribution.</strong> A route where everyone
-                                travels the same two stations will show a high Usage, but only one
-                                segment is crowded — passengers at other stops experience an empty train.
-                                Load Factor exposes this asymmetry; Usage does not.
+                                <strong>Hides uneven passenger distribution.</strong> A crowded single segment
+                                can produce a decent Performance score while the rest of the route runs empty.
+                                Load Factor exposes this asymmetry.
                             </li>
                             <li>
-                                <strong>Day-averaged, not peak-sensitive.</strong> A route that is packed
-                                during rush hour and nearly empty overnight can still read as
-                                “healthy" on Usage. Load Factor is a better signal when
-                                overcrowding at specific times matters.
-                            </li>
-                            <li>
-                                <strong>Not a crowding indicator.</strong> Usage approaching 100% means
-                                you are filling your schedule efficiently — it does not
-                                directly tell you whether any individual train is overloaded.
-                                Use Load Factor for that.
+                                <strong>Not a crowding indicator.</strong> A high multiplier means high ridership
+                                relative to schedule cost — it does not tell you whether any individual
+                                train is overloaded. Use Load Factor for that.
                             </li>
                         </ul>
                         <Warning>
-                            A route can have a high Usage <em>and</em> a low Load Factor — or
-                            vice versa. For example: a route where passengers spread evenly
-                            across all segments throughout the day will show high Usage and
-                            moderate Load Factor. A commuter route where everyone boards at
-                            the terminus and rides to the end will show a lower Usage (many
-                            seats empty on the return leg) but a high Load Factor at peak.
+                            Performance and Load Factor measure different things. A commuter route where
+                            everyone boards at the terminus and rides to the end will show a <em>lower</em>{' '}
+                            Performance (the return leg is empty) but a high Load Factor at peak.
+                            A busy multi-stop interchange route can show a very high Performance (2× or more)
+                            while keeping Load Factor comfortably in the green zone.
                             Use both metrics together for a complete picture.
                         </Warning>
                     </MetricEntry>

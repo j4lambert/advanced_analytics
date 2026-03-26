@@ -5,11 +5,16 @@
 export const CONFIG = {
     VERSION: __MOD_VERSION__,
     
-    UTILIZATION_THRESHOLDS: {
-        CRITICAL_LOW: 30,
-        CRITICAL_HIGH: 95,
-        WARNING_LOW: 45,
-        WARNING_HIGH: 85
+    EFFICIENCY_THRESHOLDS: {
+        CRITICAL_LOW: 0.15,
+        WARNING_LOW: 0.30,
+    },
+
+    LOAD_FACTOR_THRESHOLDS: {
+        CRITICAL_LOW:  40,
+        WARNING_LOW:   55,
+        WARNING_HIGH:  80,
+        CRITICAL_HIGH: 90,
     },
     
     REFRESH_INTERVAL: 1000,
@@ -45,8 +50,8 @@ export const CONFIG = {
             LOW: 'text-green-600 dark:text-green-400'
         },
         
-        // Utilization status colors
-        UTILIZATION: {
+        // Efficiency status colors
+        EFFICIENCY: {
             CRITICAL: 'text-red-600 dark:text-red-400',
             WARNING: 'text-yellow-600 dark:text-yellow-400',
             GOOD: 'text-green-600 dark:text-green-400'
@@ -89,7 +94,7 @@ export const CONFIG = {
         { key: 'ridership', label: 'Ridership', align: 'right', group: 'performance' },
         { key: 'capacity', label: 'Throughput', align: 'right', group: 'trains', description: 'Daily Capacity: total passengers this route can carry in 24 hours' },
         { key: 'loadFactor', label: 'Load Factor', align: 'right', group: 'performance', description: 'Peak segment load ÷ train capacity|How full trains are at their busiest point on average|Time-averaged: short rush-hour spikes may not be reflected|Values above 100% indicate sustained overcrowding|For real-time overloads check the game Capacity Warnings' },
-        { key: 'utilization', label: 'Usage', small: '(cap.)', align: 'right', group: 'performance', description: 'Daily ridership ÷ 24 h throughput ceiling|Measures how much of total schedule capacity is filled|Not the same as how full individual trains are' },
+        { key: 'efficiency', label: 'Performance', align: 'right', group: 'performance', description: 'Ridership ÷ bidirectional throughput capacity|1.0× = all seats filled end-to-end once|Above 1.0× = high turnover (good — not overcrowding)|Below 1.0× = unused capacity' },
         { key: 'stations', label: 'Stops', align: 'right', group: 'trains' },
         { key: 'trainType', label: 'Type', align: 'right', group: 'trains', description: 'Train Type' },
         { key: 'trainSchedule', label: 'Trains', align: 'right', group: 'trains', description: 'Number of trains:|- High Demand |- Medium Demand |- Low Demand)' },
