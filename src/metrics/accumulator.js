@@ -308,11 +308,18 @@ function _computeStatsForWindow(routeId, cutoff, now) {
 
         const hourly = _ridershipHourly[routeId];
         if (maxSegmentFraction > 0 && ridership > 0 && hourly) {
-            const ph = _getPhaseHours();
+            const ph     = _getPhaseHours();
+            const counts = {
+                high:   route.trainSchedule?.highDemand   || 0,
+                medium: route.trainSchedule?.mediumDemand || 0,
+                low:    route.trainSchedule?.lowDemand    || 0,
+            };
             const sumHours = (hours) => hours.reduce((s, h) => s + (hourly[h] || 0), 0);
-            const rHigh   = sumHours(ph.high);
-            const rMedium = sumHours(ph.medium);
-            const rLow    = sumHours(ph.low);
+            // Mask out phases with no trains: ridersPerHour reflects game demand regardless
+            // of supply, so hours with 0 scheduled trains must not dilute the distribution.
+            const rHigh   = counts.high   > 0 ? sumHours(ph.high)   : 0;
+            const rMedium = counts.medium > 0 ? sumHours(ph.medium) : 0;
+            const rLow    = counts.low    > 0 ? sumHours(ph.low)    : 0;
             const totalSampled = rHigh + rMedium + rLow;
             if (totalSampled > 0) {
                 const pc = _computePhaseCapacities(route, trainType);
