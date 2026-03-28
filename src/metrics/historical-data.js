@@ -2,6 +2,7 @@
 // Captures and retrieves historical route data
 
 import { CONFIG } from '../config.js';
+import { calculateDailyCostFromTimeline } from './train-config-tracking.js';
 
 /**
  * Capture a day's route data as a historical snapshot.
@@ -19,13 +20,30 @@ import { CONFIG } from '../config.js';
  */
 export async function captureHistoricalData(day, api, storage, routeStatsMap = {}, configCache = {}) {
     try {
-        const routes = api.gameState.getRoutes();
+        const routes     = api.gameState.getRoutes();
+        const trainTypes = api.trains.getTrainTypes();
 
         const processedData = routes.map(route => {
             const stats   = routeStatsMap[route.id] || {};
             const history = configCache[day]?.[route.id] || [];
             // Entries with timestamp > 0 are mid-day changes (0 = midnight baseline)
             const changes = history.filter(e => e.timestamp > 0);
+
+            // Compute cost from the config timeline — more accurate than the
+            // event-log approach because it covers exactly midnight-to-midnight
+            // and accounts for every schedule change to the minute.
+            const trainType    = trainTypes[route.trainType];
+            const carsPerTrain = route.carsPerTrain ?? trainType?.stats.carsPerCarSet ?? 1;
+            const timelineCost = trainType
+                ? calculateDailyCostFromTimeline(route.id, history, trainType, carsPerTrain)
+                : null;
+
+            const dailyCost      = timelineCost ?? stats.dailyCost ?? 0;
+            const dailyRevenue   = stats.dailyRevenue ?? 0;
+            const dailyProfit    = dailyRevenue - dailyCost;
+            const totalTrains    = stats.totalTrains ?? 0;
+            const profitPerTrain = totalTrains > 0 ? dailyProfit / totalTrains : 0;
+
             return {
                 id:      route.id,
                 name:    route.name || route.bullet,
@@ -34,6 +52,10 @@ export async function captureHistoricalData(day, api, storage, routeStatsMap = {
                 // Spread all precomputed stats (dailyRevenue, dailyCost, dailyProfit,
                 // capacity, utilization, ridership, transfers, trains*, stations, etc.)
                 ...stats,
+                // Override cost-derived fields with the timeline-accurate values.
+                dailyCost,
+                dailyProfit,
+                profitPerTrain,
             };
         });
 
