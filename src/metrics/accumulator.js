@@ -252,19 +252,23 @@ function _computeStaticCapacity(route, trainType) {
 /**
  * Time-weighted full-day capacity over [windowStartSec, windowEndSec].
  *
- * Uses the config timeline to weight each schedule segment by how long it
- * was active inside the window.  Falls back to _computeStaticCapacity when
- * no history is available.
+ * Merges yesterday's and today's config timelines so that the rolling 24h
+ * window correctly uses each day's own schedule history on both sides of
+ * midnight — eliminating the jump that would otherwise occur at day change.
+ * Falls back to _computeStaticCapacity when no history is available.
  *
- * @param {Object} route
- * @param {Object} trainType
- * @param {Array|null} configTimeline  - Sorted entries: { timestamp (min), high, medium, low }
- * @param {number} windowStartSec
- * @param {number} windowEndSec
+ * @param {Object}     route
+ * @param {Object}     trainType
+ * @param {Array|null} todayTimeline     - Today's entries: { timestamp (min from today's midnight), high, medium, low }
+ * @param {Array|null} yesterdayTimeline - Yesterday's entries (same shape, relative to yesterday's midnight)
+ * @param {number}     windowStartSec
+ * @param {number}     windowEndSec
  * @returns {number}
  */
-function _computeWeightedCapacity(route, trainType, configTimeline, windowStartSec, windowEndSec) {
-    if (!configTimeline?.length) return _computeStaticCapacity(route, trainType);
+function _computeWeightedCapacity(route, trainType, todayTimeline, yesterdayTimeline, windowStartSec, windowEndSec) {
+    const hasToday     = todayTimeline?.length     > 0;
+    const hasYesterday = yesterdayTimeline?.length > 0;
+    if (!hasToday && !hasYesterday) return _computeStaticCapacity(route, trainType);
 
     if (!route.stComboTimings?.length) return 0;
     const timings     = route.stComboTimings;
@@ -278,28 +282,40 @@ function _computeWeightedCapacity(route, trainType, configTimeline, windowStartS
     const windowDuration = windowEndSec - windowStartSec;
     if (windowDuration <= 0) return _computeStaticCapacity(route, trainType);
 
-    // Map minute-timestamps into elapsed seconds using the current day's midnight
-    const dayStart = Math.floor(windowEndSec / 86400) * 86400;
-    const sorted   = [...configTimeline].sort((a, b) => a.timestamp - b.timestamp);
+    // Convert both timelines to absolute elapsed seconds and merge into one
+    // sorted list. Yesterday's entries are relative to yesterday's midnight;
+    // today's entries are relative to today's midnight.
+    const todayStart     = Math.floor(windowEndSec / 86400) * 86400;
+    const yesterdayStart = todayStart - 86400;
+
+    const entries = [];
+    if (hasYesterday) {
+        for (const e of yesterdayTimeline) {
+            entries.push({ absSec: yesterdayStart + e.timestamp * 60, high: e.high, medium: e.medium, low: e.low });
+        }
+    }
+    if (hasToday) {
+        for (const e of todayTimeline) {
+            entries.push({ absSec: todayStart + e.timestamp * 60, high: e.high, medium: e.medium, low: e.low });
+        }
+    }
+    entries.sort((a, b) => a.absSec - b.absSec);
 
     let weighted = 0;
-    for (let i = 0; i < sorted.length; i++) {
-        // The first entry is treated as the config active at the window start — this correctly
-        // handles the rolling 24h window that spans midnight, where the pre-midnight portion of
-        // the window should use the same schedule that was active at midnight.
-        // For subsequent entries, clamp their start to the window.
+    for (let i = 0; i < entries.length; i++) {
+        // The first entry extends back to windowStartSec so the entire window is covered.
         const segStart = i === 0
             ? windowStartSec
-            : Math.max(dayStart + sorted[i].timestamp * 60, windowStartSec);
-        const segEnd   = i + 1 < sorted.length
-            ? Math.min(dayStart + sorted[i + 1].timestamp * 60, windowEndSec)
+            : Math.max(entries[i].absSec, windowStartSec);
+        const segEnd   = i + 1 < entries.length
+            ? Math.min(entries[i + 1].absSec, windowEndSec)
             : windowEndSec;
         if (segEnd <= segStart) continue;
 
         const frac = (segEnd - segStart) / windowDuration;
-        const cap  = (sorted[i].high   * CONFIG.DEMAND_HOURS.high   +
-                      sorted[i].medium * CONFIG.DEMAND_HOURS.medium +
-                      sorted[i].low    * CONFIG.DEMAND_HOURS.low)
+        const cap  = (entries[i].high   * CONFIG.DEMAND_HOURS.high   +
+                      entries[i].medium * CONFIG.DEMAND_HOURS.medium +
+                      entries[i].low    * CONFIG.DEMAND_HOURS.low)
                      * loopsPerHour * capacityPerTrain;
         weighted += cap * frac;
     }
@@ -402,10 +418,11 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     let loadFactorLow    = 0;
 
     if (trainType) {
-        const day        = Math.floor(now / 86400);
-        const dayHistory = _configCacheSnapshot[day]?.[routeId] || null;
+        const day              = Math.floor(now / 86400);
+        const dayHistory       = _configCacheSnapshot[day]?.[routeId]       || null;
+        const yesterdayHistory = _configCacheSnapshot[day - 1]?.[routeId]   || null;
 
-        capacity    = _computeWeightedCapacity(route, trainType, dayHistory, cutoff, now);
+        capacity    = _computeWeightedCapacity(route, trainType, dayHistory, yesterdayHistory, cutoff, now);
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
         efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
 
