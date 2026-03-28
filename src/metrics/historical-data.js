@@ -10,22 +10,27 @@ import { CONFIG } from '../config.js';
  * The caller (lifecycle.js) already computed per-route stats via
  * getRoute24hStats(), so this function just formats and persists them.
  *
- * @param {number} day          - In-game day number that just ended
- * @param {Object} api          - SubwayBuilderAPI instance
- * @param {Object} storage      - Storage instance
+ * @param {number} day           - In-game day number that just ended
+ * @param {Object} api           - SubwayBuilderAPI instance
+ * @param {Object} storage       - Storage instance
  * @param {Object} routeStatsMap - { [routeId]: statsFromGetRoute24hStats }
+ * @param {Object} configCache   - In-memory config cache snapshot for scheduleChangedAt detection
  * @returns {Promise<void>}
  */
-export async function captureHistoricalData(day, api, storage, routeStatsMap = {}) {
+export async function captureHistoricalData(day, api, storage, routeStatsMap = {}, configCache = {}) {
     try {
         const routes = api.gameState.getRoutes();
 
         const processedData = routes.map(route => {
-            const stats = routeStatsMap[route.id] || {};
+            const stats   = routeStatsMap[route.id] || {};
+            const history = configCache[day]?.[route.id] || [];
+            // Entries with timestamp > 0 are mid-day changes (0 = midnight baseline)
+            const changes = history.filter(e => e.timestamp > 0);
             return {
                 id:      route.id,
                 name:    route.name || route.bullet,
                 deleted: false,
+                scheduleChangedAt: changes.length > 0 ? changes.map(e => e.timestamp) : null,
                 // Spread all precomputed stats (dailyRevenue, dailyCost, dailyProfit,
                 // capacity, utilization, ridership, transfers, trains*, stations, etc.)
                 ...stats,

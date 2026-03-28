@@ -12,7 +12,11 @@ import {
     persistEvents,
     restoreEvents,
     getRoute24hStats,
+    setAccumulatorStorage,
+    setConfigCacheSnapshot,
+    getConfigCacheSnapshot,
 } from '../metrics/accumulator.js';
+import { captureInitialDayConfig, recordConfigChange, pruneConfigCache } from '../metrics/train-config-tracking.js';
 
 let storage = null;
 
@@ -94,6 +98,9 @@ export async function handleMapReadyFallback(api) {
     clearAccumulatorState();
     await restoreEvents(storage, api.gameState.getElapsedSeconds());
     initAccumulator(api);
+    setAccumulatorStorage(storage);
+    const configCache = await storage.get('configCache', {});
+    setConfigCacheSnapshot(configCache);
 }
 
 /**
@@ -221,6 +228,9 @@ export function initLifecycleHooks(api) {
         clearAccumulatorState();
         await restoreEvents(storage, api.gameState.getElapsedSeconds());
         initAccumulator(api);
+        setAccumulatorStorage(storage);
+        const configCache = await storage.get('configCache', {});
+        setConfigCacheSnapshot(configCache);
     });
 
     // ── onGameSaved ─────────────────────────────────────────────────────────
@@ -274,8 +284,15 @@ export function initLifecycleHooks(api) {
         // Persist event log before the new day continues accumulating
         await persistEvents(storage);
 
-        // Save historical snapshot for the day that ended
-        await captureHistoricalData(dayThatEnded, api, storage, routeStatsMap);
+        // Save historical snapshot for the day that ended (include config cache for scheduleChangedAt)
+        await captureHistoricalData(dayThatEnded, api, storage, routeStatsMap, getConfigCacheSnapshot());
+
+        // Capture baseline config at midnight for the new day
+        const newDay = dayThatEnded + 1;
+        await captureInitialDayConfig(newDay, api, storage);
+        await pruneConfigCache(30, storage);
+        const updatedConfigCache = await storage.get('configCache', {});
+        setConfigCacheSnapshot(updatedConfigCache);
 
         // Transition 'new' routes to 'ongoing' status
         await _transitionNewRoutesToOngoing(storage);
@@ -288,6 +305,17 @@ export function initLifecycleHooks(api) {
         const currentDay   = api.gameState.getCurrentDay();
         const creationTime = api.gameState.getElapsedSeconds();
         _setRouteStatus(route.id, 'new', currentDay, storage, creationTime);
+
+        // Record the initial schedule config for this new route so weighted capacity works
+        const elapsed = creationTime;
+        const hour    = Math.floor((elapsed % 86400) / 3600);
+        const minute  = Math.floor((elapsed % 3600) / 60);
+        const s = route.trainSchedule || {};
+        recordConfigChange(route.id, hour, minute,
+            { high: s.highDemand || 0, medium: s.mediumDemand || 0, low: s.lowDemand || 0 },
+            api, storage
+        ).then(() => storage.get('configCache', {}).then(setConfigCacheSnapshot))
+         .catch(e => console.warn(`${CONFIG.LOG_PREFIX} [LC] initial config record failed`, e));
     });
 
     // ── onRouteDeleted ──────────────────────────────────────────────────────

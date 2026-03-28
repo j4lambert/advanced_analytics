@@ -108,8 +108,11 @@ export function DashboardTable({
     // When a parent supplies liveRouteData we only need the hook for non-live
     // modes (historical / comparison).  In those modes liveRouteData is ignored
     // anyway, so we always call useRouteMetrics but skip its output for live.
+    // In live mode, pass a stable sort so user reordering doesn't trigger a
+    // redundant re-fetch (sorting is applied below via sortTableData instead).
+    const isLiveMode = timeframeState === 'last24h' && !compareMode && liveRouteData !== null;
     const { tableData: ownLiveData } = useRouteMetrics({
-        sortState,
+        sortState: isLiveMode ? INITIAL_STATE.sort : sortState,
         timeframeState,
         compareMode,
         comparePrimaryDay,

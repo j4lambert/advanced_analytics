@@ -41,6 +41,7 @@ import { CONFIG } from '../config.js';
 import { calculateTransfers } from './transfers.js';
 import { getRouteStationsInOrder, isCircularRoute, computeMaxSegmentLoadFraction } from '../utils/route-utils.js';
 import { gameTiming } from '../core/game-timing.js';
+import { recordConfigChange } from './train-config-tracking.js';
 
 const TAG                        = '[AA:ACC]';
 const POLL_INTERVAL_MS           = 500;
@@ -75,6 +76,11 @@ let _ridershipAccum  = {};  // { routeId: { hour, sum, count } } — in-progress
 // Timers
 let _pollTimer  = null;
 let _pruneTimer = null;
+
+// Schedule change tracking
+let _lastKnownSchedules  = {};  // { routeId: { high, medium, low } } — for change detection
+let _configCacheSnapshot = {};  // { [day]: { [routeId]: [...entries] } } — in-memory mirror of IDB configCache
+let _storage             = null;
 
 // ── Helper: empty stats shape ──────────────────────────────────────────────
 
@@ -241,6 +247,107 @@ function _computeStaticCapacity(route, trainType) {
     );
 }
 
+// ── Weighted capacity helpers ──────────────────────────────────────────────
+
+/**
+ * Time-weighted full-day capacity over [windowStartSec, windowEndSec].
+ *
+ * Uses the config timeline to weight each schedule segment by how long it
+ * was active inside the window.  Falls back to _computeStaticCapacity when
+ * no history is available.
+ *
+ * @param {Object} route
+ * @param {Object} trainType
+ * @param {Array|null} configTimeline  - Sorted entries: { timestamp (min), high, medium, low }
+ * @param {number} windowStartSec
+ * @param {number} windowEndSec
+ * @returns {number}
+ */
+function _computeWeightedCapacity(route, trainType, configTimeline, windowStartSec, windowEndSec) {
+    if (!configTimeline?.length) return _computeStaticCapacity(route, trainType);
+
+    if (!route.stComboTimings?.length) return 0;
+    const timings     = route.stComboTimings;
+    const loopTimeSec = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
+    if (loopTimeSec <= 0) return 0;
+
+    const loopsPerHour     = 3600 / loopTimeSec;
+    const carsPerTrain     = route.carsPerTrain !== undefined ? route.carsPerTrain : trainType.stats.carsPerCarSet;
+    const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
+
+    const windowDuration = windowEndSec - windowStartSec;
+    if (windowDuration <= 0) return _computeStaticCapacity(route, trainType);
+
+    // Map minute-timestamps into elapsed seconds using the current day's midnight
+    const dayStart = Math.floor(windowEndSec / 86400) * 86400;
+    const sorted   = [...configTimeline].sort((a, b) => a.timestamp - b.timestamp);
+
+    let weighted = 0;
+    for (let i = 0; i < sorted.length; i++) {
+        // The first entry is treated as the config active at the window start — this correctly
+        // handles the rolling 24h window that spans midnight, where the pre-midnight portion of
+        // the window should use the same schedule that was active at midnight.
+        // For subsequent entries, clamp their start to the window.
+        const segStart = i === 0
+            ? windowStartSec
+            : Math.max(dayStart + sorted[i].timestamp * 60, windowStartSec);
+        const segEnd   = i + 1 < sorted.length
+            ? Math.min(dayStart + sorted[i + 1].timestamp * 60, windowEndSec)
+            : windowEndSec;
+        if (segEnd <= segStart) continue;
+
+        const frac = (segEnd - segStart) / windowDuration;
+        const cap  = (sorted[i].high   * CONFIG.DEMAND_HOURS.high   +
+                      sorted[i].medium * CONFIG.DEMAND_HOURS.medium +
+                      sorted[i].low    * CONFIG.DEMAND_HOURS.low)
+                     * loopsPerHour * capacityPerTrain;
+        weighted += cap * frac;
+    }
+    return Math.round(weighted);
+}
+
+/**
+ * Time-weighted phase capacities over a full day.
+ *
+ * Weights each phase capacity by how long the corresponding schedule was
+ * active across the 1440-minute day.  Falls back to _computePhaseCapacities
+ * when no history is available.
+ *
+ * @param {Object} route
+ * @param {Object} trainType
+ * @param {Array|null} configTimeline  - Sorted entries: { timestamp (min), high, medium, low }
+ * @returns {{ high: number, medium: number, low: number }}
+ */
+function _computeWeightedPhaseCapacities(route, trainType, configTimeline) {
+    if (!configTimeline?.length) return _computePhaseCapacities(route, trainType);
+
+    if (!route.stComboTimings?.length) return { high: 0, medium: 0, low: 0 };
+    const timings     = route.stComboTimings;
+    const loopTimeSec = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
+    if (loopTimeSec <= 0) return { high: 0, medium: 0, low: 0 };
+
+    const loopsPerHour     = 3600 / loopTimeSec;
+    const carsPerTrain     = route.carsPerTrain !== undefined ? route.carsPerTrain : trainType.stats.carsPerCarSet;
+    const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
+
+    const sorted = [...configTimeline].sort((a, b) => a.timestamp - b.timestamp);
+    const result = { high: 0, medium: 0, low: 0 };
+
+    for (let i = 0; i < sorted.length; i++) {
+        const segStart = sorted[i].timestamp;
+        const segEnd   = i + 1 < sorted.length ? sorted[i + 1].timestamp : 1440;
+        const frac     = (segEnd - segStart) / 1440;
+        result.high   += sorted[i].high   * CONFIG.DEMAND_HOURS.high   * loopsPerHour * capacityPerTrain * frac;
+        result.medium += sorted[i].medium * CONFIG.DEMAND_HOURS.medium * loopsPerHour * capacityPerTrain * frac;
+        result.low    += sorted[i].low    * CONFIG.DEMAND_HOURS.low    * loopsPerHour * capacityPerTrain * frac;
+    }
+    return {
+        high:   Math.round(result.high),
+        medium: Math.round(result.medium),
+        low:    Math.round(result.low),
+    };
+}
+
 // ── Core stats computation ─────────────────────────────────────────────────
 
 /**
@@ -295,7 +402,10 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     let loadFactorLow    = 0;
 
     if (trainType) {
-        capacity    = _computeStaticCapacity(route, trainType);
+        const day        = Math.floor(now / 86400);
+        const dayHistory = _configCacheSnapshot[day]?.[routeId] || null;
+
+        capacity    = _computeWeightedCapacity(route, trainType, dayHistory, cutoff, now);
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
         efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
 
@@ -322,7 +432,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
             const rLow    = counts.low    > 0 ? sumHours(ph.low)    : 0;
             const totalSampled = rHigh + rMedium + rLow;
             if (totalSampled > 0) {
-                const pc = _computePhaseCapacities(route, trainType);
+                const pc = _computeWeightedPhaseCapacities(route, trainType, dayHistory);
                 // Use ridersPerHour as a distribution weight only — its unit is unknown,
                 // but the relative proportions between phases reflect the true demand split.
                 // Multiply by total ridership (24h) to derive absolute phase ridership.
@@ -332,6 +442,16 @@ function _computeStatsForWindow(routeId, cutoff, now) {
                 if (pc.high   > 0) loadFactorHigh   = Math.round(maxSegmentFraction * pHigh   / pc.high   * 100);
                 if (pc.medium > 0) loadFactorMedium = Math.round(maxSegmentFraction * pMedium / pc.medium * 100);
                 if (pc.low    > 0) loadFactorLow    = Math.round(maxSegmentFraction * pLow    / pc.low    * 100);
+
+                // Recompute total using the same phase-exclusion logic so the total
+                // responds immediately when a phase is set to 0 trains (matching the
+                // phase bars).  Phases with 0 trains are excluded from the denominator.
+                const maskedCap = (counts.high   > 0 ? pc.high   : 0) +
+                                  (counts.medium > 0 ? pc.medium : 0) +
+                                  (counts.low    > 0 ? pc.low    : 0);
+                if (maskedCap > 0) {
+                    loadFactor = Math.round(maxSegmentFraction * ridership / maskedCap * 100);
+                }
             }
         }
     }
@@ -406,6 +526,41 @@ function _tick() {
     // ── Refresh route/train-type caches ─────────────────────────────────
     _routesCache     = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
+
+    // ── Schedule change detection ────────────────────────────────────────
+    const currentHour   = Math.floor((elapsed % 86400) / 3600);
+    const currentMinute = Math.floor((elapsed % 3600) / 60);
+    const day           = Math.floor(elapsed / 86400);
+
+    for (const route of routes) {
+        const s = route.trainSchedule;
+        if (!s) continue;
+        const cur = { high: s.highDemand || 0, medium: s.mediumDemand || 0, low: s.lowDemand || 0 };
+        const last = _lastKnownSchedules[route.id];
+
+        if (!last) {
+            // First tick for this route — baseline already captured by captureInitialDayConfig
+            _lastKnownSchedules[route.id] = cur;
+            continue;
+        }
+        if (last.high !== cur.high || last.medium !== cur.medium || last.low !== cur.low) {
+            _lastKnownSchedules[route.id] = cur;
+
+            // Update in-memory snapshot immediately (used synchronously by _computeStatsForWindow)
+            if (!_configCacheSnapshot[day]) _configCacheSnapshot[day] = {};
+            if (!_configCacheSnapshot[day][route.id]) _configCacheSnapshot[day][route.id] = [];
+            _configCacheSnapshot[day][route.id].push({
+                timestamp: currentHour * 60 + currentMinute,
+                hour: currentHour, minute: currentMinute, ...cur,
+            });
+
+            // Async persist to IDB
+            if (_storage) {
+                recordConfigChange(route.id, currentHour, currentMinute, cur, _api, _storage)
+                    .catch(e => console.warn(`${TAG} recordConfigChange failed`, e));
+            }
+        }
+    }
 }
 
 // ── Cache refresh (game-time, every CACHES_REFRESH_GAME_SEC) ───────────────
@@ -520,18 +675,25 @@ export function stopAccumulating() {
  * Call BEFORE restoreEvents when loading a save, to discard stale in-memory data.
  */
 export function clearAccumulatorState() {
-    _revEvents         = [];
-    _costEvents        = [];
-    _lastRevWeights    = {};
-    _lastCostWeights   = {};
-    _routesCache       = null;
-    _trainTypesCache   = null;
-    _transfersCache    = null;
-    _segmentLoadsCache = {};
-    _ridershipHourly   = {};
-    _ridershipAccum    = {};
+    _revEvents           = [];
+    _costEvents          = [];
+    _lastRevWeights      = {};
+    _lastCostWeights     = {};
+    _routesCache         = null;
+    _trainTypesCache     = null;
+    _transfersCache      = null;
+    _segmentLoadsCache   = {};
+    _ridershipHourly     = {};
+    _ridershipAccum      = {};
+    _lastKnownSchedules  = {};
+    _configCacheSnapshot = {};
+    _storage             = null;
     gameTiming.reset();
 }
+
+export function setAccumulatorStorage(s)      { _storage = s; }
+export function setConfigCacheSnapshot(snap)  { _configCacheSnapshot = snap || {}; }
+export function getConfigCacheSnapshot()      { return _configCacheSnapshot; }
 
 // ── Live rolling queries ───────────────────────────────────────────────────
 

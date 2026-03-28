@@ -61,6 +61,23 @@ export async function captureInitialDayConfig(day, api, storage) {
 }
 
 /**
+ * Prune old days from the config cache to prevent storage bloat.
+ * Keeps only the most recent N days (mirrors pruneHistoricalData).
+ *
+ * @param {number} daysToKeep - Number of days to retain
+ * @param {Object} storage    - Storage instance
+ * @returns {Promise<void>}
+ */
+export async function pruneConfigCache(daysToKeep, storage) {
+    const configCache = await storage.get('configCache', {});
+    const days = Object.keys(configCache).map(Number).sort((a, b) => b - a);
+    if (days.length <= daysToKeep) return;
+
+    days.slice(daysToKeep).forEach(day => { delete configCache[day]; });
+    await storage.set('configCache', configCache);
+}
+
+/**
  * Calculate daily cost from configuration timeline
  * 
  * Uses phase-based cost calculation:
