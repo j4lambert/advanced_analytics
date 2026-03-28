@@ -398,8 +398,8 @@ export function GuideDialog({ isOpen, onClose }) {
                     <MetricEntry id="aa-guide-m-throughput" label="Throughput" icon="Container">
                         <p>
                             The theoretical maximum number of passengers the route could carry in
-                            24 hours at its current train frequency — the ceiling above current
-                            ridership. Calculated by summing three game periods:
+                            24 hours at its current train frequency, in one direction. Calculated
+                            by summing three game periods:
                         </p>
                         <ul className="list-disc">
                            <li><span className="font-bold text-red-500">High</span> (rush

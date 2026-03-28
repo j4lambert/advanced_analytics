@@ -270,7 +270,7 @@ export function RouteContent({ routeId }) {
                             label="Throughput"
                             icon="Container"
                             value={(data.capacity || 0).toLocaleString()}
-                            sub="daily capacity"
+                            sub="daily capacity / direction"
                         />
                         <StatCard
                             label="Stops"
