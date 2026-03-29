@@ -193,6 +193,17 @@ function Badge({ style, children }) {
     );
 }
 
+function InternalLink({ id, children }) {
+    return (
+        <button
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="underline text-foreground hover:text-foreground/70"
+        >
+            {children}
+        </button>
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -223,6 +234,10 @@ export function GuideDialog({ isOpen, onClose }) {
                         <ul className="space-y-0.5">
                             <NavSection id="aa-guide-intro"       label="Introduction"  scrollTo={scrollTo} />
                             <NavSection id="aa-guide-data-modes"  label="Data Modes"    scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-last24h"        label="Last 24h (live)"  icon="Clock"             scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-historical"     label="Historical"       icon="Calendar"          scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-comparison"     label="Comparison"       icon="GitCompareArrows"  scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-normalizing"    label="Normalizing"      icon="LoaderCircle"      scrollTo={scrollTo} />
                             <NavSection id="aa-guide-network"     label="Network Overview" scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-load-factor"    label="Load Factor"     icon="Gauge"        scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-health-score"   label="Health Score"    icon="HeartPulse"   scrollTo={scrollTo} />
@@ -287,6 +302,114 @@ export function GuideDialog({ isOpen, onClose }) {
                         that were created or deleted between the two days are flagged as <span className="text-purple-500 dark:text-purple-400 font-medium border py-0.5 px-1 mx-1">NEW</span> or <span className="text-gray-400 font-medium border py-0.5 px-1 mx-1">DELETED</span>.
                     </MetricEntry>
 
+                    <MetricEntry id="aa-guide-m-normalizing" label="Normalizing mode" icon="LoaderCircle">
+                        <p className="pb-2">
+                            When you change the number of trains on any route — adding peak-hour
+                            service, trimming overnight runs, or adjusting any of the three demand
+                            phases — some metrics temporarily switch to <span className="text-blue-600 dark:text-blue-400 font-medium">blue estimated values</span> marked
+                            with a spinning indicator in the live view. This is <em>normalizing mode</em>.
+                            It means the mod knows your schedule has changed but the game's
+                            underlying ridership data hasn't fully caught up yet. The values you see
+                            are intelligent estimates, not final figures. They will converge on their
+                            true steady state automatically over the next 24–48 in-game hours —
+                            you don't need to do anything.
+                        </p>
+
+                        <p className="font-semibold pb-1 text-primary">Why does this happen?</p>
+                        <p className="pb-2 text-foreground/70">
+                            The game tracks ridership through a rolling 24-hour window of completed
+                            passenger journeys. The window is cumulative: passengers who travelled
+                            before your schedule change are still counted alongside those who travel
+                            after it. Because of this, the demand side of every ratio metric (Load
+                            Factor, Performance) still reflects the old schedule for roughly one
+                            full window after the change — typically 24h for a change made early in
+                            the day, up to 48h if the change straddles the midnight boundary and
+                            affects both yesterday's and today's rolling segment. Capacity, on the
+                            other hand, responds immediately: the mod records the exact minute of
+                            each change and weights capacity proportionally, so the denominator is
+                            already accurate. The numerator (ridership) is what lags.
+                        </p>
+
+                        <p className="font-semibold pb-1 text-primary">How the estimate is computed</p>
+                        <p className="pb-1 text-foreground/70">
+                            Rather than show a meaningless figure or hide the metric entirely, the
+                            mod applies a <em>phase-proportional ridership correction</em>. It works
+                            as follows:
+                        </p>
+                        <ol className="list-disc pl-4 space-y-1 text-foreground/70 pb-2">
+                            <li>
+                                The current ridership total is split into three per-phase portions —
+                                High, Medium, Low — using the per-hour ridership rates sampled
+                                throughout the day.
+                            </li>
+                            <li>
+                                For each phase, a correction factor is applied:
+                                {' '}<strong className="text-foreground">min(1, new trains ÷ old trains)</strong>.
+                                If you removed trains, ridership for that phase is scaled down
+                                proportionally (fewer trains → fewer passengers carried). If you
+                                added trains, ridership is held at the pre-change level — the mod
+                                won't guess how much new demand will materialise.
+                            </li>
+                            <li>
+                                The three corrected phase amounts are summed to produce an
+                                effective ridership, which then feeds Load Factor and Performance
+                                in place of the raw game figure.
+                            </li>
+                        </ol>
+                        <p className="pb-2 text-foreground/70">
+                            This handles edge cases correctly: setting a phase to 0 trains
+                            immediately drives that phase's ridership contribution to zero,
+                            reflecting the reality that no trains means no passengers carried on
+                            those hours — even before the game's window has cleared.
+                        </p>
+
+                        <p className="font-semibold pb-1 text-primary">What happens when the day closes</p>
+                        <p className="pb-2 text-foreground/70">
+                            When midnight arrives and the mod takes its end-of-day snapshot, it
+                            records whether each route was still normalizing at that moment. This
+                            flag travels with the historical record and changes how that day's
+                            data is displayed across all views:
+                        </p>
+                        <ul className="list-disc pl-4 space-y-1 text-foreground/70 pb-2">
+                            <li>
+                                <strong className="text-foreground">Historical table</strong> — Load Factor
+                                and Performance for that day appear in blue without the spinner,
+                                with a tooltip noting the values were captured mid-normalization.
+                            </li>
+                            <li>
+                                <strong className="text-foreground">Comparison view</strong> — when
+                                either of the two compared days was normalizing, the delta arrow
+                                for affected metrics is replaced with{' '}
+                                <span className="font-mono text-foreground">~</span> and a tooltip
+                                warning that the percentage change is unreliable.
+                            </li>
+                            <li>
+                                <strong className="text-foreground">Charts</strong> — normalizing
+                                data points for Load Factor and Performance are omitted entirely.
+                                Line charts interpolate a straight line across the gap; bar charts
+                                leave a visible empty slot. Other metrics (ridership, cost, revenue)
+                                are not affected.
+                            </li>
+                        </ul>
+
+                        <p className="font-semibold pb-1 text-primary">Effect on system-wide metrics</p>
+                        <p className="pb-3 text-foreground/70">
+                            <InternalLink id="aa-guide-m-load-factor">System Load Factor</InternalLink> and{' '}
+                            <InternalLink id="aa-guide-m-health-score">Network Health Score</InternalLink> both
+                            exclude normalizing routes from their ridership-weighted averages.
+                            When one or more routes are excluded, a note below the metric title
+                            shows the count. This keeps the network-level picture accurate even
+                            while you are actively editing schedules.
+                        </p>
+
+                        <Warning>
+                            If <em>all</em> routes are normalizing simultaneously (for example,
+                            right after a large-scale schedule overhaul), the system metrics fall
+                            back to including all routes rather than returning an empty figure.
+                            Individual route values are still marked as estimated.
+                        </Warning>
+                    </MetricEntry>
+
                     {/* ── Network Overview ── */}
                     <SectionTitle id="aa-guide-network">Network Overview</SectionTitle>
                     <p className="text-foreground/80 mb-4">
@@ -318,11 +441,8 @@ export function GuideDialog({ isOpen, onClose }) {
                             This metric measures actual <em>crowding</em>, not schedule fill.
                             It answers the question: "across the whole network, how packed are
                             trains at their busiest point?" See the per-route{' '}
-                            <button
-                                onClick={() => document.getElementById('aa-guide-m-load-factor-route')
-                                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                                className="underline text-foreground hover:text-foreground/70"
-                            >Load Factor</button> metric for how each route's value is computed.
+                            <InternalLink id="aa-guide-m-load-factor-route">Load Factor</InternalLink>{' '}
+                            metric for how each route's value is computed.
                         </p>
                         <LoadFactorBar />
                         <ul className="list-disc pb-1">
@@ -332,6 +452,12 @@ export function GuideDialog({ isOpen, onClose }) {
                             <li><span className="text-red-500 font-medium">Red (&lt;40%)</span> — under-served. Trains are mostly empty; consider fewer or smaller trains.</li>
                             <li><span className="text-red-500 font-medium">Red (&gt;90%)</span> — overcrowded. Passengers are being left behind; add trains or capacity.</li>
                         </ul>
+                        <Note>
+                            Routes with a recent schedule change are excluded from this average
+                            while their metrics are normalizing. A count of excluded routes is
+                            shown beneath the metric title when this applies.
+                            See <InternalLink id="aa-guide-m-normalizing">Normalizing mode</InternalLink> for details.
+                        </Note>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-health-score" label="Network Health Score" icon="HeartPulse">
@@ -360,7 +486,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             than quiet ones. The result is multiplied by 100 to give a 0–100
                             scale.
                         </p>
-                        <div className="grid grid-cols-5 gap-2 text-xs text-center py-2 select-none">
+                        <div className="grid grid-cols-5 gap-2 text-xs text-center pt-2 pb-4 select-none">
                             {[
                                 { range: '0–40',  label: 'Poor',      color: '#ef4444' },
                                 { range: '40–60', label: 'Fair',      color: '#f59e0b' },
@@ -382,6 +508,14 @@ export function GuideDialog({ isOpen, onClose }) {
                             further demand growth. Adding trains or capacity to those routes
                             will raise the score.
                         </Warning>
+                        <div className="pt-2"/>
+                        <Note>
+                            Because the Health Score is derived from per-route Load Factors,
+                            routes that are currently normalizing after a schedule change are
+                            excluded from the weighted average — the same way System Load Factor
+                            handles them.
+                            See <InternalLink id="aa-guide-m-normalizing">Normalizing mode</InternalLink> for details.
+                        </Note>
                     </MetricEntry>
 
                     {/* ── Metrics ── */}
@@ -448,7 +582,7 @@ export function GuideDialog({ isOpen, onClose }) {
                         </p>
                         <LoadFactorBar />
 
-                        <p className="font-semibold pt-1 pb-1">How direction affects the calculation</p>
+                        <p className="font-semibold pt-1 pb-1 text-primary">How direction affects the calculation</p>
                         <p className="pb-2">
                             Subway Builder routes come in two shapes, and the calculation
                             handles them differently:
@@ -476,7 +610,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             </div>
                         </div>
 
-                        <p className="font-semibold pt-1 pb-1">Data source and accuracy</p>
+                        <p className="font-semibold pt-1 pb-1 text-primary">Data source and accuracy</p>
                         <p className="pb-2">
                             Load Factor is derived from the game's completed-commutes records,
                             which accumulate over all game days. To avoid values growing with
@@ -497,7 +631,7 @@ export function GuideDialog({ isOpen, onClose }) {
                         <div className="grid grid-cols-2 gap-3 pb-1">
                             <div className="rounded-lg border border-border p-3 space-y-1.5">
                                 <p className="font-semibold text-foreground">Use Load Factor when…</p>
-                                <ul className="list-disc text-foreground/70 text-xs space-y-1">
+                                <ul className="list-disc text-foreground/70 space-y-1">
                                     <li>Checking whether passengers are being left behind at stops.</li>
                                     <li>Deciding if you need to add trains or longer consists to a specific segment.</li>
                                     <li>Comparing two routes' actual service quality.</li>
@@ -506,7 +640,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             </div>
                             <div className="rounded-lg border border-border p-3 space-y-1.5">
                                 <p className="font-semibold text-foreground">Use Performance when…</p>
-                                <ul className="list-disc text-foreground/70 text-xs space-y-1">
+                                <ul className="list-disc text-foreground/70 space-y-1">
                                     <li>Evaluating how well ridership justifies your schedule (are you running too many trains?).</li>
                                     <li>Doing financial analysis — cost scales with trains, not with crowding at one segment.</li>
                                     <li>Identifying routes with high passenger turnover that generate a lot of ridership relative to their capacity.</li>
@@ -514,11 +648,11 @@ export function GuideDialog({ isOpen, onClose }) {
                             </div>
                         </div>
                         <Note>
-                            When you change a train schedule, ridership takes up to 24 in-game hours to
-                            adjust to the new capacity. During this window a{' '}
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">blue circle indicator</span>{' '}
-                            appears on the route — both in the route dialog and in the table — to signal that
-                            Load Factor is still normalizing and may not reflect steady-state conditions.
+                            After any schedule change, Load Factor switches to an <em>estimated</em> value
+                            shown in <span className="text-blue-600 dark:text-blue-400 font-medium">blue</span> with
+                            a spinning indicator. It will converge to its real value within 24–48h.
+                            See <InternalLink id="aa-guide-m-normalizing">Normalizing mode</InternalLink> for a full explanation
+                            of how the estimate is computed and how stored historical values are handled.
                         </Note>
                     </MetricEntry>
 
@@ -552,7 +686,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             </li>
                         </ul>
 
-                        <p className="font-semibold pt-3 pb-1">Why ÷ 2?</p>
+                        <p className="font-semibold pt-3 pb-1 text-primary">Why ÷ 2?</p>
                         <p className="pb-2 text-foreground/70 text-xs">
                             The throughput ceiling counts <em>one-directional</em> seat capacity.
                             A train running A → B → A serves passengers in both directions, so the
@@ -561,7 +695,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             end-to-end in each direction — a natural, intuitive baseline.
                         </p>
 
-                        <p className="font-semibold pt-2 pb-1">Strengths</p>
+                        <p className="font-semibold pt-2 pb-1 text-primary">Strengths</p>
                         <ul className="list-disc pb-1">
                             <li>Directly tied to financials — a low Performance route is likely losing money on operational costs.</li>
                             <li>Rewards long routes serving many transfer hubs: high turnover pushes the multiplier well above 1×.</li>
@@ -569,7 +703,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             <li>No artificial cap — high values are always good and reflect genuine ridership generation.</li>
                         </ul>
 
-                        <p className="font-semibold pt-2 pb-1">Limitations</p>
+                        <p className="font-semibold pt-2 pb-1 text-primary">Limitations</p>
                         <ul className="list-disc pb-2">
                             <li>
                                 <strong>Hides uneven passenger distribution.</strong> A crowded single segment
@@ -591,10 +725,9 @@ export function GuideDialog({ isOpen, onClose }) {
                             Use both metrics together for a complete picture.
                         </Warning>
                         <Note>
-                            Like Load Factor, Performance is derived from the ridership/capacity ratio and
-                            will show a{' '}
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">blue circle indicator</span>{' '}
-                            for ~24h/~48h after any schedule change while the rolling window re-calibrates.
+                            Like Load Factor, Performance is derived from the ridership/capacity ratio
+                            and switches to a blue estimated value after any schedule change.
+                            See <InternalLink id="aa-guide-m-normalizing">Normalizing mode</InternalLink> for details.
                         </Note>
                     </MetricEntry>
 
