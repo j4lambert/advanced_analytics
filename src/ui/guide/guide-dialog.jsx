@@ -594,7 +594,7 @@ export function GuideDialog({ isOpen, onClose }) {
                             Like Load Factor, Performance is derived from the ridership/capacity ratio and
                             will show a{' '}
                             <span className="text-blue-600 dark:text-blue-400 font-medium">blue circle indicator</span>{' '}
-                            for ~24h after any schedule change while the rolling window re-calibrates.
+                            for ~24h/~48h after any schedule change while the rolling window re-calibrates.
                         </Note>
                     </MetricEntry>
 

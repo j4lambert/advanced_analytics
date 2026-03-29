@@ -133,7 +133,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                                     </span>
                                 </Tooltip>
                             ) : (
-                                <Tooltip content="Schedule changed recently — metrics still settling (~24h)" side="left" delayDuration={100}>
+                                <Tooltip content="Estimated value — ridership corrected for the schedule change. Will fully stabilize in ~24–48h." side="left" delayDuration={100}>
                                     <span className="inline-flex items-center justify-end gap-1 text-blue-600 dark:text-blue-400">
                                         {React.createElement(icons['LoaderCircle'], { size: 11, className: 'shrink-0 aa-animate-normalizing' })}
                                         <span className="aa-animate-metric-is-normalizing-pulse">{row.loadFactor > 0 ? `${row.loadFactor}%` : ''}</span>
@@ -171,7 +171,7 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                                     </span>
                                 </Tooltip>
                             ) : (
-                                <Tooltip content="Schedule changed recently — metrics still settling (~24h)" side="left" delayDuration={100}>
+                                <Tooltip content="Estimated value — ridership corrected for the schedule change. Will fully stabilize in ~24–48h." side="left" delayDuration={100}>
                                     <span className="inline-flex items-center justify-end gap-1 text-blue-600 dark:text-blue-400">
                                         {React.createElement(icons['LoaderCircle'], { size: 11, className: 'shrink-0 aa-animate-normalizing' })}
                                         <span className="aa-animate-metric-is-normalizing-pulse">{row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : ''}</span>

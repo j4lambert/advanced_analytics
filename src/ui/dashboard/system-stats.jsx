@@ -247,24 +247,31 @@ export function SystemStats({ liveRouteData }) {
         const routes = (liveRouteData ?? []).filter(r => !r.deleted);
         if (!routes.length) return null;
 
+        const totalTrains  = routes.reduce((s, r) => s + (r.totalTrains  ?? 0), 0);
+        const totalRevenue = routes.reduce((s, r) => s + (r.dailyRevenue ?? 0), 0);
         const totalRidership = routes.reduce((s, r) => s + (r.ridership  ?? 0), 0);
-        const totalCapacity  = routes.reduce((s, r) => s + (r.capacity   ?? 0), 0);
-        const totalTrains    = routes.reduce((s, r) => s + (r.totalTrains ?? 0), 0);
-        const totalRevenue   = routes.reduce((s, r) => s + (r.dailyRevenue ?? 0), 0);
-        const totalEfficiency = totalCapacity > 0
-            ? totalRidership / (2 * totalCapacity)
-            : 0;
 
+        // Normalizing routes carry estimated load-factor / efficiency values.
+        // Exclude them from the network aggregates so one unsettled route
+        // doesn't skew the whole network picture.
+        const stableRoutes     = routes.filter(r => !r.scheduleChangedRecently);
+        const normalizingCount = routes.length - stableRoutes.length;
+        const aggRoutes        = stableRoutes.length > 0 ? stableRoutes : routes; // fallback: use all
+
+        const aggRidership = aggRoutes.reduce((s, r) => s + (r.ridership ?? 0), 0);
+        const aggCapacity  = aggRoutes.reduce((s, r) => s + (r.capacity  ?? 0), 0);
+
+        const totalEfficiency = aggCapacity > 0 ? aggRidership / (2 * aggCapacity) : 0;
 
         // Ridership-weighted average of per-route load factors (each already 0–100)
-        const loadFactor = totalRidership > 0
-            ? routes.reduce((s, r) => s + (r.ridership ?? 0) * (r.loadFactor ?? 0), 0) / totalRidership
+        const loadFactor = aggRidership > 0
+            ? aggRoutes.reduce((s, r) => s + (r.ridership ?? 0) * (r.loadFactor ?? 0), 0) / aggRidership
             : 0;
 
-        const healthScore = totalRidership > 0
-            ? routes.reduce((s, r) =>
+        const healthScore = aggRidership > 0
+            ? aggRoutes.reduce((s, r) =>
                 s + (r.ridership ?? 0) * routeHealthScore(r.loadFactor ?? 0)
-              , 0) / totalRidership * 100
+              , 0) / aggRidership * 100
             : 0;
 
         let hubCount = 0;
@@ -283,6 +290,7 @@ export function SystemStats({ liveRouteData }) {
             totalEfficiency,
             loadFactor,
             healthScore,
+            normalizingCount,
         };
     }, [liveRouteData]);
 
@@ -318,34 +326,44 @@ export function SystemStats({ liveRouteData }) {
             <div className="grid grid-cols-2 gap-4">
 
                 {/* Load Factor */}
-                <div className="rounded border border-border bg-muted/20 px-4 py-3 space-y-3">
-                    <div>
+                <div className="rounded border border-border bg-muted/20 px-4 py-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wider">
                             System Load Factor
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            Ridership-weighted avg. peak segment load
-                        </p>
+                        {stats.normalizingCount > 0 && (
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400">
+                                {stats.normalizingCount} route{stats.normalizingCount > 1 ? 's' : ''} excluded (normalizing)
+                            </span>
+                        )}
                     </div>
+                    <p className="text-xs text-muted-foreground mt-1 pb-3">
+                        Ridership-weighted avg. peak segment load
+                    </p>
                     <LoadFactorBar pct={stats.loadFactor} />
                 </div>
 
                 {/* Network Health Score */}
                 <div className="rounded border border-border bg-muted/20 px-4 py-3">
-                    <div className="mb-3">
+                    <div className="flex items-center justify-between gap-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wider">
                             Network Health Score
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            Ridership-weighted load factor quality (0–100)
-                        </p>
+                        {stats.normalizingCount > 0 && (
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400">
+                                {stats.normalizingCount} route{stats.normalizingCount > 1 ? 's' : ''} excluded (normalizing)
+                            </span>
+                        )}
                     </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 pb-3">
+                        Ridership-weighted load factor quality (0–100)
+                    </p>
                     <div className="flex items-center gap-4">
                         <div className="w-28 shrink-0">
                             <GaugeArc score={stats.healthScore} />
                         </div>
                         <div>
-                            <p className="text-xl font-bold leading-none"
+                            <p className="font-bold leading-none pt-2"
                                style={{ color: healthColor(stats.healthScore) }}>
                                 {healthLabel(stats.healthScore)}
                             </p>

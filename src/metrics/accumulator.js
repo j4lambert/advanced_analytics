@@ -365,6 +365,91 @@ function _computeWeightedPhaseCapacities(route, trainType, configTimeline) {
     };
 }
 
+// ── Option B: phase-proportional ridership correction ──────────────────────
+//
+// When a schedule change occurred within the rolling window, the raw ridership
+// figure still reflects the OLD schedule (the demand side lags ~48h).
+// We split ridership into per-phase portions using _ridershipHourly weights,
+// then scale each phase by min(1, newTrains / oldTrains).
+//
+// For capacity decreases  → ridership scales down proportionally (riders
+//   get left behind / stop using the route).
+// For capacity increases  → ridership is held at the pre-change level
+//   (conservative: we don't know how much extra demand will materialise).
+//
+// Returns the corrected ridership to use for load-factor / efficiency / utilization.
+
+/**
+ * Returns the { high, medium, low } train counts that were active at `targetSec`,
+ * reading from the merged timeline of today + yesterday config history.
+ */
+function _getCountsAtTime(dayHistory, yesterdayHistory, todayStart, yesterdayStart, targetSec) {
+    const entries = [];
+    if (Array.isArray(yesterdayHistory)) {
+        for (const e of yesterdayHistory) entries.push({ ...e, absSec: yesterdayStart + e.timestamp * 60 });
+    }
+    if (Array.isArray(dayHistory)) {
+        for (const e of dayHistory) entries.push({ ...e, absSec: todayStart + e.timestamp * 60 });
+    }
+    entries.sort((a, b) => a.absSec - b.absSec);
+
+    let result = null;
+    for (const e of entries) {
+        if (e.absSec <= targetSec) result = e;
+        else break;
+    }
+    return result; // null only if there are zero timeline entries
+}
+
+/**
+ * Phase-proportional ridership correction (Option B).
+ *
+ * @param {number}      rawRidership  - game's 24h cumulative ridership
+ * @param {object}      newCounts     - { high, medium, low } current train schedule
+ * @param {object|null} oldCounts     - { high, medium, low } at window start (from _getCountsAtTime)
+ * @param {object|null} routeHourly   - _ridershipHourly[routeId] (may be null/undefined)
+ * @returns {number} corrected ridership to use for ratio metrics
+ */
+function _correctedRidership(rawRidership, newCounts, oldCounts, routeHourly) {
+    if (!oldCounts) return rawRidership;
+
+    const ph = _getPhaseHours();
+
+    // Helper: sum ridersPerHour for an array of hour indices
+    const sumH = (hours) => hours.reduce((s, h) => s + ((routeHourly?.[h]) || 0), 0);
+
+    const wH = sumH(ph.high);
+    const wM = sumH(ph.medium);
+    const wL = sumH(ph.low);
+    const totalW = wH + wM + wL;
+
+    // Correction factor per phase: min(1, new/old).
+    // If oldTrains = 0 and newTrains > 0 → factor 1 (can't scale up from nothing).
+    // If newTrains = 0 → factor 0 (no service, no ridership).
+    const cf = (oldT, newT) =>
+        oldT > 0 ? Math.min(1, newT / oldT) : (newT > 0 ? 1 : 0);
+
+    const cfH = cf(oldCounts.high,   newCounts.high);
+    const cfM = cf(oldCounts.medium, newCounts.medium);
+    const cfL = cf(oldCounts.low,    newCounts.low);
+
+    if (totalW > 0) {
+        // Hourly data available → weight by phase demand distribution
+        const rH = rawRidership * wH / totalW;
+        const rM = rawRidership * wM / totalW;
+        const rL = rawRidership * wL / totalW;
+        return rH * cfH + rM * cfM + rL * cfL;
+    }
+
+    // Fallback: no hourly data — weight by phase hours
+    const hH = CONFIG.DEMAND_HOURS.high, hM = CONFIG.DEMAND_HOURS.medium, hL = CONFIG.DEMAND_HOURS.low;
+    const totalHours = hH + hM + hL;
+    const rH = rawRidership * hH / totalHours;
+    const rM = rawRidership * hM / totalHours;
+    const rL = rawRidership * hL / totalHours;
+    return rH * cfH + rM * cfM + rL * cfL;
+}
+
 // ── Core stats computation ─────────────────────────────────────────────────
 
 /**
@@ -433,25 +518,34 @@ function _computeStatsForWindow(routeId, cutoff, now) {
             hasRecentChange(dayHistory, todayStart) ||
             hasRecentChange(yesterdayHistory, yesterdayStart);
 
-        capacity    = _computeWeightedCapacity(route, trainType, dayHistory, yesterdayHistory, cutoff, now);
-        utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
-        efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
+        capacity = _computeWeightedCapacity(route, trainType, dayHistory, yesterdayHistory, cutoff, now);
+
+        // Option B: when a schedule change is recent, the rolling-window ridership
+        // still reflects the old schedule.  Apply a phase-proportional correction
+        // so that ratio metrics (load factor, efficiency) are estimated immediately
+        // rather than waiting 48h for the demand side to catch up.
+        const effectiveRidership = scheduleChangedRecently
+            ? _correctedRidership(
+                ridership, trainCounts,
+                _getCountsAtTime(dayHistory, yesterdayHistory, todayStart, yesterdayStart, cutoff),
+                _ridershipHourly[routeId]
+              )
+            : ridership;
+
+        utilization = capacity > 0 ? Math.round((effectiveRidership / capacity) * 100) : 0;
+        efficiency  = capacity > 0 ? effectiveRidership / (2 * capacity) : 0;
 
         // loadFactor = (fraction of ridership on the busiest segment) × utilization
         // The fraction is scale-invariant (normalises cumulative commute counts).
         const maxSegmentFraction = _segmentLoadsCache[routeId] ?? 0;
         loadFactor = capacity > 0 && maxSegmentFraction > 0
-            ? Math.round(maxSegmentFraction * (ridership / capacity) * 100)
+            ? Math.round(maxSegmentFraction * (effectiveRidership / capacity) * 100)
             : 0;
 
         const hourly = _ridershipHourly[routeId];
-        if (maxSegmentFraction > 0 && ridership > 0 && hourly) {
+        if (maxSegmentFraction > 0 && effectiveRidership > 0 && hourly) {
             const ph     = _getPhaseHours();
-            const counts = {
-                high:   route.trainSchedule?.highDemand   || 0,
-                medium: route.trainSchedule?.mediumDemand || 0,
-                low:    route.trainSchedule?.lowDemand    || 0,
-            };
+            const counts = trainCounts;
             const sumHours = (hours) => hours.reduce((s, h) => s + (hourly[h] || 0), 0);
             // Mask out phases with no trains: ridersPerHour reflects game demand regardless
             // of supply, so hours with 0 scheduled trains must not dilute the distribution.
@@ -463,10 +557,10 @@ function _computeStatsForWindow(routeId, cutoff, now) {
                 const pc = _computeWeightedPhaseCapacities(route, trainType, dayHistory);
                 // Use ridersPerHour as a distribution weight only — its unit is unknown,
                 // but the relative proportions between phases reflect the true demand split.
-                // Multiply by total ridership (24h) to derive absolute phase ridership.
-                const pHigh   = ridership * rHigh   / totalSampled;
-                const pMedium = ridership * rMedium / totalSampled;
-                const pLow    = ridership * rLow    / totalSampled;
+                // Multiply by effectiveRidership (24h, already corrected) to derive phase amounts.
+                const pHigh   = effectiveRidership * rHigh   / totalSampled;
+                const pMedium = effectiveRidership * rMedium / totalSampled;
+                const pLow    = effectiveRidership * rLow    / totalSampled;
                 if (pc.high   > 0) loadFactorHigh   = Math.round(maxSegmentFraction * pHigh   / pc.high   * 100);
                 if (pc.medium > 0) loadFactorMedium = Math.round(maxSegmentFraction * pMedium / pc.medium * 100);
                 if (pc.low    > 0) loadFactorLow    = Math.round(maxSegmentFraction * pLow    / pc.low    * 100);
@@ -478,7 +572,7 @@ function _computeStatsForWindow(routeId, cutoff, now) {
                                   (counts.medium > 0 ? pc.medium : 0) +
                                   (counts.low    > 0 ? pc.low    : 0);
                 if (maskedCap > 0) {
-                    loadFactor = Math.round(maxSegmentFraction * ridership / maskedCap * 100);
+                    loadFactor = Math.round(maxSegmentFraction * effectiveRidership / maskedCap * 100);
                 }
             }
         }
