@@ -141,7 +141,7 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
                     style={{backgroundColor: 'rgba(128,128,128,0.15)'}}
                 >
                     <div
-                        className={`absolute inset-y-0 left-0 transition-all duration-500 ${colors.bar} ${overflow ? '' : 'rounded'}`}
+                        className={`absolute inset-y-0 left-0 transition-all duration-500 ${colors.bar} ${overflow ? '' : 'rounded rounded-r-none'}`}
                         style={{width: `${barWidth}%`}}
                     />
                     {/* Over-capacity stripes on the right edge */}
@@ -181,9 +181,9 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
                                         <span className="text-muted-foreground shrink-0">
                                             {React.createElement(icons[iconName], { size: 11 })}
                                         </span>
-                                        <div className="relative flex-1 h-1.5 rounded overflow-hidden"
+                                        <div className="relative flex-1 h-2 rounded overflow-hidden"
                                              style={{backgroundColor: 'rgba(128,128,128,0.15)'}}>
-                                            <div className={`absolute inset-y-0 left-0 rounded ${c.bar}`}
+                                            <div className={`absolute inset-y-0 left-0 rounded rounded-r-none ${c.bar}`}
                                                  style={{width: `${Math.min(pct, 100)}%`}} />
                                         </div>
                                     </div>
@@ -282,7 +282,7 @@ export function RouteContent({ routeId }) {
                             icon="Zap"
                             value={data.efficiency > 0 ? `${data.efficiency.toFixed(2)}×` : '—'}
                             sub={data.efficiency >= 1 ? 'High turnover' : data.efficiency > 0 ? 'Room to grow' : 'No data yet'}
-                            valueClass={getEfficiencyClasses(data.efficiency || 0)}
+                            valueClass={data.scheduleChangedRecently ? 'text-blue-600 dark:text-blue-400' : getEfficiencyClasses(data.efficiency || 0)}
                         />
                         <StatCard
                             label="Trains"

@@ -198,7 +198,7 @@ function LoadFactorBar({ pct }) {
                     ))}
                 </div>
                 {/* Fill */}
-                <div className="absolute inset-y-0 left-0 rounded-sm transition-all duration-700"
+                <div className="absolute inset-y-0 left-0 rounded-sm rounded-r-none transition-all duration-700"
                      style={{ width: `${fillPct}%`, background: color, opacity: 0.85 }} />
                 {/* Over-capacity hatch */}
                 {overCap && (
@@ -290,10 +290,10 @@ export function SystemStats({ liveRouteData }) {
 
     return (
         <div className="space-y-3 py-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="flex gap-4">
                 {/* ── Stat chips ─────────────────────────────────────────────── */}
-                <div>
-                    <div className={'text-lg'}>
+                <div className="mr-auto">
+                    <div className={'leading-none mb-1.5 text-lg'}>
                         {getCityName(api.utils.getCityCode())}
                     </div>
                     <div className={'text-xs text-muted-foregound'}>
