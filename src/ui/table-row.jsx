@@ -10,9 +10,32 @@ import { getLoadFactorClasses, getEfficiencyClasses, getComparisonColorClass, ge
 import { Tooltip } from '../components/tooltip.jsx';
 
 const api = window.SubwayBuilderAPI;
-const { React } = api.utils;
+const { React, icons } = api.utils;
+
+// Injects the normalizing-pulse keyframe into <head> once (idempotent).
+function useNormalizingStyle() {
+    React.useEffect(() => {
+        const id = 'aa-normalizing-style';
+        if (!document.getElementById(id)) {
+            const style = document.createElement('style');
+            style.id = id;
+            style.textContent = `
+                 @keyframes normalizing-rotate {
+                    to { transform: rotate(359deg); }
+                 }
+                 @keyframes normalizing-pulse {
+                    50% { opacity: 0.6; }
+                 }
+                .aa-animate-normalizing { animation: normalizing-rotate 2s linear infinite; }
+                .aa-animate-metric-is-normalizing-pulse { animation: normalizing-pulse 2s ease infinite; }
+            `;
+            document.head.appendChild(style);
+        }
+    }, []);
+}
 
 export function TableRow({ row, sortState, groups = ['trains', 'finance', 'performance'], groupState, compareShowPercentages = true }) {
+    useNormalizingStyle();
     const isDeleted = row.deleted === true;
     
     // Helper to check if a column should be visible
@@ -101,7 +124,16 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     />
                 ) : (
                     <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getLoadFactorClasses(row.loadFactor)} ${getCellClasses('loadFactor', sortState, groupState, 'performance')}`}>
-                        {row.loadFactor > 0 ? `${row.loadFactor}%` : '—'}
+                        {row.scheduleChangedRecently ? (
+                            <Tooltip content="Schedule changed recently — metrics still settling (~24h)" side="left" delayDuration={100}>
+                                <span className="inline-flex items-center justify-end gap-1 text-blue-600 dark:text-blue-400">
+                                    {React.createElement(icons['LoaderCircle'], { size: 11, className: 'shrink-0 aa-animate-normalizing' })}
+                                    <span className="aa-animate-metric-is-normalizing-pulse">{row.loadFactor > 0 ? `${row.loadFactor}%` : ''}</span>
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            row.loadFactor > 0 ? `${row.loadFactor}%` : '—'
+                        )}
                     </td>
                 )
             )}
@@ -121,7 +153,16 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                     />
                 ) : (
                     <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getEfficiencyClasses(row.efficiency || 0)} ${getCellClasses('efficiency', sortState, groupState, 'performance')}`}>
-                        {row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : '—'}
+                        {row.scheduleChangedRecently ? (
+                            <Tooltip content="Schedule changed recently — metrics still settling (~24h)" side="left" delayDuration={100}>
+                                <span className="inline-flex items-center justify-end gap-1 text-blue-600 dark:text-blue-400">
+                                    {React.createElement(icons['LoaderCircle'], { size: 11, className: 'shrink-0 aa-animate-normalizing' })}
+                                    <span className="aa-animate-metric-is-normalizing-pulse">{row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : ''}</span>
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : '—'
+                        )}
                     </td>
                 )
             )}

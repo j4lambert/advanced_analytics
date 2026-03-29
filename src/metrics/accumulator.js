@@ -102,9 +102,10 @@ function _emptyStats() {
         trainsHigh:         0,
         trainsMedium:       0,
         trainsLow:          0,
-        trainSchedule:      0,
-        totalTrains:        0,
-        profitPerTrain:     0,
+        trainSchedule:          0,
+        totalTrains:            0,
+        profitPerTrain:         0,
+        scheduleChangedRecently: false,
     };
 }
 
@@ -409,18 +410,28 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     const totalTrains = trainCounts.high + trainCounts.medium + trainCounts.low;
     const stations    = route.stNodes?.length > 0 ? route.stNodes.length - 1 : 0;
 
-    let capacity         = 0;
-    let utilization      = 0;
-    let efficiency       = 0;
-    let loadFactor       = 0;
-    let loadFactorHigh   = 0;
-    let loadFactorMedium = 0;
-    let loadFactorLow    = 0;
+    let capacity                 = 0;
+    let utilization              = 0;
+    let efficiency               = 0;
+    let loadFactor               = 0;
+    let loadFactorHigh           = 0;
+    let loadFactorMedium         = 0;
+    let loadFactorLow            = 0;
+    let scheduleChangedRecently  = false;
 
     if (trainType) {
         const day              = Math.floor(now / 86400);
         const dayHistory       = _configCacheSnapshot[day]?.[routeId]       || null;
         const yesterdayHistory = _configCacheSnapshot[day - 1]?.[routeId]   || null;
+
+        const todayStart     = day * 86400;
+        const yesterdayStart = todayStart - 86400;
+        const hasRecentChange = (timeline, baselineSec) =>
+            Array.isArray(timeline) &&
+            timeline.some(e => e.timestamp > 0 && (baselineSec + e.timestamp * 60) > cutoff);
+        scheduleChangedRecently =
+            hasRecentChange(dayHistory, todayStart) ||
+            hasRecentChange(yesterdayHistory, yesterdayStart);
 
         capacity    = _computeWeightedCapacity(route, trainType, dayHistory, yesterdayHistory, cutoff, now);
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
@@ -493,9 +504,10 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         trainsHigh:     trainCounts.high,
         trainsMedium:   trainCounts.medium,
         trainsLow:      trainCounts.low,
-        trainSchedule:  trainCounts.high,
+        trainSchedule:           trainCounts.high,
         totalTrains,
         profitPerTrain,
+        scheduleChangedRecently,
     };
 }
 

@@ -513,6 +513,13 @@ export function GuideDialog({ isOpen, onClose }) {
                                 </ul>
                             </div>
                         </div>
+                        <Note>
+                            When you change a train schedule, ridership takes up to 24 in-game hours to
+                            adjust to the new capacity. During this window a{' '}
+                            <span className="text-blue-600 dark:text-blue-400 font-medium">blue circle indicator</span>{' '}
+                            appears on the route — both in the route dialog and in the table — to signal that
+                            Load Factor is still normalizing and may not reflect steady-state conditions.
+                        </Note>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-usage" label="Performance" icon="Zap">
@@ -583,6 +590,12 @@ export function GuideDialog({ isOpen, onClose }) {
                             while keeping Load Factor comfortably in the green zone.
                             Use both metrics together for a complete picture.
                         </Warning>
+                        <Note>
+                            Like Load Factor, Performance is derived from the ridership/capacity ratio and
+                            will show a{' '}
+                            <span className="text-blue-600 dark:text-blue-400 font-medium">blue circle indicator</span>{' '}
+                            for ~24h after any schedule change while the rolling window re-calibrates.
+                        </Note>
                     </MetricEntry>
 
                     <MetricEntry id="aa-guide-m-trains" label="Trains" icon="TramFront">

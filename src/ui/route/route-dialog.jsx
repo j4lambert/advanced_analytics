@@ -21,6 +21,18 @@ import { RouteMetrics }  from './route-metrics.jsx';
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
+// ── Normalizing animation ───────────────────────────────────────────────────────
+function NormalizingStyle() {
+    return React.createElement('style', null, `
+        @keyframes normalizing-rotate {
+             to { transform: rotate(359deg); }
+        }
+        .aa-animate-normalizing { animation: normalizing-rotate 2s linear infinite; }
+        .aa-metric-is-normalizing { filter: saturate(0.7); }
+    `);
+}
+
+
 // ── Live data hook ─────────────────────────────────────────────────────────────
 // Polls game state every second and returns processed metrics for one route.
 // All financial and capacity data comes from getRoute24hStats (rolling 24h window).
@@ -98,7 +110,7 @@ function getLoadFactorLabel(pct) {
 
 // ── Load Factor gauge (hero metric) ───────────────────────────────────────────
 
-function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow }) {
+function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow, isNormalizing }) {
     const pct      = Math.max(loadFactor || 0, 0);
     const barWidth = Math.min(pct, 100);
     const overflow = pct > 100;
@@ -107,7 +119,7 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
     const { WARNING_LOW, WARNING_HIGH } = CONFIG.LOAD_FACTOR_THRESHOLDS;
 
     return (
-        <div className="rounded flex flex-col border bg-muted/30 px-6 py-5">
+        <div className={`rounded flex flex-col border bg-muted/30 px-6 py-5 flex-1 ${isNormalizing ? 'aa-metric-is-normalizing' : ''}`}>
             {/* Header row */}
             <div className="mb-1 flex text-muted-foreground justify-between">
                 <div className={"uppercase text-sm font-semibold tracking-wider"}>Load Factor</div>
@@ -115,7 +127,7 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
             </div>
             <div className={"my-auto"}>
                 <div className="flex justify-between items-start mb-2">
-                    <div className={`text-xl font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
+                    <div className={`text-xl font-bold ${colors.text} ${isNormalizing ? 'opacity-0' : ''}`}>{pct > 0 ? label : 'No data yet'}</div>
                     <div className={`text-5xl font-bold tabular-nums leading-none ${colors.text}`}>
                         {pct > 0 ? pct.toFixed(1) : '—'}
                         {pct > 0 && <span className="text-2xl font-medium ml-0.5">%</span>}
@@ -237,13 +249,25 @@ export function RouteContent({ routeId }) {
     return (
         <div className={"pb-6"}>
             <section className={'grid grid-cols-2 gap-4'}>
-                {/* ── Load Factor (hero) ── */}
-                <UsageGauge
-                    loadFactor={data.loadFactor}
-                    loadFactorHigh={data.loadFactorHigh}
-                    loadFactorMedium={data.loadFactorMedium}
-                    loadFactorLow={data.loadFactorLow}
-                />
+                <div className="flex flex-col">
+                    <NormalizingStyle />
+                    {data.scheduleChangedRecently && (
+                        <div className="mb-3 px-3 py-2 rounded border border-blue-500 bg-muted/20 flex items-start gap-2">
+                            {React.createElement(icons['LoaderCircle'], { size: 14, className: 'text-blue-600 dark:text-blue-400 shrink-0 aa-animate-normalizing' })}
+                            <span className="text-xs text-blue-600 dark:text-blue-400">
+                                Schedule change detected — metrics are still normalizing (~24h to stabilize).
+                            </span>
+                        </div>
+                    )}
+                    {/* ── Load Factor (hero) ── */}
+                    <UsageGauge
+                        loadFactor={data.loadFactor}
+                        loadFactorHigh={data.loadFactorHigh}
+                        loadFactorMedium={data.loadFactorMedium}
+                        loadFactorLow={data.loadFactorLow}
+                        isNormalizing={data.scheduleChangedRecently}
+                    />
+                </div>
 
                 {/* ── Operational stats --- First row ── */}
                 <div className="grid grid-cols-3 gap-3">
