@@ -205,10 +205,14 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
         )
     };
 
+    const eitherNormalizing = !!(primaryRoute?.scheduleChangedRecently || secondaryRoute?.scheduleChangedRecently);
+
     return {
         id: row.id,
         name: row.name,
         ...metrics,
+        loadFactorNormalizing: eitherNormalizing,
+        efficiencyNormalizing: eitherNormalizing,
         primaryValues: {
             ridership: primaryRoute.ridership,
             capacity: primaryRoute.capacity,
@@ -220,7 +224,8 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             dailyCost: primaryRoute.dailyCost,
             dailyRevenue: primaryRoute.dailyRevenue,
             dailyProfit: primaryRoute.dailyProfit,
-            profitPerTrain: primaryRoute.profitPerTrain
+            profitPerTrain: primaryRoute.profitPerTrain,
+            scheduleChangedRecently: primaryRoute.scheduleChangedRecently || false,
         },
         secondaryValues: {
             ridership: secondaryRoute.ridership,
@@ -233,7 +238,8 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
             dailyCost: secondaryRoute.dailyCost,
             dailyRevenue: secondaryRoute.dailyRevenue,
             dailyProfit: secondaryRoute.dailyProfit,
-            profitPerTrain: secondaryRoute.profitPerTrain
+            profitPerTrain: secondaryRoute.profitPerTrain,
+            scheduleChangedRecently: secondaryRoute.scheduleChangedRecently || false,
         },
         deleted: false,
         isComparison: true

@@ -104,7 +104,8 @@ export function useRouteMetrics({
 
                         processedData = dayData.routes.map(route => ({
                             ...route,
-                            deleted: !currentRoutes.some(r => r.id === route.id)
+                            deleted: !currentRoutes.some(r => r.id === route.id),
+                            isHistoricalSnapshot: true,
                         }));
                     }
                 }
