@@ -251,25 +251,18 @@ export function SystemStats({ liveRouteData }) {
         const totalRevenue = routes.reduce((s, r) => s + (r.dailyRevenue ?? 0), 0);
         const totalRidership = routes.reduce((s, r) => s + (r.ridership  ?? 0), 0);
 
-        // Normalizing routes carry estimated load-factor / efficiency values.
-        // Exclude them from the network aggregates so one unsettled route
-        // doesn't skew the whole network picture.
-        const stableRoutes     = routes.filter(r => !r.scheduleChangedRecently);
-        const normalizingCount = routes.length - stableRoutes.length;
-        const aggRoutes        = stableRoutes.length > 0 ? stableRoutes : routes; // fallback: use all
-
-        const aggRidership = aggRoutes.reduce((s, r) => s + (r.ridership ?? 0), 0);
-        const aggCapacity  = aggRoutes.reduce((s, r) => s + (r.capacity  ?? 0), 0);
+        const aggRidership = routes.reduce((s, r) => s + (r.ridership ?? 0), 0);
+        const aggCapacity  = routes.reduce((s, r) => s + (r.capacity  ?? 0), 0);
 
         const totalEfficiency = aggCapacity > 0 ? aggRidership / (2 * aggCapacity) : 0;
 
         // Ridership-weighted average of per-route load factors (each already 0–100)
         const loadFactor = aggRidership > 0
-            ? aggRoutes.reduce((s, r) => s + (r.ridership ?? 0) * (r.loadFactor ?? 0), 0) / aggRidership
+            ? routes.reduce((s, r) => s + (r.ridership ?? 0) * (r.loadFactor ?? 0), 0) / aggRidership
             : 0;
 
         const healthScore = aggRidership > 0
-            ? aggRoutes.reduce((s, r) =>
+            ? routes.reduce((s, r) =>
                 s + (r.ridership ?? 0) * routeHealthScore(r.loadFactor ?? 0)
               , 0) / aggRidership * 100
             : 0;
@@ -290,7 +283,6 @@ export function SystemStats({ liveRouteData }) {
             totalEfficiency,
             loadFactor,
             healthScore,
-            normalizingCount,
         };
     }, [liveRouteData]);
 
@@ -331,11 +323,6 @@ export function SystemStats({ liveRouteData }) {
                         <p className="text-[10px] font-semibold uppercase tracking-wider">
                             System Load Factor
                         </p>
-                        {stats.normalizingCount > 0 && (
-                            <span className="text-[10px] text-blue-600 dark:text-blue-400">
-                                {stats.normalizingCount} route{stats.normalizingCount > 1 ? 's' : ''} excluded (normalizing)
-                            </span>
-                        )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 pb-3">
                         Ridership-weighted avg. peak segment load
@@ -349,11 +336,6 @@ export function SystemStats({ liveRouteData }) {
                         <p className="text-[10px] font-semibold uppercase tracking-wider">
                             Network Health Score
                         </p>
-                        {stats.normalizingCount > 0 && (
-                            <span className="text-[10px] text-blue-600 dark:text-blue-400">
-                                {stats.normalizingCount} route{stats.normalizingCount > 1 ? 's' : ''} excluded (normalizing)
-                            </span>
-                        )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 pb-3">
                         Ridership-weighted load factor quality (0–100)

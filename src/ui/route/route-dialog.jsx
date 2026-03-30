@@ -21,15 +21,6 @@ import { RouteMetrics }  from './route-metrics.jsx';
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-// ── Normalizing animation ───────────────────────────────────────────────────────
-function NormalizingStyle() {
-    return React.createElement('style', null, `
-        @keyframes normalizing-rotate {
-             to { transform: rotate(359deg); }
-        }
-        .aa-animate-normalizing { animation: normalizing-rotate 2s linear infinite; }
-    `);
-}
 
 
 // ── Live data hook ─────────────────────────────────────────────────────────────
@@ -109,7 +100,7 @@ function getLoadFactorLabel(pct) {
 
 // ── Load Factor gauge (hero metric) ───────────────────────────────────────────
 
-function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow, isNormalizing }) {
+function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow }) {
     const pct      = Math.max(loadFactor || 0, 0);
     const barWidth = Math.min(pct, 100);
     const overflow = pct > 100;
@@ -122,28 +113,15 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
             {/* Header row */}
             <div className="mb-1 flex text-muted-foreground justify-between">
                 <div className={"uppercase text-sm font-semibold tracking-wider"}>Load Factor</div>
-                {isNormalizing
-                    ? <span className="text-xs text-blue-600 dark:text-blue-400 italic">~ Estimated value</span>
-                    : <span className="text-xs text-muted-foreground">Peak train load ÷ train capacity</span>
-                }
+                <span className="text-xs text-muted-foreground">Peak train load ÷ train capacity</span>
             </div>
             <div className={"my-auto"}>
                 <div className="flex justify-between items-start mb-2">
-                    <div className={`text-xl font-bold ${colors.text} ${isNormalizing ? 'opacity-0' : ''}`}>{pct > 0 ? label : 'No data yet'}</div>
-                    <Tooltip
-                        side="left"
-                        delayDuration={150}
-                        content={isNormalizing
-                            ? "Estimated — ridership corrected for the schedule change. Will converge to the real value over ~24–48h."
-                            : undefined
-                        }
-                        disabled={!isNormalizing}
-                    >
-                        <div className={`text-5xl font-bold tabular-nums leading-none ${isNormalizing ? 'text-blue-600 dark:text-blue-400' : colors.text}`}>
-                            {pct > 0 ? pct.toFixed(1) : '—'}
-                            {pct > 0 && <span className="text-2xl font-medium ml-0.5">%</span>}
-                        </div>
-                    </Tooltip>
+                    <div className={`text-xl font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
+                    <div className={`text-5xl font-bold tabular-nums leading-none ${colors.text}`}>
+                        {pct > 0 ? pct.toFixed(1) : '—'}
+                        {pct > 0 && <span className="text-2xl font-medium ml-0.5">%</span>}
+                    </div>
                 </div>
 
                 {/* Progress bar — bar fills to 100 %; a striped overflow indicator
@@ -153,7 +131,7 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
                     style={{backgroundColor: 'rgba(128,128,128,0.15)'}}
                 >
                     <div
-                        className={`absolute inset-y-0 left-0 transition-all duration-500 ${isNormalizing ? 'bg-current text-blue-500' : colors.bar} ${overflow ? '' : 'rounded rounded-r-none'}`}
+                        className={`absolute inset-y-0 left-0 transition-all duration-500 ${colors.bar} ${overflow ? '' : 'rounded rounded-r-none'}`}
                         style={{width: `${barWidth}%`}}
                     />
                     {/* Over-capacity stripes on the right edge */}
@@ -183,9 +161,8 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
                             const tip = (
                                 <div className="flex flex-col gap-0.5">
                                     <span className="font-semibold">{title}</span>
-                                    <span className={isNormalizing ? 'text-blue-600 dark:text-blue-400' : c.text}>{pct}%{isNormalizing ? ' ~ Est.' : ''}</span>
+                                    <span className={c.text}>{pct}%</span>
                                     <span className="text-xs opacity-70">{desc}</span>
-                                    {isNormalizing && <span className="text-xs text-blue-600 dark:text-blue-400 italic mt-0.5">Estimated — schedule still normalizing</span>}
                                 </div>
                             );
                             return (
@@ -196,7 +173,7 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
                                         </span>
                                         <div className="relative flex-1 h-2 rounded overflow-hidden"
                                              style={{backgroundColor: 'rgba(128,128,128,0.15)'}}>
-                                            <div className={`absolute inset-y-0 left-0 rounded rounded-r-none ${isNormalizing ? 'bg-current text-blue-500' : c.bar}`}
+                                            <div className={`absolute inset-y-0 left-0 rounded rounded-r-none ${c.bar}`}
                                                  style={{width: `${Math.min(pct, 100)}%`}} />
                                         </div>
                                     </div>
@@ -269,22 +246,12 @@ export function RouteContent({ routeId }) {
         <div className={"pb-6"}>
             <section className={'grid grid-cols-2 gap-4'}>
                 <div className="flex flex-col">
-                    <NormalizingStyle />
-                    {data.scheduleChangedRecently && (
-                        <div className="mb-3 px-3 py-2 rounded border border-blue-500 bg-muted/20 flex items-start gap-2">
-                            {React.createElement(icons['LoaderCircle'], { size: 14, className: 'text-blue-600 dark:text-blue-400 shrink-0 aa-animate-normalizing' })}
-                            <span className="text-xs text-blue-600 dark:text-blue-400">
-                                Schedule change detected — Load Factor and Performance are <strong>estimated</strong> values based on phase-proportional capacity correction. Full stabilization takes ~24–48h.
-                            </span>
-                        </div>
-                    )}
                     {/* ── Load Factor (hero) ── */}
                     <UsageGauge
                         loadFactor={data.loadFactor}
                         loadFactorHigh={data.loadFactorHigh}
                         loadFactorMedium={data.loadFactorMedium}
                         loadFactorLow={data.loadFactorLow}
-                        isNormalizing={data.scheduleChangedRecently}
                     />
                 </div>
 
@@ -300,15 +267,8 @@ export function RouteContent({ routeId }) {
                             label="Performance"
                             icon="Zap"
                             value={data.efficiency > 0 ? `${data.efficiency.toFixed(2)}×` : '—'}
-                            sub={data.scheduleChangedRecently
-                                ? '~ Estimated value'
-                                : (data.efficiency >= 1 ? 'High turnover' : data.efficiency > 0 ? 'Room to grow' : 'No data yet')
-                            }
-                            valueClass={data.scheduleChangedRecently ? 'text-blue-600 dark:text-blue-400' : getEfficiencyClasses(data.efficiency || 0)}
-                            tooltip={data.scheduleChangedRecently
-                                ? 'Estimated — ridership corrected for the schedule change. Will converge to the real value over ~24–48h.'
-                                : undefined
-                            }
+                            sub={data.efficiency >= 1 ? 'High turnover' : data.efficiency > 0 ? 'Room to grow' : 'No data yet'}
+                            valueClass={getEfficiencyClasses(data.efficiency || 0)}
                         />
                         <StatCard
                             label="Trains"

@@ -39,7 +39,7 @@
 
 import { CONFIG } from '../config.js';
 import { calculateTransfers } from './transfers.js';
-import { getRouteStationsInOrder, isCircularRoute, computeMaxSegmentLoadFraction } from '../utils/route-utils.js';
+import { getRouteStationsInOrder, isCircularRoute, computeSegmentLoads } from '../utils/route-utils.js';
 import { gameTiming } from '../core/game-timing.js';
 import { recordConfigChange } from './train-config-tracking.js';
 
@@ -69,13 +69,12 @@ let _trainTypesCache    = null; // { trainTypeId: trainType }
 let _transfersCache     = null; // { routeId: { count, routes, routeIds, stationIds } }
 let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 
-// Per-hour ridership tracking (sampled from ridersPerHour in _refreshCaches)
-let _ridershipHourly = {};  // { routeId: number[24] } — average ridersPerHour for each game hour
-let _ridershipAccum  = {};  // { routeId: { hour, sum, count } } — in-progress accumulator for current game hour
-
 // Timers
 let _pollTimer  = null;
 let _pruneTimer = null;
+
+// Timestamp validation (temporary — remove after confirming)
+let _timestampValidationDone = false;
 
 // Schedule change tracking
 let _lastKnownSchedules  = {};  // { routeId: { high, medium, low } } — for change detection
@@ -168,21 +167,6 @@ function _buildWeights(rates, prevWeights) {
     return weights;
 }
 
-// ── Helper: phase-hour index map (built once from CONFIG) ─────────────────
-
-let _phaseHours = null; // { high: number[], medium: number[], low: number[] }
-
-function _getPhaseHours() {
-    if (_phaseHours) return _phaseHours;
-    const map = { high: [], medium: [], low: [] };
-    for (const phase of CONFIG.DEMAND_PHASES) {
-        for (let h = phase.startHour; h < phase.endHour; h++) {
-            map[phase.type].push(h);
-        }
-    }
-    _phaseHours = map;
-    return _phaseHours;
-}
 
 // ── Helper: per-phase capacities ──────────────────────────────────────────
 
@@ -365,91 +349,6 @@ function _computeWeightedPhaseCapacities(route, trainType, configTimeline) {
     };
 }
 
-// ── Option B: phase-proportional ridership correction ──────────────────────
-//
-// When a schedule change occurred within the rolling window, the raw ridership
-// figure still reflects the OLD schedule (the demand side lags ~48h).
-// We split ridership into per-phase portions using _ridershipHourly weights,
-// then scale each phase by min(1, newTrains / oldTrains).
-//
-// For capacity decreases  → ridership scales down proportionally (riders
-//   get left behind / stop using the route).
-// For capacity increases  → ridership is held at the pre-change level
-//   (conservative: we don't know how much extra demand will materialise).
-//
-// Returns the corrected ridership to use for load-factor / efficiency / utilization.
-
-/**
- * Returns the { high, medium, low } train counts that were active at `targetSec`,
- * reading from the merged timeline of today + yesterday config history.
- */
-function _getCountsAtTime(dayHistory, yesterdayHistory, todayStart, yesterdayStart, targetSec) {
-    const entries = [];
-    if (Array.isArray(yesterdayHistory)) {
-        for (const e of yesterdayHistory) entries.push({ ...e, absSec: yesterdayStart + e.timestamp * 60 });
-    }
-    if (Array.isArray(dayHistory)) {
-        for (const e of dayHistory) entries.push({ ...e, absSec: todayStart + e.timestamp * 60 });
-    }
-    entries.sort((a, b) => a.absSec - b.absSec);
-
-    let result = null;
-    for (const e of entries) {
-        if (e.absSec <= targetSec) result = e;
-        else break;
-    }
-    return result; // null only if there are zero timeline entries
-}
-
-/**
- * Phase-proportional ridership correction (Option B).
- *
- * @param {number}      rawRidership  - game's 24h cumulative ridership
- * @param {object}      newCounts     - { high, medium, low } current train schedule
- * @param {object|null} oldCounts     - { high, medium, low } at window start (from _getCountsAtTime)
- * @param {object|null} routeHourly   - _ridershipHourly[routeId] (may be null/undefined)
- * @returns {number} corrected ridership to use for ratio metrics
- */
-function _correctedRidership(rawRidership, newCounts, oldCounts, routeHourly) {
-    if (!oldCounts) return rawRidership;
-
-    const ph = _getPhaseHours();
-
-    // Helper: sum ridersPerHour for an array of hour indices
-    const sumH = (hours) => hours.reduce((s, h) => s + ((routeHourly?.[h]) || 0), 0);
-
-    const wH = sumH(ph.high);
-    const wM = sumH(ph.medium);
-    const wL = sumH(ph.low);
-    const totalW = wH + wM + wL;
-
-    // Correction factor per phase: min(1, new/old).
-    // If oldTrains = 0 and newTrains > 0 → factor 1 (can't scale up from nothing).
-    // If newTrains = 0 → factor 0 (no service, no ridership).
-    const cf = (oldT, newT) =>
-        oldT > 0 ? Math.min(1, newT / oldT) : (newT > 0 ? 1 : 0);
-
-    const cfH = cf(oldCounts.high,   newCounts.high);
-    const cfM = cf(oldCounts.medium, newCounts.medium);
-    const cfL = cf(oldCounts.low,    newCounts.low);
-
-    if (totalW > 0) {
-        // Hourly data available → weight by phase demand distribution
-        const rH = rawRidership * wH / totalW;
-        const rM = rawRidership * wM / totalW;
-        const rL = rawRidership * wL / totalW;
-        return rH * cfH + rM * cfM + rL * cfL;
-    }
-
-    // Fallback: no hourly data — weight by phase hours
-    const hH = CONFIG.DEMAND_HOURS.high, hM = CONFIG.DEMAND_HOURS.medium, hL = CONFIG.DEMAND_HOURS.low;
-    const totalHours = hH + hM + hL;
-    const rH = rawRidership * hH / totalHours;
-    const rM = rawRidership * hM / totalHours;
-    const rL = rawRidership * hL / totalHours;
-    return rH * cfH + rM * cfM + rL * cfL;
-}
-
 // ── Core stats computation ─────────────────────────────────────────────────
 
 /**
@@ -511,6 +410,10 @@ function _computeStatsForWindow(routeId, cutoff, now) {
 
         const todayStart     = day * 86400;
         const yesterdayStart = todayStart - 86400;
+
+        // scheduleChangedRecently: kept for backward compat in historical snapshots,
+        // but no longer used for metric corrections (timestamps on commutes make
+        // the correction unnecessary).
         const hasRecentChange = (timeline, baselineSec) =>
             Array.isArray(timeline) &&
             timeline.some(e => e.timestamp > 0 && (baselineSec + e.timestamp * 60) > cutoff);
@@ -520,60 +423,29 @@ function _computeStatsForWindow(routeId, cutoff, now) {
 
         capacity = _computeWeightedCapacity(route, trainType, dayHistory, yesterdayHistory, cutoff, now);
 
-        // Option B: when a schedule change is recent, the rolling-window ridership
-        // still reflects the old schedule.  Apply a phase-proportional correction
-        // so that ratio metrics (load factor, efficiency) are estimated immediately
-        // rather than waiting 48h for the demand side to catch up.
-        const effectiveRidership = scheduleChangedRecently
-            ? _correctedRidership(
-                ridership, trainCounts,
-                _getCountsAtTime(dayHistory, yesterdayHistory, todayStart, yesterdayStart, cutoff),
-                _ridershipHourly[routeId]
-              )
-            : ridership;
+        utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
+        efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
 
-        utilization = capacity > 0 ? Math.round((effectiveRidership / capacity) * 100) : 0;
-        efficiency  = capacity > 0 ? effectiveRidership / (2 * capacity) : 0;
+        // Load factor: peak segment load from time-filtered commutes ÷ capacity.
+        // _segmentLoadsCache now holds { overall, high, medium, low } raw passenger
+        // counts from the rolling 24h window, computed directly from commute timestamps.
+        const segLoads = _segmentLoadsCache[routeId];
+        if (segLoads && capacity > 0 && segLoads.overall > 0) {
+            loadFactor = Math.round((segLoads.overall / capacity) * 100);
 
-        // loadFactor = (fraction of ridership on the busiest segment) × utilization
-        // The fraction is scale-invariant (normalises cumulative commute counts).
-        const maxSegmentFraction = _segmentLoadsCache[routeId] ?? 0;
-        loadFactor = capacity > 0 && maxSegmentFraction > 0
-            ? Math.round(maxSegmentFraction * (effectiveRidership / capacity) * 100)
-            : 0;
+            // Per-phase load factors: direct segment loads ÷ phase capacity.
+            const pc = _computeWeightedPhaseCapacities(route, trainType, dayHistory);
+            if (pc.high   > 0 && trainCounts.high   > 0) loadFactorHigh   = Math.round((segLoads.high   / pc.high)   * 100);
+            if (pc.medium > 0 && trainCounts.medium > 0) loadFactorMedium = Math.round((segLoads.medium / pc.medium) * 100);
+            if (pc.low    > 0 && trainCounts.low    > 0) loadFactorLow    = Math.round((segLoads.low    / pc.low)    * 100);
 
-        const hourly = _ridershipHourly[routeId];
-        if (maxSegmentFraction > 0 && effectiveRidership > 0 && hourly) {
-            const ph     = _getPhaseHours();
-            const counts = trainCounts;
-            const sumHours = (hours) => hours.reduce((s, h) => s + (hourly[h] || 0), 0);
-            // Mask out phases with no trains: ridersPerHour reflects game demand regardless
-            // of supply, so hours with 0 scheduled trains must not dilute the distribution.
-            const rHigh   = counts.high   > 0 ? sumHours(ph.high)   : 0;
-            const rMedium = counts.medium > 0 ? sumHours(ph.medium) : 0;
-            const rLow    = counts.low    > 0 ? sumHours(ph.low)    : 0;
-            const totalSampled = rHigh + rMedium + rLow;
-            if (totalSampled > 0) {
-                const pc = _computeWeightedPhaseCapacities(route, trainType, dayHistory);
-                // Use ridersPerHour as a distribution weight only — its unit is unknown,
-                // but the relative proportions between phases reflect the true demand split.
-                // Multiply by effectiveRidership (24h, already corrected) to derive phase amounts.
-                const pHigh   = effectiveRidership * rHigh   / totalSampled;
-                const pMedium = effectiveRidership * rMedium / totalSampled;
-                const pLow    = effectiveRidership * rLow    / totalSampled;
-                if (pc.high   > 0) loadFactorHigh   = Math.round(maxSegmentFraction * pHigh   / pc.high   * 100);
-                if (pc.medium > 0) loadFactorMedium = Math.round(maxSegmentFraction * pMedium / pc.medium * 100);
-                if (pc.low    > 0) loadFactorLow    = Math.round(maxSegmentFraction * pLow    / pc.low    * 100);
-
-                // Recompute total using the same phase-exclusion logic so the total
-                // responds immediately when a phase is set to 0 trains (matching the
-                // phase bars).  Phases with 0 trains are excluded from the denominator.
-                const maskedCap = (counts.high   > 0 ? pc.high   : 0) +
-                                  (counts.medium > 0 ? pc.medium : 0) +
-                                  (counts.low    > 0 ? pc.low    : 0);
-                if (maskedCap > 0) {
-                    loadFactor = Math.round(maxSegmentFraction * effectiveRidership / maskedCap * 100);
-                }
+            // Recompute total using phase-exclusion logic: phases with 0 trains
+            // are excluded so the total responds immediately when a phase is zeroed.
+            const maskedCap = (trainCounts.high   > 0 ? pc.high   : 0) +
+                              (trainCounts.medium > 0 ? pc.medium : 0) +
+                              (trainCounts.low    > 0 ? pc.low    : 0);
+            if (maskedCap > 0) {
+                loadFactor = Math.round((segLoads.overall / maskedCap) * 100);
             }
         }
     }
@@ -694,32 +566,8 @@ function _tick() {
 function _refreshCaches() {
     if (!_api) return;
 
-    const elapsed     = _api.gameState.getElapsedSeconds();
-    const currentHour = Math.floor((elapsed % 86400) / 3600);
-    const routes      = _routesCache ?? _api.gameState.getRoutes();
-
-    // ── Per-hour ridership sampling ─────────────────────────────────────
-    try {
-        const lineMetrics = _api.gameState.getLineMetrics();
-        lineMetrics.forEach(lm => {
-            const id  = lm.routeId;
-            const val = lm.ridersPerHour || 0;
-            if (!_ridershipHourly[id]) _ridershipHourly[id] = new Array(24).fill(0);
-            if (!_ridershipAccum[id])  _ridershipAccum[id]  = { hour: currentHour, sum: 0, count: 0 };
-            const acc = _ridershipAccum[id];
-            if (acc.hour !== currentHour) {
-                const finalisedAvg = acc.count > 0 ? acc.sum / acc.count : 0;
-                if (acc.count > 0) _ridershipHourly[id][acc.hour] = finalisedAvg;
-                acc.hour  = currentHour;
-                acc.sum   = 0;
-                acc.count = 0;
-            }
-            acc.sum   += val;
-            acc.count += 1;
-        });
-    } catch (e) {
-        console.warn('[AA:hourly] sampling error', e);
-    }
+    const elapsed = _api.gameState.getElapsedSeconds();
+    const routes  = _routesCache ?? _api.gameState.getRoutes();
 
     try {
         _transfersCache = calculateTransfers(routes, _api);
@@ -729,14 +577,33 @@ function _refreshCaches() {
 
     try {
         const commutes    = _api.gameState.getCompletedCommutes?.() ?? [];
+        const cutoff      = elapsed - 86400; // rolling 24h window
+
+        // ── TEMP: validate timestamp availability ──────────────────────────
+        if (commutes.length > 0 && !_timestampValidationDone) {
+            const first = commutes[0];
+            const last  = commutes[commutes.length - 1];
+            const ordered = last.journeyEnd >= first.journeyEnd;
+            console.log('[AA:timestamp-validation]', {
+                elapsed,
+                firstJourneyEnd:  first.journeyEnd,
+                lastJourneyEnd:   last.journeyEnd,
+                hasTimestamps:    first.journeyStart !== undefined && first.journeyEnd !== undefined,
+                orderedByEnd:     ordered,
+                sampleCommute:    { journeyStart: first.journeyStart, journeyEnd: first.journeyEnd, size: first.size },
+            });
+            _timestampValidationDone = true;
+        }
+        // ── END TEMP ───────────────────────────────────────────────────────
+
         const allStations = _api.gameState.getStations();
         const newLoads    = {};
         for (const route of routes) {
             const ordered    = getRouteStationsInOrder(route.id, _api);
             const orderedIds = ordered.map(s => s.id);
             const circular   = isCircularRoute(route, allStations);
-            newLoads[route.id] = computeMaxSegmentLoadFraction(
-                route.id, orderedIds, commutes, circular
+            newLoads[route.id] = computeSegmentLoads(
+                route.id, orderedIds, commutes, circular, cutoff, CONFIG.DEMAND_PHASES
             );
         }
         _segmentLoadsCache = newLoads;
@@ -805,12 +672,11 @@ export function clearAccumulatorState() {
     _routesCache         = null;
     _trainTypesCache     = null;
     _transfersCache      = null;
-    _segmentLoadsCache   = {};
-    _ridershipHourly     = {};
-    _ridershipAccum      = {};
-    _lastKnownSchedules  = {};
-    _configCacheSnapshot = {};
-    _storage             = null;
+    _segmentLoadsCache        = {};
+    _timestampValidationDone  = false;
+    _lastKnownSchedules       = {};
+    _configCacheSnapshot      = {};
+    _storage                  = null;
     gameTiming.reset();
 }
 
@@ -865,9 +731,8 @@ export async function persistEvents(storage) {
     if (!storage) return;
     try {
         await storage.set(PERSIST_KEY, {
-            revEvents:       _revEvents,
-            costEvents:      _costEvents,
-            ridershipHourly: _ridershipHourly,
+            revEvents:  _revEvents,
+            costEvents: _costEvents,
         });
     } catch (e) {
         console.error(`${TAG} Failed to persist events:`, e);
@@ -897,9 +762,6 @@ export async function restoreEvents(storage, currentElapsed) {
         // Keep only events in [cutoff, currentElapsed]
         _revEvents  = (saved.revEvents  || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
         _costEvents = (saved.costEvents || []).filter(e => e.t >= cutoff && e.t <= currentElapsed);
-
-        // Restore per-hour ridership distribution (no pruning needed — it's a fixed 24-slot array per route)
-        if (saved.ridershipHourly) _ridershipHourly = saved.ridershipHourly;
     } catch (e) {
         console.error(`${TAG} Failed to restore events:`, e);
     }

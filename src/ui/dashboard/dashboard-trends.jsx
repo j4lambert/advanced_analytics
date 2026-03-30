@@ -48,15 +48,9 @@ const TIMEFRAMES = [
 // Label used for the synthetic today entry
 const TODAY_LABEL = 'Today';
 
-// Metrics whose values are distorted during the schedule-change normalizing window.
-// Data points with scheduleChangedRecently === true are nulled out for these metrics
-// so charts interpolate (line) or show a gap (bar) rather than plotting bad data.
-const NORMALIZING_METRICS = new Set(['loadFactor', 'efficiency']);
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Compute the projected (full-day extrapolated) value for a time-based metric.
  * Build the synthetic "Today" data point from liveRouteData.
  * Returns an object shaped like a historical day's route entry but tagged
  * with isLive = true.
@@ -68,8 +62,7 @@ const NORMALIZING_METRICS = new Set(['loadFactor', 'efficiency']);
 function buildTodayPoint(liveRouteData, metricKey) {
     const point = { day: TODAY_LABEL, isLive: true };
     liveRouteData.forEach(route => {
-        const isNormalizingToday = NORMALIZING_METRICS.has(metricKey) && route.scheduleChangedRecently;
-        point[route.id] = isNormalizingToday ? null : (route[metricKey] ?? 0);
+        point[route.id] = route[metricKey] ?? 0;
     });
     return point;
 }
@@ -189,11 +182,6 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
                 // derive it from the stored ridership / capacity pair
                 if (value == null && selectedMetric === 'efficiency' && routeData?.capacity > 0) {
                     value = routeData.ridership / (2 * routeData.capacity);
-                }
-                // Null out ratio metrics captured during a normalizing window so the
-                // chart interpolates (line) or shows a gap (bar) rather than bad data.
-                if (NORMALIZING_METRICS.has(selectedMetric) && routeData?.scheduleChangedRecently) {
-                    value = null;
                 }
                 point[routeId] = value;
                 // No projected key for historical — they are complete days
@@ -622,7 +610,7 @@ function ChartDisplay({ data, routes, selectedRoutes, metricKey, metricLabel, ch
                             strokeOpacity: hoveredRoute && hoveredRoute !== routeId ? 0.2 : 1,
                             dot:          makeLiveDot(getRouteColor(routeId)),
                             activeDot:    { r: 5 },
-                            connectNulls: NORMALIZING_METRICS.has(metricKey),
+                            connectNulls: false,
                             style:        { transition: 'stroke-opacity 0.15s, stroke-width 0.15s' },
                             animationDuration: 500,
                         })

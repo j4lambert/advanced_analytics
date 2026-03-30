@@ -107,84 +107,132 @@ export function isCircularRoute(route, allStations) {
 }
 
 /**
- * Compute the max-segment load fraction for a route from commute data.
+ * Compute the peak segment passenger load for a route from time-filtered commutes.
  *
- * Returns a scale-invariant value (0–1): the fraction of per-direction
- * ridership that travels through the busiest segment. Multiply by the
- * route's throughput utilisation to get the average load factor at the
- * peak segment.
+ * Returns the raw passenger count on the busiest segment within the time window,
+ * broken down by demand phase. Divide by the corresponding capacity to get
+ * load factor as a percentage.
  *
- * Why a fraction rather than raw counts:
- *   getCompletedCommutes() accumulates over the entire game lifetime, so
- *   raw counts grow with each day played. A fraction normalises this away.
+ * Commutes are filtered by journeyEnd > cutoff (rolling 24h window).
+ * Per-phase breakdown uses journeyStart to classify each commute into
+ * high/medium/low demand phases.
  *
- * Why directions are separated:
+ * Why directions are separated (pendulum routes):
  *   For pendulum routes (A→B→C→B→A) the deduplicated station list is
  *   [A, B, C]. WH commuters travelling C→A appear to board at a high
  *   index and alight at a low index. Mixing both directions in a single
- *   cumulative array causes HW boarders at A to be cancelled by WH
- *   alighters at A, producing bogus (often near-zero or extremely large)
- *   results. Processing each direction independently avoids this.
+ *   cumulative array causes cancellation artifacts. Processing each
+ *   direction independently avoids this.
  *
  * @param {string} routeId - Route ID
  * @param {Array<string>} orderedStationIds - Station IDs in timetable order (deduplicated)
  * @param {Array} commutes - Array from getCompletedCommutes()
  * @param {boolean} isCircular - True if circular/loop route
- * @returns {number} Fraction in [0, 1]; multiply by utilization% to get load factor%
+ * @param {number} cutoff - Elapsed seconds cutoff; only commutes with journeyEnd > cutoff are included
+ * @param {Array} demandPhases - CONFIG.DEMAND_PHASES array (each: { type, startHour, endHour })
+ * @returns {{ overall: number, high: number, medium: number, low: number }}
+ *   Peak segment passenger counts for the overall window and per demand phase
  */
-export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commutes, isCircular) {
-    if (!orderedStationIds.length || !commutes.length) return 0;
+export function computeSegmentLoads(routeId, orderedStationIds, commutes, isCircular, cutoff, demandPhases) {
+    const zero = { overall: 0, high: 0, medium: 0, low: 0 };
+    if (!orderedStationIds.length || !commutes.length) return zero;
+
+    // Build hour → phase lookup (24 entries)
+    const hourToPhase = new Array(24);
+    for (const phase of demandPhases) {
+        for (let h = phase.startHour; h < phase.endHour; h++) {
+            hourToPhase[h] = phase.type;
+        }
+    }
+
+    // Filter to 24h window. Commutes are likely ordered by journeyEnd (appended
+    // chronologically by the game), so scan from the end to find the cutoff.
+    // Binary search would be faster on very long games, but a simple backward
+    // scan is robust even if ordering isn't guaranteed.
+    let startIdx = 0;
+    if (commutes.length > 0 && commutes[0].journeyEnd !== undefined) {
+        // Fast path: if ordered, binary search for cutoff
+        if (commutes[commutes.length - 1].journeyEnd >= commutes[0].journeyEnd) {
+            let lo = 0, hi = commutes.length;
+            while (lo < hi) {
+                const mid = (lo + hi) >>> 1;
+                if (commutes[mid].journeyEnd > cutoff) hi = mid;
+                else lo = mid + 1;
+            }
+            startIdx = lo;
+        }
+    }
 
     const n = orderedStationIds.length;
     const stationIdxMap = new Map(orderedStationIds.map((id, i) => [id, i]));
 
     if (isCircular) {
-        // For circular routes, directly accumulate segment loads.
-        // There are n segments (0→1, 1→2, …, (n-2)→(n-1), (n-1)→0).
-        //
-        // We cannot use the boarding/alighting cumulative scan here because
-        // getRouteStationsInOrder() deduplicates the terminus, so the station
-        // list is [A, B, C, D] (not [A, B, C, D, A]). A passenger travelling
-        // D→A therefore gets bi=3, ai=0 — which the bi>ai check misclassifies
-        // as "reverse", silently dropping all passengers whose journey ends at
-        // the terminus. Direct accumulation handles the wrap-around correctly.
-        const segLoad      = new Array(n).fill(0);
-        let totalBoarding  = 0;
+        return _circularSegmentLoads(routeId, n, stationIdxMap, commutes, startIdx, cutoff, hourToPhase);
+    }
+    return _pendulumSegmentLoads(routeId, n, stationIdxMap, commutes, startIdx, cutoff, hourToPhase);
+}
 
-        for (const c of commutes) {
-            if (!c.stationRoutes) continue;
-            const size = c.size || 1;
-            const seg  = c.stationRoutes.find(s => s.routeId === routeId);
-            if (!seg?.stationIds?.length) continue;
+/**
+ * Circular route: direct segment accumulation with wrap-around.
+ * There are n segments (0→1, 1→2, …, (n-1)→0).
+ */
+function _circularSegmentLoads(routeId, n, stationIdxMap, commutes, startIdx, cutoff, hourToPhase) {
+    // Per-phase + overall segment load arrays
+    const segAll  = new Array(n).fill(0);
+    const segHigh = new Array(n).fill(0);
+    const segMed  = new Array(n).fill(0);
+    const segLow  = new Array(n).fill(0);
 
-            const bi = stationIdxMap.get(seg.stationIds[0]);
-            const ai = stationIdxMap.get(seg.stationIds[seg.stationIds.length - 1]);
-            if (bi === undefined || ai === undefined || bi === ai) continue;
+    for (let ci = startIdx; ci < commutes.length; ci++) {
+        const c = commutes[ci];
+        if (c.journeyEnd === undefined || c.journeyEnd <= cutoff) continue;
+        if (!c.stationRoutes) continue;
+        const size = c.size || 1;
+        const seg  = c.stationRoutes.find(s => s.routeId === routeId);
+        if (!seg?.stationIds?.length) continue;
 
-            totalBoarding += size;
+        const bi = stationIdxMap.get(seg.stationIds[0]);
+        const ai = stationIdxMap.get(seg.stationIds[seg.stationIds.length - 1]);
+        if (bi === undefined || ai === undefined || bi === ai) continue;
 
-            if (bi < ai) {
-                // Normal forward: segments bi → bi+1 → … → ai
-                for (let i = bi; i < ai; i++) segLoad[i] += size;
-            } else {
-                // Wrap-around: bi → … → n-1 (→ terminus) → 0 → … → ai
-                for (let i = bi; i < n; i++) segLoad[i] += size;
-                for (let i = 0; i < ai; i++) segLoad[i] += size;
-            }
+        // Pick the phase array based on journeyStart hour
+        const hour = Math.floor((c.journeyStart % 86400) / 3600);
+        const phase = hourToPhase[hour];
+        const phaseSeg = phase === 'high' ? segHigh : phase === 'medium' ? segMed : segLow;
+
+        if (bi < ai) {
+            for (let i = bi; i < ai; i++) { segAll[i] += size; phaseSeg[i] += size; }
+        } else {
+            for (let i = bi; i < n; i++) { segAll[i] += size; phaseSeg[i] += size; }
+            for (let i = 0; i < ai; i++) { segAll[i] += size; phaseSeg[i] += size; }
         }
-
-        const maxLoad = segLoad.length > 0 ? Math.max(...segLoad) : 0;
-        return totalBoarding > 0 ? maxLoad / totalBoarding : 0;
     }
 
-    // ── Pendulum route ────────────────────────────────────────────────────────
-    // Separate forward (bi <= ai) and reverse (bi > ai) passengers.
-    const fwdBoarding  = new Array(n).fill(0);
-    const fwdAlighting = new Array(n).fill(0);
-    const revBoarding  = new Array(n).fill(0);
-    const revAlighting = new Array(n).fill(0);
+    return {
+        overall: segAll.length  > 0 ? Math.max(...segAll)  : 0,
+        high:    segHigh.length > 0 ? Math.max(...segHigh) : 0,
+        medium:  segMed.length  > 0 ? Math.max(...segMed)  : 0,
+        low:     segLow.length  > 0 ? Math.max(...segLow)  : 0,
+    };
+}
 
-    for (const c of commutes) {
+/**
+ * Pendulum route: separate forward/reverse cumulative scan.
+ */
+function _pendulumSegmentLoads(routeId, n, stationIdxMap, commutes, startIdx, cutoff, hourToPhase) {
+    // Boarding/alighting arrays: [overall, high, medium, low] × [fwd, rev]
+    const fwdB = new Array(n).fill(0), fwdA = new Array(n).fill(0);
+    const revB = new Array(n).fill(0), revA = new Array(n).fill(0);
+    const fwdBH = new Array(n).fill(0), fwdAH = new Array(n).fill(0);
+    const revBH = new Array(n).fill(0), revAH = new Array(n).fill(0);
+    const fwdBM = new Array(n).fill(0), fwdAM = new Array(n).fill(0);
+    const revBM = new Array(n).fill(0), revAM = new Array(n).fill(0);
+    const fwdBL = new Array(n).fill(0), fwdAL = new Array(n).fill(0);
+    const revBL = new Array(n).fill(0), revAL = new Array(n).fill(0);
+
+    for (let ci = startIdx; ci < commutes.length; ci++) {
+        const c = commutes[ci];
+        if (c.journeyEnd === undefined || c.journeyEnd <= cutoff) continue;
         if (!c.stationRoutes) continue;
         const size = c.size || 1;
         const seg  = c.stationRoutes.find(s => s.routeId === routeId);
@@ -194,49 +242,44 @@ export function computeMaxSegmentLoadFraction(routeId, orderedStationIds, commut
         const ai = stationIdxMap.get(seg.stationIds[seg.stationIds.length - 1]);
         if (bi === undefined || ai === undefined) continue;
 
+        const hour = Math.floor((c.journeyStart % 86400) / 3600);
+        const phase = hourToPhase[hour];
+
         if (bi <= ai) {
-            fwdBoarding[bi]  += size;
-            fwdAlighting[ai] += size;
+            fwdB[bi] += size; fwdA[ai] += size;
+            if      (phase === 'high')   { fwdBH[bi] += size; fwdAH[ai] += size; }
+            else if (phase === 'medium') { fwdBM[bi] += size; fwdAM[ai] += size; }
+            else                         { fwdBL[bi] += size; fwdAL[ai] += size; }
         } else {
-            revBoarding[bi]  += size;
-            revAlighting[ai] += size;
+            revB[bi] += size; revA[ai] += size;
+            if      (phase === 'high')   { revBH[bi] += size; revAH[ai] += size; }
+            else if (phase === 'medium') { revBM[bi] += size; revAM[ai] += size; }
+            else                         { revBL[bi] += size; revAL[ai] += size; }
         }
     }
 
-    // Forward cumulative load (low → high index)
-    let fwdLoad = 0, fwdMaxLoad = 0;
-    for (let i = 0; i < n - 1; i++) {
-        fwdLoad += fwdBoarding[i] - fwdAlighting[i];
-        if (fwdLoad > fwdMaxLoad) fwdMaxLoad = fwdLoad;
-    }
-    const fwdTotal = fwdBoarding.reduce((s, b) => s + b, 0);
+    // Compute max segment load via cumulative scan for each set
+    const scanMax = (boarding, alighting, fwd) => {
+        let load = 0, maxLoad = 0;
+        if (fwd) {
+            for (let i = 0; i < n - 1; i++) {
+                load += boarding[i] - alighting[i];
+                if (load > maxLoad) maxLoad = load;
+            }
+        } else {
+            for (let i = n - 1; i > 0; i--) {
+                load += boarding[i] - alighting[i];
+                if (load > maxLoad) maxLoad = load;
+            }
+        }
+        return maxLoad;
+    };
 
-    // Reverse cumulative load (high → low index) for pendulum return leg
-    let revLoad = 0, revMaxLoad = 0;
-    for (let i = n - 1; i > 0; i--) {
-        revLoad += revBoarding[i] - revAlighting[i];
-        if (revLoad > revMaxLoad) revMaxLoad = revLoad;
-    }
-    const revTotal = revBoarding.reduce((s, b) => s + b, 0);
+    // For each category, take max of forward and reverse peak
+    const peakAll  = Math.max(scanMax(fwdB,  fwdA,  true), scanMax(revB,  revA,  false));
+    const peakHigh = Math.max(scanMax(fwdBH, fwdAH, true), scanMax(revBH, revAH, false));
+    const peakMed  = Math.max(scanMax(fwdBM, fwdAM, true), scanMax(revBM, revAM, false));
+    const peakLow  = Math.max(scanMax(fwdBL, fwdAL, true), scanMax(revBL, revAL, false));
 
-    // `_computeStaticCapacity` uses loopTimeSec = timings[last] - timings[0], which
-    // for a pendulum spans the full round trip (A→…→Z→…→A). It then computes
-    // loopsPerHour × capacityPerTrain — one seat-slot per round trip. A train
-    // physically carries passengers in both directions per round trip, but the
-    // formula credits only one direction's worth of seats. Therefore the capacity
-    // it returns is already a per-direction figure for pendulum routes.
-    //
-    // With per-direction capacity in the denominator, the load factor becomes:
-    //
-    //   loadFactor = fraction × (ridership / capacity)
-    //              = (dominantMaxLoad / totalBoardings) × (ridership / capacity)
-    //              ≈ dominantMaxLoad / capacity
-    //
-    // No ×2 adjustment is needed. For symmetric routes (fwdMaxLoad ≈ revMaxLoad)
-    // this equals fwdMaxLoad / fwdTotal, the natural per-direction peak fraction.
-    // For asymmetric routes, dominantMaxLoad / totalBoardings < 1 but correctly
-    // reflects that the peak direction is more loaded than the average implies.
-    const dominantMaxLoad = fwdMaxLoad > revMaxLoad ? fwdMaxLoad : revMaxLoad;
-    const totalBoardings  = fwdTotal + revTotal;
-    return totalBoardings > 0 ? dominantMaxLoad / totalBoardings : 0;
+    return { overall: peakAll, high: peakHigh, medium: peakMed, low: peakLow };
 }

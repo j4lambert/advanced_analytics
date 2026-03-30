@@ -12,30 +12,7 @@ import { Tooltip } from '../components/tooltip.jsx';
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-// Injects the normalizing-pulse keyframe into <head> once (idempotent).
-function useNormalizingStyle() {
-    React.useEffect(() => {
-        const id = 'aa-normalizing-style';
-        if (!document.getElementById(id)) {
-            const style = document.createElement('style');
-            style.id = id;
-            style.textContent = `
-                 @keyframes normalizing-rotate {
-                    to { transform: rotate(359deg); }
-                 }
-                 @keyframes normalizing-pulse {
-                    50% { opacity: 0.6; }
-                 }
-                .aa-animate-normalizing { animation: normalizing-rotate 2s linear infinite; }
-                .aa-animate-metric-is-normalizing-pulse { animation: normalizing-pulse 2s ease infinite; }
-            `;
-            document.head.appendChild(style);
-        }
-    }, []);
-}
-
 export function TableRow({ row, sortState, groups = ['trains', 'finance', 'performance'], groupState, compareShowPercentages = true }) {
-    useNormalizingStyle();
     const isDeleted = row.deleted === true;
     
     // Helper to check if a column should be visible
@@ -121,28 +98,10 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         sortState={sortState}
                         groupState={groupState}
                         group="performance"
-                        normalizing={row.loadFactorNormalizing}
                     />
                 ) : (
                     <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getLoadFactorClasses(row.loadFactor)} ${getCellClasses('loadFactor', sortState, groupState, 'performance')}`}>
-                        {row.scheduleChangedRecently ? (
-                            row.isHistoricalSnapshot ? (
-                                <Tooltip content="Captured while metrics were still normalizing — may not reflect steady-state conditions" side="left" delayDuration={100}>
-                                    <span className="text-blue-600 dark:text-blue-400">
-                                        {row.loadFactor > 0 ? `${row.loadFactor}%` : '—'}
-                                    </span>
-                                </Tooltip>
-                            ) : (
-                                <Tooltip content="Estimated value — ridership corrected for the schedule change. Will fully stabilize in ~24–48h." side="left" delayDuration={100}>
-                                    <span className="inline-flex items-center justify-end gap-1 text-blue-600 dark:text-blue-400">
-                                        {React.createElement(icons['LoaderCircle'], { size: 11, className: 'shrink-0 aa-animate-normalizing' })}
-                                        <span className="aa-animate-metric-is-normalizing-pulse">{row.loadFactor > 0 ? `${row.loadFactor}%` : ''}</span>
-                                    </span>
-                                </Tooltip>
-                            )
-                        ) : (
-                            row.loadFactor > 0 ? `${row.loadFactor}%` : '—'
-                        )}
+                        {row.loadFactor > 0 ? `${row.loadFactor}%` : '—'}
                     </td>
                 )
             )}
@@ -159,28 +118,10 @@ export function TableRow({ row, sortState, groups = ['trains', 'finance', 'perfo
                         sortState={sortState}
                         groupState={groupState}
                         group="performance"
-                        normalizing={row.efficiencyNormalizing}
                     />
                 ) : (
                     <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getEfficiencyClasses(row.efficiency || 0)} ${getCellClasses('efficiency', sortState, groupState, 'performance')}`}>
-                        {row.scheduleChangedRecently ? (
-                            row.isHistoricalSnapshot ? (
-                                <Tooltip content="Captured while metrics were still normalizing — may not reflect steady-state conditions" side="left" delayDuration={100}>
-                                    <span className="text-blue-600 dark:text-blue-400">
-                                        {row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : '—'}
-                                    </span>
-                                </Tooltip>
-                            ) : (
-                                <Tooltip content="Estimated value — ridership corrected for the schedule change. Will fully stabilize in ~24–48h." side="left" delayDuration={100}>
-                                    <span className="inline-flex items-center justify-end gap-1 text-blue-600 dark:text-blue-400">
-                                        {React.createElement(icons['LoaderCircle'], { size: 11, className: 'shrink-0 aa-animate-normalizing' })}
-                                        <span className="aa-animate-metric-is-normalizing-pulse">{row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : ''}</span>
-                                    </span>
-                                </Tooltip>
-                            )
-                        ) : (
-                            row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : '—'
-                        )}
+                        {row.efficiency > 0 ? `${row.efficiency.toFixed(2)}×` : '—'}
                     </td>
                 )
             )}
@@ -450,25 +391,7 @@ function ProfitCell({ columnKey, value, isComparison, primaryValue, secondaryVal
 }
 
 // Comparison cell component
-function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, formatter, useCompactTooltip = false, normalizing = false }) {
-    // Normalizing override: suppress delta, show primary value in blue
-    if (normalizing && value !== 'NEW' && value !== 'DELETED') {
-        const displayValue = primaryValue != null
-            ? (typeof primaryValue === 'number'
-                ? (formatter ? formatter(primaryValue) : primaryValue.toLocaleString(undefined, { maximumFractionDigits: 2 }))
-                : primaryValue)
-            : '—';
-        return (
-            <td className={`whitespace-nowrap px-3 py-2 align-middle text-right tabular-nums ${getCellClasses(columnKey, sortState, groupState, group)}`}>
-                <Tooltip content="One or both days were captured while metrics were still normalizing — delta unreliable" side="left" delayDuration={100}>
-                    <span className="text-blue-600 dark:text-blue-400">
-                        {displayValue} <span className="text-muted-foreground">~</span>
-                    </span>
-                </Tooltip>
-            </td>
-        );
-    }
-
+function ComparisonCell({ columnKey, value, primaryValue, secondaryValue, showPercentages, sortState, groupState, group, formatter, useCompactTooltip = false }) {
     // Handle special cases
     if (value === 'NEW') {
         return (

@@ -205,14 +205,10 @@ export function buildComparisonRow(row, routeStatuses, comparePrimaryDay, compar
         )
     };
 
-    const eitherNormalizing = !!(primaryRoute?.scheduleChangedRecently || secondaryRoute?.scheduleChangedRecently);
-
     return {
         id: row.id,
         name: row.name,
         ...metrics,
-        loadFactorNormalizing: eitherNormalizing,
-        efficiencyNormalizing: eitherNormalizing,
         primaryValues: {
             ridership: primaryRoute.ridership,
             capacity: primaryRoute.capacity,
