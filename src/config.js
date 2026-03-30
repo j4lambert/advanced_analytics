@@ -11,10 +11,10 @@ export const CONFIG = {
     },
 
     LOAD_FACTOR_THRESHOLDS: {
-        CRITICAL_LOW:  40,
-        WARNING_LOW:   55,
+        CRITICAL_LOW:  20,
+        WARNING_LOW:   40,
         WARNING_HIGH:  80,
-        CRITICAL_HIGH: 90,
+        CRITICAL_HIGH: 95,
     },
     
     REFRESH_INTERVAL: 1000,

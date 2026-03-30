@@ -7,18 +7,18 @@
 //   Each route's load factor = peak segment load ÷ train capacity, so this
 //   answers "across the whole network, how full are trains at their busiest
 //   point on each route, weighted by how many people ride each route?"
-//   Zones: <40% under-served · 40–55% light · 55–80% healthy · 80–90% heavy
-//          >90% overcrowded
+//   Zones: <20% under-served · 20–40% light · 40–80% healthy · 80–95% heavy
+//          >95% overcrowded
 //
 // ── NETWORK HEALTH SCORE ─────────────────────────────────────────────────────
 //   Ridership-weighted average of a per-route "health" function that rewards
-//   load factor in the 55–80% sweet spot and penalises both waste and crowding:
+//   load factor in the 40–80% sweet spot and penalises both waste and crowding:
 //
-//     score(u) = 0               u ≤ 40%
-//              = (u-40)/15 × 0.5  40 < u ≤ 55%   (ramp up)
-//              = 1.0              55 < u ≤ 80%   (perfect)
-//              = 1 - (u-80)/10×0.3  80 < u ≤ 90% (mild crowding)
-//              = 0.7 - (u-90)/30×0.7 90 < u ≤ 120%(severe crowding)
+//     score(u) = 0               u ≤ 20%
+//              = (u-20)/20 × 0.5  20 < u ≤ 40%   (ramp up)
+//              = 1.0              40 < u ≤ 80%   (perfect)
+//              = 1 - (u-80)/15×0.3  80 < u ≤ 95% (mild crowding)
+//              = 0.7 - (u-95)/25×0.7 95 < u ≤ 120%(severe crowding)
 //              = 0               u > 120%
 //
 //   Network Health = Σ(ridership_i × score_i) / Σridership_i  × 100   (0–100)
@@ -36,11 +36,11 @@ const { React, icons } = api.utils;
 
 function routeHealthScore(utilization) {
     const u = utilization ?? 0;
-    if (u <= 40)  return 0;
-    if (u <= 55)  return ((u - 40) / 15) * 0.5;
+    if (u <= 20)  return 0;
+    if (u <= 40)  return ((u - 20) / 20) * 0.5;
     if (u <= 80)  return 1.0;
-    if (u <= 90)  return 1.0 - ((u - 80) / 10) * 0.3;
-    if (u <= 120) return 0.7 - ((u - 90) / 30) * 0.7;
+    if (u <= 95)  return 1.0 - ((u - 80) / 15) * 0.3;
+    if (u <= 120) return 0.7 - ((u - 95) / 25) * 0.7;
     return 0;
 }
 
@@ -62,18 +62,18 @@ function healthLabel(score) {
 // ── Load factor helpers ───────────────────────────────────────────────────────
 
 function loadColor(pct) {
-    if (pct < 40) return '#ef4444';
-    if (pct < 55) return '#f59e0b';
+    if (pct < 20) return '#ef4444';
+    if (pct < 40) return '#f59e0b';
     if (pct < 80) return '#22c55e';
-    if (pct < 90) return '#f59e0b';
+    if (pct < 95) return '#f59e0b';
     return '#ef4444';
 }
 
 function loadLabel(pct) {
-    if (pct < 40) return 'Under-served';
-    if (pct < 55) return 'Light';
+    if (pct < 20) return 'Under-served';
+    if (pct < 40) return 'Light';
     if (pct < 80) return 'Healthy';
-    if (pct < 90) return 'Heavy';
+    if (pct < 95) return 'Heavy';
     return 'Overcrowded';
 }
 
@@ -110,8 +110,8 @@ function GaugeArc({ score }) {
 
     return (
         <svg viewBox="0 0 120 72" style={{ width: '100%', maxHeight: 72 }}>
-            {/* Zone ticks at 40 / 55 / 80 / 90 */}
-            {[40, 55, 80, 90].map(t => {
+            {/* Zone ticks at 20 / 40 / 80 / 95 */}
+            {[20, 40, 80, 95].map(t => {
                 const a = Math.PI * (1 - t / 100);
                 const x1 = cx + (r - sw / 2 ) * Math.cos(a);
                 const y1 = cy - (r - sw / 2 ) * Math.sin(a);
@@ -163,11 +163,11 @@ function GaugeArc({ score }) {
 
 // Zone segments as percentage-of-100 widths
 const ZONE_SEGMENTS = [
-    { width: 40, color: '#ef4444' },  // 0 – 40%
-    { width: 15, color: '#f59e0b' },  // 40 – 55%
-    { width: 25, color: '#22c55e' },  // 55 – 80%
-    { width: 10, color: '#f59e0b' },  // 80 – 90%
-    { width: 10, color: '#ef4444' },  // 90 – 100%
+    { width: 20, color: '#ef4444' },  // 0 – 20%
+    { width: 20, color: '#f59e0b' },  // 20 – 40%
+    { width: 40, color: '#22c55e' },  // 40 – 80%
+    { width: 15, color: '#f59e0b' },  // 80 – 95%
+    { width:  5, color: '#ef4444' },  // 95 – 100%
 ];
 
 function LoadFactorBar({ pct }) {
@@ -208,7 +208,7 @@ function LoadFactorBar({ pct }) {
                          }} />
                 )}
                 {/* Zone dividers */}
-                {[40, 55, 80, 90].map(t => (
+                {[20, 40, 80, 95].map(t => (
                     <div key={t} className="absolute inset-y-0 w-px bg-background/50"
                          style={{ left: `${t}%` }} />
                 ))}
@@ -217,7 +217,7 @@ function LoadFactorBar({ pct }) {
             {/* Zone labels */}
             <div className="flex justify-between text-[9px] text-muted-foreground select-none">
                 <span>0%</span>
-                <span>Healthy zone: 55–80%</span>
+                <span>Healthy zone: 40–80%</span>
                 <span>100%</span>
             </div>
         </div>
@@ -368,7 +368,7 @@ export function SystemStats({ liveRouteData }) {
                                 {healthLabel(stats.healthScore)}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                                Routes with load factor 55–80% score highest.<br/>
+                                Routes with load factor 40–80% score highest.<br/>
                                 Under-served or overcrowded routes lower the score.
                             </p>
                         </div>

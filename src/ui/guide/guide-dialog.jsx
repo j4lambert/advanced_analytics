@@ -97,18 +97,18 @@ function Warning({ children }) {
 
 function LoadFactorBar() {
     const zones = [
-        { flex: 40, bg: '#ef4444', label: 'Under-served', textColor: '#fff' },
-        { flex: 15, bg: '#f59e0b', label: 'Light',        textColor: '#000' },
-        { flex: 25, bg: '#22c55e', label: 'Healthy',      textColor: '#fff' },
-        { flex: 10, bg: '#f59e0b', label: 'Heavy',        textColor: '#000' },
-        { flex: 10, bg: '#ef4444', label: 'Over',         textColor: '#fff' },
+        { flex: 20, bg: '#ef4444', label: 'Under-served', textColor: '#fff' },
+        { flex: 20, bg: '#f59e0b', label: 'Light',        textColor: '#000' },
+        { flex: 40, bg: '#22c55e', label: 'Healthy',      textColor: '#fff' },
+        { flex: 15, bg: '#f59e0b', label: 'Heavy',        textColor: '#000' },
+        { flex:  5, bg: '#ef4444', label: 'Over',         textColor: '#fff' },
     ];
     const ticks = [
         { pct: 0,   label: '0%'   },
+        { pct: 20,  label: '20%'  },
         { pct: 40,  label: '40%'  },
-        { pct: 55,  label: '55%'  },
         { pct: 80,  label: '80%'  },
-        { pct: 90,  label: '90%'  },
+        { pct: 95,  label: '95%'  },
         { pct: 100, label: '100%' },
     ];
     return (
@@ -141,18 +141,18 @@ function LoadFactorBar() {
 function HealthScoreBar() {
     // Visual bands map the per-route load factor ranges to their score contribution
     const bands = [
-        { flex: 40, bg: '#ef4444', label: '≤40%: 0 pts',    textColor: '#fff' },
-        { flex: 15, bg: '#f59e0b', label: '40–55%: ramp',   textColor: '#000' },
-        { flex: 25, bg: '#22c55e', label: '55–80%: full',   textColor: '#fff' },
-        { flex: 10, bg: '#f59e0b', label: '80–90%: −30%',   textColor: '#000' },
-        { flex: 30, bg: '#ef4444', label: '90–120%: −100%', textColor: '#fff' },
+        { flex: 20, bg: '#ef4444', label: '≤20%: 0 pts',    textColor: '#fff' },
+        { flex: 20, bg: '#f59e0b', label: '20–40%: ramp',   textColor: '#000' },
+        { flex: 40, bg: '#22c55e', label: '40–80%: full',   textColor: '#fff' },
+        { flex: 15, bg: '#f59e0b', label: '80–95%: −30%',   textColor: '#000' },
+        { flex: 25, bg: '#ef4444', label: '95–120%: −100%', textColor: '#fff' },
     ];
     const ticks = [
-        { pct: 0,    label: '0%'   },
-        { pct: 40,   label: '40%'  },
-        { pct: 55,   label: '55%'  },
-        { pct: 80,   label: '80%'  },
-        { pct: 90,   label: '90%'  },
+        { pct: 0,    label: '0%'    },
+        { pct: 20,   label: '20%'   },
+        { pct: 40,   label: '40%'   },
+        { pct: 80,   label: '80%'   },
+        { pct: 95,   label: '95%'   },
         { pct: 100,  label: '120%+' },
     ];
     return (
@@ -446,11 +446,11 @@ export function GuideDialog({ isOpen, onClose }) {
                         </p>
                         <LoadFactorBar />
                         <ul className="list-disc pb-1">
-                            <li><span className="text-green-500 font-medium">Green (55–80%)</span> — healthy. Trains are well-loaded without overcrowding.</li>
-                            <li><span className="text-yellow-500 font-medium">Amber (40–55%)</span> — light. Trains are running with plenty of spare room.</li>
-                            <li><span className="text-yellow-500 font-medium">Amber (80–90%)</span> — heavy. Some routes are getting crowded at peak.</li>
-                            <li><span className="text-red-500 font-medium">Red (&lt;40%)</span> — under-served. Trains are mostly empty; consider fewer or smaller trains.</li>
-                            <li><span className="text-red-500 font-medium">Red (&gt;90%)</span> — overcrowded. Passengers are being left behind; add trains or capacity.</li>
+                            <li><span className="text-green-500 font-medium">Green (40–80%)</span> — healthy. Trains are well-loaded without overcrowding.</li>
+                            <li><span className="text-yellow-500 font-medium">Amber (20–40%)</span> — light. Trains are running with plenty of spare room.</li>
+                            <li><span className="text-yellow-500 font-medium">Amber (80–95%)</span> — heavy. Some routes are getting crowded at peak.</li>
+                            <li><span className="text-red-500 font-medium">Red (&lt;20%)</span> — under-served. Trains are mostly empty; consider fewer or smaller trains.</li>
+                            <li><span className="text-red-500 font-medium">Red (&gt;95%)</span> — overcrowded. Passengers are being left behind; add trains or capacity.</li>
                         </ul>
                         <Note>
                             Routes with a recent schedule change are excluded from this average
@@ -474,11 +474,11 @@ export function GuideDialog({ isOpen, onClose }) {
                         </p>
                         <HealthScoreBar />
                         <ul className="list-disc pb-1">
-                            <li><strong>55–80% load factor</strong>: full score (1.0) — trains are well-loaded without crowding.</li>
-                            <li><strong>40–55% load factor</strong>: partial score (ramp 0 → 0.5) — route is lightly loaded but functional.</li>
-                            <li><strong>80–90% load factor</strong>: mild penalty — peak trains are getting crowded.</li>
-                            <li><strong>90–120% load factor</strong>: severe penalty — trains are overcrowded at peak, likely suppressing demand.</li>
-                            <li><strong>Below 40% or above 120%</strong>: score of 0 — trains are critically empty or severely overcrowded.</li>
+                            <li><strong>40–80% load factor</strong>: full score (1.0) — trains are well-loaded without crowding.</li>
+                            <li><strong>20–40% load factor</strong>: partial score (ramp 0 → 0.5) — route is lightly loaded but functional.</li>
+                            <li><strong>80–95% load factor</strong>: mild penalty — peak trains are getting crowded.</li>
+                            <li><strong>95–120% load factor</strong>: severe penalty — trains are overcrowded at peak, likely suppressing demand.</li>
+                            <li><strong>Below 20% or above 120%</strong>: score of 0 — trains are critically empty or severely overcrowded.</li>
                         </ul>
                         <p className="pb-1">
                             Individual route scores are then averaged across the network,
