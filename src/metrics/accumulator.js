@@ -424,18 +424,26 @@ function _computeStatsForWindow(routeId, cutoff, now) {
         efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
 
         // Load factor: peak segment load from time-filtered commutes ÷ capacity.
-        // _segmentLoadsCache now holds { overall, high, medium, low } raw passenger
-        // counts from the rolling 24h window, computed directly from commute timestamps.
+        // _segmentLoadsCache holds { overall, high, medium, low } raw passenger counts
+        // from the rolling 24h window, computed directly from commute timestamps.
+        //
+        // Per-phase denominators use _computePhaseCapacities (current train counts)
+        // so that the bars respond immediately when trains are added or removed,
+        // rather than lagging behind a time-weighted historical average.
+        //
+        // Overall load factor = max of the active per-phase load factors, so that
+        // removing all trains from a phase immediately removes its contribution
+        // from the total (rather than waiting for the rolling 24h window to drain).
         const segLoads = _segmentLoadsCache[routeId];
-        if (segLoads && capacity > 0 && segLoads.overall > 0) {
-            loadFactor = Math.round((segLoads.overall / capacity) * 100);
+        if (segLoads && segLoads.overall > 0) {
+            const pc = _computePhaseCapacities(route, trainType);
+            if (trainCounts.high   > 0) loadFactorHigh   = Math.round((segLoads.high   / pc.high)   * 100);
+            if (trainCounts.medium > 0) loadFactorMedium = Math.round((segLoads.medium / pc.medium) * 100);
+            if (trainCounts.low    > 0) loadFactorLow    = Math.round((segLoads.low    / pc.low)    * 100);
 
-            // Per-phase load factors: direct segment loads ÷ phase capacity.
-            const pc = _computeWeightedPhaseCapacities(route, trainType, dayHistory);
-            if (pc.high   > 0 && trainCounts.high   > 0) loadFactorHigh   = Math.round((segLoads.high   / pc.high)   * 100);
-            if (pc.medium > 0 && trainCounts.medium > 0) loadFactorMedium = Math.round((segLoads.medium / pc.medium) * 100);
-            if (pc.low    > 0 && trainCounts.low    > 0) loadFactorLow    = Math.round((segLoads.low    / pc.low)    * 100);
-
+            // Overall = worst active phase (immediately tracks train-count changes).
+            const activeLFs = [loadFactorHigh, loadFactorMedium, loadFactorLow].filter(v => v > 0);
+            if (activeLFs.length > 0) loadFactor = Math.max(...activeLFs);
         }
     }
 
