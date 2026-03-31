@@ -73,9 +73,6 @@ let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 let _pollTimer  = null;
 let _pruneTimer = null;
 
-// Timestamp validation (temporary — remove after confirming)
-let _timestampValidationDone = false;
-
 // Schedule change tracking
 let _lastKnownSchedules  = {};  // { routeId: { high, medium, low } } — for change detection
 let _configCacheSnapshot = {};  // { [day]: { [routeId]: [...entries] } } — in-memory mirror of IDB configCache
@@ -439,14 +436,6 @@ function _computeStatsForWindow(routeId, cutoff, now) {
             if (pc.medium > 0 && trainCounts.medium > 0) loadFactorMedium = Math.round((segLoads.medium / pc.medium) * 100);
             if (pc.low    > 0 && trainCounts.low    > 0) loadFactorLow    = Math.round((segLoads.low    / pc.low)    * 100);
 
-            // Recompute total using phase-exclusion logic: phases with 0 trains
-            // are excluded so the total responds immediately when a phase is zeroed.
-            const maskedCap = (trainCounts.high   > 0 ? pc.high   : 0) +
-                              (trainCounts.medium > 0 ? pc.medium : 0) +
-                              (trainCounts.low    > 0 ? pc.low    : 0);
-            if (maskedCap > 0) {
-                loadFactor = Math.round((segLoads.overall / maskedCap) * 100);
-            }
         }
     }
 
@@ -579,23 +568,6 @@ function _refreshCaches() {
         const commutes    = _api.gameState.getCompletedCommutes?.() ?? [];
         const cutoff      = elapsed - 86400; // rolling 24h window
 
-        // ── TEMP: validate timestamp availability ──────────────────────────
-        if (commutes.length > 0 && !_timestampValidationDone) {
-            const first = commutes[0];
-            const last  = commutes[commutes.length - 1];
-            const ordered = last.journeyEnd >= first.journeyEnd;
-            console.log('[AA:timestamp-validation]', {
-                elapsed,
-                firstJourneyEnd:  first.journeyEnd,
-                lastJourneyEnd:   last.journeyEnd,
-                hasTimestamps:    first.journeyStart !== undefined && first.journeyEnd !== undefined,
-                orderedByEnd:     ordered,
-                sampleCommute:    { journeyStart: first.journeyStart, journeyEnd: first.journeyEnd, size: first.size },
-            });
-            _timestampValidationDone = true;
-        }
-        // ── END TEMP ───────────────────────────────────────────────────────
-
         const allStations = _api.gameState.getStations();
         const newLoads    = {};
         for (const route of routes) {
@@ -673,7 +645,6 @@ export function clearAccumulatorState() {
     _trainTypesCache     = null;
     _transfersCache      = null;
     _segmentLoadsCache        = {};
-    _timestampValidationDone  = false;
     _lastKnownSchedules       = {};
     _configCacheSnapshot      = {};
     _storage                  = null;
