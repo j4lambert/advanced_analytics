@@ -68,6 +68,7 @@ let _routesCache        = null; // current routes array
 let _trainTypesCache    = null; // { trainTypeId: trainType }
 let _transfersCache     = null; // { routeId: { count, routes, routeIds, stationIds } }
 let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
+let _trainsByRoute      = new Map(); // routeId → Train[] (from getTrains())
 
 // Timers
 let _pollTimer  = null;
@@ -519,6 +520,17 @@ function _tick() {
     _routesCache     = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
 
+    // ── Refresh trains-by-route cache ──────────────────────────────────
+    if (typeof _api.gameState.getTrains === 'function') {
+        const trains = _api.gameState.getTrains();
+        const grouped = new Map();
+        for (const t of trains) {
+            if (!grouped.has(t.routeId)) grouped.set(t.routeId, []);
+            grouped.get(t.routeId).push(t);
+        }
+        _trainsByRoute = grouped;
+    }
+
     // ── Schedule change detection ────────────────────────────────────────
     const currentHour   = Math.floor((elapsed % 86400) / 3600);
     const currentMinute = Math.floor((elapsed % 3600) / 60);
@@ -653,6 +665,7 @@ export function clearAccumulatorState() {
     _trainTypesCache     = null;
     _transfersCache      = null;
     _segmentLoadsCache        = {};
+    _trainsByRoute            = new Map();
     _lastKnownSchedules       = {};
     _configCacheSnapshot      = {};
     _storage                  = null;
@@ -696,6 +709,17 @@ export function getRouteTodayStats(routeId) {
     const now      = _api.gameState.getElapsedSeconds();
     const dayStart = Math.floor(now / 86400) * 86400;
     return _computeStatsForWindow(routeId, dayStart, now);
+}
+
+/**
+ * Get live train objects for a route (from getTrains(), grouped by routeId).
+ * Returns an empty array if getTrains() is unavailable or no trains are active.
+ *
+ * @param {string} routeId
+ * @returns {Train[]}
+ */
+export function getTrainsForRoute(routeId) {
+    return _trainsByRoute.get(routeId) ?? [];
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────

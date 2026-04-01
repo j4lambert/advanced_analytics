@@ -100,6 +100,22 @@ export function wasRouteNewOnDay(routeId, day, routeStatuses) {
 }
 
 /**
+ * Format seconds as mm:ss with optional sign prefix.
+ * Used for headway and schedule drift display.
+ * @param {number|null} seconds - Seconds to format (null → '—')
+ * @param {boolean} showSign - If true, prefix with +/- (default: false)
+ * @returns {string} Formatted time string (e.g., "18:19" or "+2:05")
+ */
+export function formatSecondsAsTime(seconds, showSign = false) {
+    if (seconds == null) return '—';
+    const abs = Math.abs(seconds);
+    const m = Math.floor(abs / 60);
+    const s = Math.round(abs % 60);
+    const sign = showSign ? (seconds < 0 ? '-' : seconds > 0 ? '+' : '') : '';
+    return `${sign}${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
  * Check if route was deleted on a specific day
  * @param {string} routeId - Route ID
  * @param {number} day - Day to check

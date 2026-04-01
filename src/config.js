@@ -40,6 +40,16 @@ export const CONFIG = {
         { type: 'low',    startHour: 20, endHour: 24, name: 'Late Night' },
     ],
     
+    HEADWAY_THRESHOLDS: {
+        REGULAR:   0.1,   // CV < 0.1  → evenly spaced
+        IRREGULAR: 0.25,  // CV < 0.25 → some bunching
+    },
+
+    SCHEDULE_DRIFT_THRESHOLDS: {
+        GOOD:    30,   // < 30 s  → on schedule
+        WARNING: 120,  // < 120 s → moderate drift
+    },
+
     TRANSFER_WALKING_TIME_THRESHOLD: 100,  // seconds
     
     COLORS: {
@@ -69,6 +79,20 @@ export const CONFIG = {
             DEFAULT: ''
         },
         
+        // Headway regularity colors
+        HEADWAY: {
+            REGULAR:   'text-green-600 dark:text-green-400',
+            IRREGULAR: 'text-yellow-600 dark:text-yellow-400',
+            BUNCHING:  'text-red-600 dark:text-red-400',
+        },
+
+        // Schedule drift colors
+        DRIFT: {
+            GOOD:     'text-green-600 dark:text-green-400',
+            WARNING:  'text-yellow-600 dark:text-yellow-400',
+            CRITICAL: 'text-red-600 dark:text-red-400',
+        },
+
         // Comparison mode colors
         COMPARE: {
             POSITIVE: 'text-green-600 dark:text-green-400',  // Good improvement

@@ -9,10 +9,11 @@ import { Dropdown }     from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge }   from '../../components/route-badge.jsx';
 import { CONFIG }       from '../../config.js';
-import { formatCurrencyCompact, calculateTotalTrains } from '../../utils/formatting.js';
+import { formatCurrencyCompact, calculateTotalTrains, formatSecondsAsTime } from '../../utils/formatting.js';
 import { getEfficiencyClasses } from '../../utils/colors.js';
 import { getStorage }   from '../../core/lifecycle.js';
-import { getRoute24hStats } from '../../metrics/accumulator.js';
+import { getRoute24hStats, getTrainsForRoute } from '../../metrics/accumulator.js';
+import { computeHeadwayRegularity, computeScheduleDrift } from '../../metrics/timetable-metrics.js';
 import { getRouteStationsInOrder } from '../../utils/route-utils.js';
 import { StationFlow }   from './station-flow.jsx';
 import { CommuteFlow }   from './commute-flow.jsx';
@@ -40,6 +41,11 @@ function useRouteData(routeId) {
 
             // ── Rolling 24h stats (single source of truth) ──────────────────
             const stats = getRoute24hStats(routeId);
+
+            // ── Timetable snapshot metrics ──────────────────────────────────
+            const routeTrains = getTrainsForRoute(routeId);
+            const headway     = computeHeadwayRegularity(routeTrains);
+            const drift       = computeScheduleDrift(routeTrains);
 
             // ── Route creation info (for the info card only) ─────────────────
             const currentDay = api.gameState.getCurrentDay();
@@ -69,7 +75,7 @@ function useRouteData(routeId) {
                 trainTypeColor:       trainTypeInfo?.color       || null,
             };
 
-            setData({ route, routeInfo, ...stats });
+            setData({ route, routeInfo, headway, drift, ...stats });
         };
 
         update();
@@ -96,6 +102,24 @@ function getLoadFactorLabel(pct) {
     if (pct > CRITICAL_HIGH) return 'Overcrowded';
     if (pct > WARNING_HIGH)  return 'Near Capacity';
     return 'Healthy';
+}
+
+// ── Headway & drift color helpers ─────────────────────────────────────────────
+
+function getHeadwayColor(label) {
+    const c = CONFIG.COLORS.HEADWAY;
+    if (label === 'Regular')   return c.REGULAR;
+    if (label === 'Irregular') return c.IRREGULAR;
+    if (label === 'Bunching')  return c.BUNCHING;
+    return '';
+}
+
+function getDriftColor(absSec) {
+    const { GOOD, WARNING } = CONFIG.SCHEDULE_DRIFT_THRESHOLDS;
+    const c = CONFIG.COLORS.DRIFT;
+    if (absSec < GOOD)    return c.GOOD;
+    if (absSec < WARNING) return c.WARNING;
+    return c.CRITICAL;
 }
 
 // ── Load Factor gauge (hero metric) ───────────────────────────────────────────
@@ -202,7 +226,7 @@ function StatCard({ label, icon, value, sub, children, valueClass = '', tooltip 
                     {label}
                 </div>}
                 {tooltip
-                    ? <Tooltip side="top" delayDuration={150} content={tooltip}>{valueEl}</Tooltip>
+                    ? <Tooltip side="right" delayDuration={150} content={tooltip}>{valueEl}</Tooltip>
                     : valueEl
                 }
                 {children}
@@ -320,6 +344,50 @@ export function RouteContent({ routeId }) {
                             })()}
                         </StatCard>
 
+                </div>
+
+                {/* ── Timetable metrics ── */}
+                <div className="grid grid-cols-2 gap-3 col-span-2">
+                    <StatCard
+                        label="Headway"
+                        icon="UnfoldHorizontal"
+                        value={data.headway.meanHeadwaySec != null
+                            ? formatSecondsAsTime(data.headway.meanHeadwaySec)
+                            : '—'}
+                        sub={data.headway.label}
+                        valueClass={getHeadwayColor(data.headway.label)}
+                        tooltip={
+                            <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold">Headway Regularity</span>
+                                <span className="text-xs opacity-70">
+                                    Average time between consecutive train arrivals at the first stop.
+                                    Lower variation = more evenly spaced trains.
+                                </span>
+                                {data.headway.cvHeadway != null && (
+                                    <span className="text-xs mt-1">CV: {data.headway.cvHeadway.toFixed(3)}</span>
+                                )}
+                            </div>
+                        }
+                    />
+                    <StatCard
+                        label="Schedule Drift"
+                        icon="CalendarClock"
+                        value={formatSecondsAsTime(data.drift.meanDriftSec, true)}
+                        sub={data.drift.maxDriftSec > 0
+                            ? `max ${formatSecondsAsTime(data.drift.maxDriftSec, true)}`
+                            : 'On schedule'}
+                        valueClass={getDriftColor(Math.abs(data.drift.meanDriftSec))}
+                        tooltip={
+                            <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold">Schedule Drift</span>
+                                <span className="text-xs opacity-70">
+                                    How much the game scheduler has adjusted arrival times
+                                    from the original timetable. A large drift indicates
+                                    structural route stress.
+                                </span>
+                            </div>
+                        }
+                    />
                 </div>
 
                 {/* ── Info ── */}
