@@ -70,6 +70,10 @@ let _transfersCache     = null; // { routeId: { count, routes, routeIds, station
 let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 let _trainsByRoute      = new Map(); // routeId → Train[] (from getTrains())
 
+// Per-day timetable accumulation (reset at midnight via resetTimetableAccum())
+let _timetableAccum  = {}; // { [routeId]: { [stNodeId]: { sumDelaySec, sumDwellActual, sumDwellExpected, count } } }
+let _lastSeenArrival = {}; // { [trainId]: { [stNodeIndex]: number } } — last arrivalTime accumulated per stop
+
 // Timers
 let _pollTimer  = null;
 let _pruneTimer = null;
@@ -520,7 +524,7 @@ function _tick() {
     _routesCache     = routes;
     _trainTypesCache = _api.trains.getTrainTypes();
 
-    // ── Refresh trains-by-route cache ──────────────────────────────────
+    // ── Refresh trains-by-route cache + timetable lap accumulation ──────
     if (typeof _api.gameState.getTrains === 'function') {
         const trains = _api.gameState.getTrains();
         const grouped = new Map();
@@ -529,6 +533,39 @@ function _tick() {
             grouped.get(t.routeId).push(t);
         }
         _trainsByRoute = grouped;
+
+        // Detect newly-completed stops and accumulate delay + dwell per stNodeId.
+        // A stop is considered newly completed when arrivalTime and departureTime are
+        // both non-null AND the arrivalTime differs from what we last accumulated
+        // (catches both first-time visits and new-lap revisits).
+        for (const train of trains) {
+            if (!train.timings) continue;
+            const trainSeen = _lastSeenArrival[train.id] ?? {};
+
+            for (const stop of train.timings) {
+                const { stNodeId, stNodeIndex, arrivalTime, departureTime,
+                        adjustedExpectedArrivalTime, expectedArrivalTime,
+                        expectedDepartureTime } = stop;
+
+                if (arrivalTime === null || departureTime === null) continue;
+                if (arrivalTime === trainSeen[stNodeIndex]) continue;
+
+                // New completed stop — accumulate
+                if (!_timetableAccum[train.routeId])            _timetableAccum[train.routeId] = {};
+                if (!_timetableAccum[train.routeId][stNodeId])  _timetableAccum[train.routeId][stNodeId] = {
+                    sumDelaySec: 0, sumDwellActual: 0, sumDwellExpected: 0, count: 0,
+                };
+                const bucket = _timetableAccum[train.routeId][stNodeId];
+                bucket.sumDelaySec    += arrivalTime - adjustedExpectedArrivalTime;
+                bucket.sumDwellActual += departureTime - arrivalTime;
+                bucket.sumDwellExpected += expectedDepartureTime - expectedArrivalTime;
+                bucket.count          += 1;
+
+                trainSeen[stNodeIndex] = arrivalTime;
+            }
+
+            _lastSeenArrival[train.id] = trainSeen;
+        }
     }
 
     // ── Schedule change detection ────────────────────────────────────────
@@ -666,6 +703,8 @@ export function clearAccumulatorState() {
     _transfersCache      = null;
     _segmentLoadsCache        = {};
     _trainsByRoute            = new Map();
+    _timetableAccum           = {};
+    _lastSeenArrival          = {};
     _lastKnownSchedules       = {};
     _configCacheSnapshot      = {};
     _storage                  = null;
@@ -720,6 +759,26 @@ export function getRouteTodayStats(routeId) {
  */
 export function getTrainsForRoute(routeId) {
     return _trainsByRoute.get(routeId) ?? [];
+}
+
+/**
+ * Get the accumulated timetable data for a route (delay + dwell per stNodeId).
+ * Returns null if no data has been collected yet for this route today.
+ *
+ * @param {string} routeId
+ * @returns {{ [stNodeId]: { sumDelaySec, sumDwellActual, sumDwellExpected, count } } | null}
+ */
+export function getTimetableAccum(routeId) {
+    return _timetableAccum[routeId] ?? null;
+}
+
+/**
+ * Reset timetable accumulation for all routes.
+ * Called at midnight (onDayChange) so charts reflect the current day only.
+ */
+export function resetTimetableAccum() {
+    _timetableAccum  = {};
+    _lastSeenArrival = {};
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────

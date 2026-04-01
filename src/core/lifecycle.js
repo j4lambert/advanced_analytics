@@ -15,6 +15,7 @@ import {
     setAccumulatorStorage,
     setConfigCacheSnapshot,
     getConfigCacheSnapshot,
+    resetTimetableAccum,
 } from '../metrics/accumulator.js';
 import { captureInitialDayConfig, recordConfigChange, pruneConfigCache } from '../metrics/train-config-tracking.js';
 
@@ -283,6 +284,9 @@ export function initLifecycleHooks(api) {
 
         // Persist event log before the new day continues accumulating
         await persistEvents(storage);
+
+        // Reset per-day timetable accumulation (delay/dwell charts)
+        resetTimetableAccum();
 
         // Save historical snapshot for the day that ended (include config cache for scheduleChangedAt)
         await captureHistoricalData(dayThatEnded, api, storage, routeStatsMap, getConfigCacheSnapshot());

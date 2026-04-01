@@ -12,8 +12,9 @@ import { CONFIG }       from '../../config.js';
 import { formatCurrencyCompact, calculateTotalTrains, formatSecondsAsTime } from '../../utils/formatting.js';
 import { getEfficiencyClasses } from '../../utils/colors.js';
 import { getStorage }   from '../../core/lifecycle.js';
-import { getRoute24hStats, getTrainsForRoute } from '../../metrics/accumulator.js';
+import { getRoute24hStats, getTrainsForRoute, getTimetableAccum } from '../../metrics/accumulator.js';
 import { computeHeadwayRegularity, computeScheduleDrift } from '../../metrics/timetable-metrics.js';
+import { TimetableCharts } from './timetable-charts.jsx';
 import { getRouteStationsInOrder } from '../../utils/route-utils.js';
 import { StationFlow }   from './station-flow.jsx';
 import { CommuteFlow }   from './commute-flow.jsx';
@@ -43,9 +44,10 @@ function useRouteData(routeId) {
             const stats = getRoute24hStats(routeId);
 
             // ── Timetable snapshot metrics ──────────────────────────────────
-            const routeTrains = getTrainsForRoute(routeId);
-            const headway     = computeHeadwayRegularity(routeTrains);
-            const drift       = computeScheduleDrift(routeTrains);
+            const routeTrains  = getTrainsForRoute(routeId);
+            const headway      = computeHeadwayRegularity(routeTrains);
+            const drift        = computeScheduleDrift(routeTrains);
+            const timetableAccum = getTimetableAccum(routeId);
 
             // ── Route creation info (for the info card only) ─────────────────
             const currentDay = api.gameState.getCurrentDay();
@@ -75,7 +77,7 @@ function useRouteData(routeId) {
                 trainTypeColor:       trainTypeInfo?.color       || null,
             };
 
-            setData({ route, routeInfo, headway, drift, ...stats });
+            setData({ route, routeInfo, headway, drift, timetableAccum, ...stats });
         };
 
         update();
@@ -469,6 +471,15 @@ export function RouteContent({ routeId }) {
                     />
                 </div>
             </section>
+
+            {/* ── Timetable Analysis ── */}
+            <div className="pt-8">
+                <div className="py-5 flex items-baseline gap-3">
+                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Timetable Analysis</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Per-stop delay and dwell, averaged across completed laps today</p>
+                </div>
+                <TimetableCharts routeId={routeId} accum={data.timetableAccum} />
+            </div>
 
             {/* ── Route Metrics chart ── */}
             <div className="pt-8">
