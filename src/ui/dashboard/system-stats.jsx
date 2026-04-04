@@ -189,7 +189,7 @@ function LoadFactorBar({ pct }) {
             </div>
 
             {/* Zoned progress bar */}
-            <div className="relative h-3 rounded-sm overflow-hidden">
+            <div className="relative h-4 rounded-[3px] overflow-hidden">
                 {/* Zone backgrounds */}
                 <div className="absolute inset-0 flex">
                     {ZONE_SEGMENTS.map((z, i) => (
@@ -198,7 +198,7 @@ function LoadFactorBar({ pct }) {
                     ))}
                 </div>
                 {/* Fill */}
-                <div className="absolute inset-y-0 left-0 rounded-sm rounded-r-none transition-all duration-700"
+                <div className="absolute inset-y-0 left-0 rounded-[3px] rounded-r-none transition-all duration-700"
                      style={{ width: `${fillPct}%`, background: color, opacity: 0.85 }} />
                 {/* Over-capacity hatch */}
                 {overCap && (

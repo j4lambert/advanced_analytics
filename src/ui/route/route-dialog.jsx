@@ -126,7 +126,7 @@ function getDriftColor(absSec) {
 
 // ── Load Factor gauge (hero metric) ───────────────────────────────────────────
 
-function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow }) {
+function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLow, trainsHigh, trainsMedium, trainsLow, trainsTotal }) {
     const pct      = Math.max(loadFactor || 0, 0);
     const barWidth = Math.min(pct, 100);
     const overflow = pct > 100;
@@ -135,25 +135,42 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
     const { WARNING_LOW, WARNING_HIGH } = CONFIG.LOAD_FACTOR_THRESHOLDS;
 
     return (
-        <div className={`rounded flex flex-col border bg-muted/30 px-6 py-5 flex-1`}>
+        <div className={`rounded flex flex-col border bg-muted/30 px-5 py-4 flex-1`}>
             {/* Header row */}
-            <div className="mb-1 flex text-muted-foreground justify-between">
-                <div className={"uppercase text-sm font-semibold tracking-wider"}>Load Factor</div>
-                <span className="text-xs text-muted-foreground">Peak train load ÷ train capacity</span>
-            </div>
+            <section className="flex gap-3 flex-1">
+                <icons.Gauge size={22} className={'mt-0.5 shrink-0'}/>
+                <div className="flex flex-1 text-muted-foreground justify-between">
+                    <div>
+                        <div className={"uppercase text-[10px] font-semibold tracking-wider mb-1"}>Load Factor</div>
+                        <span className={`text-xl font-semibold ${pct > 0 ? colors.text : 'text-muted-foreground'}`}>
+                            {pct > 0 ? label : 'No data yet'}
+                        </span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Peak train load ÷ train capacity</span>
+                </div>
+            </section>
             <div className={"my-auto"}>
-                <div className="flex justify-between items-start mb-2">
-                    <div className={`text-xl font-bold ${colors.text}`}>{pct > 0 ? label : 'No data yet'}</div>
-                    <div className={`text-5xl font-bold tabular-nums leading-none ${colors.text}`}>
+                <div className="flex justify-between items-end mb-2">
+                    <div className={`text-xl ${pct > 0 ? colors.text : 'text-muted'}`}>
+                        <div
+                            className={`flex items-center gap-1 shrink-0`}>
+                            <icons.TramFront size={12} className={'text-muted-foreground'}/>
+                             <span className={`text-xs text-foreground`}>
+                                <span className={'font-semibold'}>{trainsTotal} </span>
+                                (24h)
+                            </span>
+                        </div>
+                    </div>
+                    <div className={`text-5xl font-semibold tabular-nums leading-none ${pct > 0 ? colors.text : 'text-muted'}`}>
                         {pct > 0 ? pct.toFixed(1) : '—'}
                         {pct > 0 && <span className="text-2xl font-medium ml-0.5">%</span>}
                     </div>
                 </div>
 
                 {/* Progress bar — bar fills to 100 %; a striped overflow indicator
-                    appears on the right edge when the route is over capacity. */}
+                appears on the right edge when the route is over capacity. */}
                 <div
-                    className="relative h-3 rounded overflow-hidden mb-5"
+                    className="relative h-4 rounded overflow-hidden mb-6"
                     style={{backgroundColor: 'rgba(128,128,128,0.15)'}}
                 >
                     <div
@@ -176,31 +193,68 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
 
                 {/* Phase breakdown bars */}
                 {(loadFactorHigh > 0 || loadFactorMedium > 0 || loadFactorLow > 0) && (
-                    <div className="grid gap-8 mt-2 mb-1"
-                         style={{gridTemplateColumns: `${CONFIG.DEMAND_HOURS.medium}fr ${CONFIG.DEMAND_HOURS.high}fr ${CONFIG.DEMAND_HOURS.low}fr`}}>
+                    <div className="grid gap-6 mt-2 mb-1"
+                         style={{gridTemplateColumns: `${CONFIG.DEMAND_HOURS.high}fr ${CONFIG.DEMAND_HOURS.medium}fr ${CONFIG.DEMAND_HOURS.low}fr`}}>
                         {[
-                            { key: 'MED',  pct: loadFactorMedium, iconName: 'Sun',       title: 'Medium Demand', desc: 'How full trains run during daytime hours relative to the capacity scheduled for that period.' },
-                            { key: 'HIGH', pct: loadFactorHigh,   iconName: 'Briefcase', title: 'High Demand',   desc: 'How full trains run during peak hours relative to the capacity scheduled for that period.' },
-                            { key: 'LOW',  pct: loadFactorLow,    iconName: 'Moon',      title: 'Low Demand',    desc: 'How full trains run during overnight hours relative to the capacity scheduled for that period.' },
-                        ].map(({ key, pct, iconName, title, desc }) => {
+                            {
+                                key: 'HIGH',
+                                pct: loadFactorHigh,
+                                trainsNumber: trainsHigh,
+                                demandHours: CONFIG.DEMAND_HOURS.high,
+                                iconName: 'Briefcase',
+                                title: 'High',
+                                desc: 'How full trains run during peak hours relative to the capacity scheduled for that period.'
+                            },
+                            {
+                                key: 'MED',
+                                pct: loadFactorMedium,
+                                trainsNumber: trainsMedium,
+                                demandHours: CONFIG.DEMAND_HOURS.medium,
+                                iconName: 'Sun',
+                                title: 'Medium',
+                                desc: 'How full trains run during daytime hours relative to the capacity scheduled for that period.'
+                            },
+                            {
+                                key: 'LOW',
+                                pct: loadFactorLow,
+                                trainsNumber: trainsLow,
+                                demandHours: CONFIG.DEMAND_HOURS.low,
+                                iconName: 'Moon',
+                                title: 'Low',
+                                desc: 'How full trains run during overnight hours relative to the capacity scheduled for that period.'
+                            },
+                        ].map(({key, pct, trainsNumber, demandHours, iconName, title, desc}) => {
                             const c = getLoadFactorColors(pct);
                             const tip = (
                                 <div className="flex flex-col gap-0.5">
-                                    <span className="font-semibold">{title}</span>
+                                    <span className="font-semibold">{title} Demand Phase</span>
                                     <span className={c.text}>{pct}%</span>
                                     <span className="text-xs opacity-70">{desc}</span>
                                 </div>
                             );
                             return (
                                 <Tooltip key={key} side="bottom" delayDuration={50} content={tip}>
-                                    <div className="flex items-center gap-1.5 cursor-default">
-                                        <span className="text-muted-foreground shrink-0">
-                                            {React.createElement(icons[iconName], { size: 11 })}
-                                        </span>
-                                        <div className="relative flex-1 h-2 rounded overflow-hidden"
+                                    <div className="flex flex-col gap-1.5 cursor-default">
+                                        <div className="relative w-full h-3 rounded-[2px] overflow-hidden"
                                              style={{backgroundColor: 'rgba(128,128,128,0.15)'}}>
-                                            <div className={`absolute inset-y-0 left-0 rounded rounded-r-none ${c.bar}`}
-                                                 style={{width: `${Math.min(pct, 100)}%`}} />
+                                            <div
+                                                className={`absolute inset-y-0 left-0 rounded-[2px] rounded-r-none ${c.bar}`}
+                                                style={{width: `${Math.min(pct, 100)}%`}}/>
+                                        </div>
+                                        <div className={`flex items-center justify-between`}>
+                                            <div
+                                                className={`flex items-center gap-1 shrink-0 text-muted`}>
+                                                {React.createElement(icons[iconName], {size: 11, className: 'text-muted-foreground'})}
+                                                <span className={`text-[0.65rem]`}>
+                                                    <span className={'font-semibold'}>{title} </span>
+                                                    ({demandHours}h)
+                                                </span>
+                                            </div>
+                                            <div
+                                                className={`flex items-center gap-1 shrink-0 text-muted`}>
+                                                <icons.TramFront size={11} className={'text-muted-foreground'}/>
+                                                <span className={`text-[0.65rem] font-semibold tabular-nums`}>{trainsNumber}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </Tooltip>
@@ -208,7 +262,6 @@ function UsageGauge({ loadFactor, loadFactorHigh, loadFactorMedium, loadFactorLo
                         })}
                     </div>
                 )}
-
             </div>
         </div>
     );
@@ -228,7 +281,7 @@ function StatCard({ label, icon, value, sub, children, valueClass = '', tooltip 
                     {label}
                 </div>}
                 {tooltip
-                    ? <Tooltip side="right" delayDuration={150} content={tooltip}>{valueEl}</Tooltip>
+                    ? <Tooltip side="left" delayDuration={150} content={tooltip}>{valueEl}</Tooltip>
                     : valueEl
                 }
                 {children}
@@ -278,78 +331,130 @@ export function RouteContent({ routeId }) {
                         loadFactorHigh={data.loadFactorHigh}
                         loadFactorMedium={data.loadFactorMedium}
                         loadFactorLow={data.loadFactorLow}
+                        trainsTotal={totalTrains}
+                        trainsHigh={data.trainsHigh}
+                        trainsMedium={data.trainsMedium}
+                        trainsLow={data.trainsLow}
                     />
                 </div>
 
                 {/* ── Operational stats --- First row ── */}
-                <div className="grid grid-cols-3 gap-3">
-                        <StatCard
-                            label="Ridership"
-                            icon="Route"
-                            value={Math.round(data.ridership).toLocaleString()}
-                            sub="/ last 24h"
-                        />
-                        <StatCard
-                            label="Performance"
-                            icon="Zap"
-                            value={data.efficiency > 0 ? `${data.efficiency.toFixed(2)}×` : '—'}
-                            sub={data.efficiency >= 1 ? 'High turnover' : data.efficiency > 0 ? 'Room to grow' : 'No data yet'}
-                            valueClass={getEfficiencyClasses(data.efficiency || 0)}
-                        />
-                        <StatCard
-                            label="Trains"
-                            icon="TramFront"
-                            value={totalTrains}
-                            sub={`${data.trainsHigh}H · ${data.trainsMedium}M · ${data.trainsLow}L`}
-                        />
-                        <StatCard
-                            label="Throughput"
-                            icon="Container"
-                            value={(data.capacity || 0).toLocaleString()}
-                            sub="daily capacity / direction"
-                        />
-                        <StatCard
-                            label="Stops"
-                            icon="FlagTriangleRight"
-                            value={data.stations || '–'}
-                            sub={`${data.routeInfo?.stationCount ?? '–'} station${data.routeInfo?.stationCount !== 1 ? 's' : ''}`}
-                        />
-                        <StatCard
-                            label="Transfers"
-                            icon="Component"
-                            sub="Connection Hubs"
-                        >
-                            {(() => {
-                                const routeIds = data.transfers?.routeIds ?? [];
-                                if (routeIds.length === 0) {
-                                    return <div className="text-xl font-semibold tabular-nums">0</div>;
-                                }
-                                const allRoutes = api.gameState.getRoutes();
-                                return (
-                                    <Dropdown
-                                        togglerContent={
-                                            <span className="text-xl font-semibold tabular-nums">
-                                                {routeIds.length}
-                                            </span>
-                                        }
-                                        togglerClasses="flex items-center gap-1 rounded hover:bg-accent px-1 -ml-1 transition-colors"
-                                        onChange={(rid) => window.AdvancedAnalytics?.openRouteDialog?.(rid)}
-                                    >
-                                        {routeIds.map(rid => {
-                                            const route = allRoutes.find(r => r.id === rid);
-                                            return route
-                                                ? <DropdownItem key={rid} value={rid} route={route} />
-                                                : null;
-                                        })}
-                                    </Dropdown>
-                                );
-                            })()}
-                        </StatCard>
-
+                <div className="grid grid-cols-2 gap-3">
+                    <StatCard
+                        label="Ridership"
+                        icon="Route"
+                        value={Math.round(data.ridership).toLocaleString()}
+                        sub="/ last 24h"
+                    />
+                    <StatCard
+                        label="Stops"
+                        icon="FlagTriangleRight"
+                        value={data.stations || '–'}
+                        sub={`${data.routeInfo?.stationCount ?? '–'} station${data.routeInfo?.stationCount !== 1 ? 's' : ''}`}
+                    />
+                    <StatCard
+                        label="Throughput"
+                        icon="Container"
+                        value={(data.capacity || 0).toLocaleString()}
+                        sub="daily capacity / direction"
+                    />
+                    <StatCard
+                        label="Transfers"
+                        icon="Component"
+                        sub="Connection Hubs"
+                    >
+                        {(() => {
+                            const routeIds = data.transfers?.routeIds ?? [];
+                            if (routeIds.length === 0) {
+                                return <div className="text-xl font-semibold tabular-nums">0</div>;
+                            }
+                            const allRoutes = api.gameState.getRoutes();
+                            return (
+                                <Dropdown
+                                    togglerContent={
+                                        <span className="text-xl font-semibold tabular-nums">
+                                            {routeIds.length}
+                                        </span>
+                                    }
+                                    togglerClasses="flex items-center gap-1 rounded hover:bg-accent px-1 -ml-1 transition-colors"
+                                    onChange={(rid) => window.AdvancedAnalytics?.openRouteDialog?.(rid)}
+                                >
+                                    {routeIds.map(rid => {
+                                        const route = allRoutes.find(r => r.id === rid);
+                                        return route
+                                            ? <DropdownItem key={rid} value={rid} route={route} />
+                                            : null;
+                                    })}
+                                </Dropdown>
+                            );
+                        })()}
+                    </StatCard>
                 </div>
 
+                {/* ── Info ── */}
+                <StatCard
+                >
+                    <div className="pl-2 flex gap-6">
+
+                        {/* Route name */}
+                        <div className="shrink-0">
+                            <RouteBadge routeId={routeId} size="1.4rem" interactive={false} />
+                        </div>
+                        <div>
+
+                            {/* Creation day + time in service */}
+                            {data.routeInfo?.createdDay != null && (
+                                <div className="flex gap-4 text-xs pt-1 mb-3">
+                                            <span className="text-muted-foreground">
+                                                Created&nbsp;
+                                                <span className="text-foreground font-medium">
+                                                    Day {data.routeInfo.createdDay + 1}
+                                                </span>
+                                            </span>
+                                    {data.routeInfo.daysInService != null && (
+                                        <span className="text-muted-foreground">
+                                                    In service&nbsp;
+                                            <span className="text-foreground font-medium">
+                                                        {data.routeInfo.daysInService > 0
+                                                            ? `${data.routeInfo.daysInService} day${data.routeInfo.daysInService !== 1 ? 's' : ''}`
+                                                            : 'since today'}
+                                                    </span>
+                                                </span>
+                                    )}
+                                </div>
+                            )}
+
+                            <div>
+                                {/* Train type */}
+                                {data.routeInfo?.trainTypeName && (
+                                    <div className="flex items-center gap-1.5 text-xs mb-2">
+                                                <span
+                                                    className="w-2 h-2 rounded-full shrink-0"
+                                                    style={{ background: data.routeInfo.trainTypeColor }}
+                                                />
+                                        <span className="font-medium">{data.routeInfo.trainTypeName}</span>
+                                    </div>
+                                )}
+
+                                {/* Train type description */}
+                                {data.routeInfo?.trainTypeDescription && (
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {data.routeInfo.trainTypeDescription}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </StatCard>
                 {/* ── Timetable metrics ── */}
-                <div className="grid grid-cols-2 gap-3 col-span-2">
+                <div className="grid grid-cols-3 gap-3">
+                    <StatCard
+                        label="Performance"
+                        icon="Zap"
+                        value={data.efficiency > 0 ? `${data.efficiency.toFixed(2)}×` : '—'}
+                        sub={data.efficiency >= 1 ? 'High turnover' : data.efficiency > 0 ? 'Room to grow' : 'No data yet'}
+                        valueClass={getEfficiencyClasses(data.efficiency || 0)}
+                    />
                     <StatCard
                         label="Headway"
                         icon="UnfoldHorizontal"
@@ -390,66 +495,6 @@ export function RouteContent({ routeId }) {
                             </div>
                         }
                     />
-                </div>
-
-                {/* ── Info ── */}
-                <StatCard
-                >
-                    <div className="pl-2 flex gap-6">
-
-                        {/* Route name */}
-                        <div className="shrink-0">
-                            <RouteBadge routeId={routeId} size="1.4rem" interactive={false} />
-                        </div>
-                        <div>
-
-                            {/* Creation day + time in service */}
-                            {data.routeInfo?.createdDay != null && (
-                                <div className="flex gap-4 text-xs pt-1 mb-3">
-                                            <span className="text-muted-foreground">
-                                                Created&nbsp;
-                                                <span className="text-foreground font-medium">
-                                                    Day {data.routeInfo.createdDay}
-                                                </span>
-                                            </span>
-                                    {data.routeInfo.daysInService != null && (
-                                        <span className="text-muted-foreground">
-                                                    In service&nbsp;
-                                            <span className="text-foreground font-medium">
-                                                        {data.routeInfo.daysInService > 0
-                                                            ? `${data.routeInfo.daysInService} day${data.routeInfo.daysInService !== 1 ? 's' : ''}`
-                                                            : 'since today'}
-                                                    </span>
-                                                </span>
-                                    )}
-                                </div>
-                            )}
-
-                            <div>
-                                {/* Train type */}
-                                {data.routeInfo?.trainTypeName && (
-                                    <div className="flex items-center gap-1.5 text-xs mb-2">
-                                                <span
-                                                    className="w-2 h-2 rounded-full shrink-0"
-                                                    style={{ background: data.routeInfo.trainTypeColor }}
-                                                />
-                                        <span className="font-medium">{data.routeInfo.trainTypeName}</span>
-                                    </div>
-                                )}
-
-                                {/* Train type description */}
-                                {data.routeInfo?.trainTypeDescription && (
-                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                        {data.routeInfo.trainTypeDescription}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </StatCard>
-
-                {/* ── Financial stats ── */}
-                <div className="grid grid-cols-3 gap-3">
                     <StatCard
                         label="Revenue"
                         icon="ArrowBigUpDash"
@@ -472,15 +517,6 @@ export function RouteContent({ routeId }) {
                 </div>
             </section>
 
-            {/* ── Timetable Analysis ── */}
-            <div className="pt-8">
-                <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Timetable Analysis</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Per-stop delay and dwell, averaged across completed laps today</p>
-                </div>
-                <TimetableCharts routeId={routeId} accum={data.timetableAccum} />
-            </div>
-
             {/* ── Route Metrics chart ── */}
             <div className="pt-8">
                 <div className="py-5 flex items-baseline gap-3">
@@ -489,6 +525,16 @@ export function RouteContent({ routeId }) {
                 </div>
                 <RouteMetrics routeId={routeId} />
             </div>
+
+            {/* ── Timetable Analysis ── */}
+            <div className="pt-8">
+                <div className="py-5 flex items-baseline gap-3">
+                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Realtime Timetable Analysis</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Per-stop delay and dwell, averaged across completed laps today</p>
+                </div>
+                <TimetableCharts routeId={routeId} accum={data.timetableAccum} />
+            </div>
+
 
             {/* ── Station Flow chart ── */}
             <div className="pt-8">
