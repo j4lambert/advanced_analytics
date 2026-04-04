@@ -1,6 +1,6 @@
 # Advanced Analytics
 
-A mod for [Subway Builder](https://www.subwaybuilder.com) that adds detailed per-route analytics, historical tracking, and financial metrics to your network.
+A mod for [Subway Builder](https://www.subwaybuilder.com) that adds detailed per-route analytics, historical tracking, financial metrics, and real-time timetable analysis to your network.
 
 [![Latest Release](https://img.shields.io/github/v/release/stefanorigano/advanced_analytics?label=stable&color=2ea44f)](https://github.com/stefanorigano/advanced_analytics/releases/latest)
 [![Pre-release](https://img.shields.io/github/v/release/stefanorigano/advanced_analytics?include_prereleases&label=pre-release&color=e3b341)](https://github.com/stefanorigano/advanced_analytics/releases?q=prerelease%3Atrue)
@@ -13,22 +13,45 @@ A mod for [Subway Builder](https://www.subwaybuilder.com) that adds detailed per
 
 Advanced Analytics sits alongside the game UI and gives you data the base game doesn't expose:
 
-- **Per-route metrics** — ridership, throughput, load factor, capacity usage, transfer connections, revenue, cost, profit, and profit per train
+- **Per-route metrics** — ridership, throughput, load factor, performance, transfer connections, revenue, cost, profit, and profit per train
+- **Timetable analysis** — real-time headway regularity, schedule drift, per-stop delay profile, and dwell compliance charts
 - **Three data modes** — live (last 24h), historical (end-of-day snapshots), and side-by-side day comparison
 - **Trend charts** — visualize how any route evolved over time
+- **Route notes** — attach a free-text note to any route and track it alongside its historical profit
 - **System map** — schematic overview of your entire network
 - **Storage manager** — export, import, and manage analytics data across saves
 
 All data is stored in IndexedDB and persists across game restarts. No save file is modified.
 
+---
+
 ### Metrics explained
+
+#### Financial & capacity
 
 | Metric | What it measures |
 |---|---|
-| **Load Factor** | Peak passengers on the busiest segment ÷ train capacity. The primary crowding indicator. Values above 100% mean trains are overcrowded at their peak. For back-and-forth (pendulum) routes, the combined load is halved to get a per-direction figure; for circular (one-way loop) routes the load is already directional. Shows `—` until commute data is available. |
-| **Usage (cap.)** | Daily ridership ÷ 24 h throughput ceiling. A throughput efficiency measure — how much of the route's scheduling capacity is being filled each day. Different from Load Factor: a route can have low Load Factor (trains never packed) but moderate Usage (many trips made). |
-| **Throughput** | Total passenger-trips the route *could* carry in 24 hours given its current train schedule and loop time. |
 | **Ridership** | Total passenger-trips recorded on the route in the last rolling 24 hours. |
+| **Throughput** | Total passenger-trips the route *could* carry in 24 hours given its current train schedule and loop time. |
+| **Load Factor** | Peak passengers on the busiest segment ÷ train capacity. The primary crowding indicator. Values above 100% mean trains are overcrowded at their peak. |
+| **Performance** | Daily ridership ÷ bidirectional 24 h throughput ceiling. Measures how efficiently the route's schedule is being used. A value above 1× means high passenger turnover at intermediate stops — a good sign on busy multi-stop routes. |
+| **Revenue** | Total fare income for the day, read directly from the game's revenue model. |
+| **Cost** | Daily operational cost based on trains deployed, train type, and hours of service. Accounts for mid-day schedule changes. |
+| **Profit** | Revenue minus Cost. |
+| **Profit / Train** | Daily profit divided by total trains across all demand tiers. |
+
+#### Timetable analysis
+
+These four metrics appear in the Route panel and update continuously throughout the day as trains complete each stop. They reset at midnight.
+
+| Metric | What it measures |
+|---|---|
+| **Headway Regularity** | How evenly spaced consecutive trains are at the first stop. Expressed as a coefficient of variation (CV) — the lower, the more regular. High values indicate bunching. |
+| **Schedule Drift** | How far ahead or behind the timetable the whole route has shifted, averaged across all trains and stops. Distinct from Headway: trains can be evenly spaced but still all running late. |
+| **Delay Profile** | Per-stop chart of average arrival delay accumulated across all laps today. Reveals whether delays are growing progressively or isolated to a single problem station. |
+| **Dwell Compliance** | Per-stop chart of actual vs scheduled dwell time. Positive values mean trains are being held longer than planned — a common cause of downstream delays on busy routes. |
+
+---
 
 [![Liberapay](https://img.shields.io/badge/Liberapay-Support-F6C915?logo=liberapay&logoColor=black)](https://liberapay.com/Steno)
 <a href='https://ko-fi.com/Q5Q61VIM68' target='_blank'><img height='20' style='border:0px;height:40px;' src='https://storage.ko-fi.com/cdn/kofi3.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
@@ -45,10 +68,10 @@ Install [_Railyard_](https://subwaybuildermodded.com/railyard/) mod manager.
 Search for "Advanced Analytics".
 
 ### 🛠️ Manual (Github)
-1. Crate the `advanced-analytics` folder in into your mods directory ( Main Menu > Settings > Mods)
-2. Download the [latest ZIP from the release page]( https://github.com/stefanorigano/advanced_analytics/releases/latest).
-3. Extract the ZIP content **into** the advanced-analytics folder you created.
-4. Restart the game and activate the "Advanced Analytics" - That's it 🙂
+1. Create the `advanced-analytics` folder in your mods directory (Main Menu > Settings > Mods).
+2. Download the [latest ZIP from the release page](https://github.com/stefanorigano/advanced_analytics/releases/latest).
+3. Extract the ZIP content **into** the `advanced-analytics` folder you created.
+4. Restart the game and activate "Advanced Analytics" — that's it 🙂
 
 ---
 
