@@ -13,6 +13,7 @@ import { formatCurrencyCompact, calculateTotalTrains, formatSecondsAsTime } from
 import { getEfficiencyClasses } from '../../utils/colors.js';
 import { getStorage }   from '../../core/lifecycle.js';
 import { getRoute24hStats, getTrainsForRoute, getTimetableAccum } from '../../metrics/accumulator.js';
+import { getRouteLifetimeProfit } from '../../metrics/historical-data.js';
 import { computeHeadwayRegularity, computeScheduleDrift } from '../../metrics/timetable-metrics.js';
 import { TimetableCharts } from './timetable-charts.jsx';
 import { getRouteStationsInOrder } from '../../utils/route-utils.js';
@@ -50,12 +51,19 @@ function useRouteData(routeId) {
             const timetableAccum = getTimetableAccum(routeId);
 
             // ── Route creation info (for the info card only) ─────────────────
-            const currentDay = api.gameState.getCurrentDay();
-            const storage    = getStorage();
-            let createdDay   = null;
+            const currentDay    = api.gameState.getCurrentDay();
+            const storage       = getStorage();
+            let createdDay      = null;
+            let lifetimeProfit  = null;
             if (storage) {
-                const routeStatuses = await storage.get('routeStatuses', {});
+                const [routeStatuses, historicalData] = await Promise.all([
+                    storage.get('routeStatuses', {}),
+                    storage.get('historicalData', { days: {} }),
+                ]);
                 createdDay = routeStatuses[routeId]?.createdDay ?? null;
+                if (createdDay != null) {
+                    lifetimeProfit = getRouteLifetimeProfit(routeId, createdDay, historicalData, currentDay);
+                }
             }
 
             // ── Train type metadata (for the info card only) ─────────────────
@@ -71,6 +79,7 @@ function useRouteData(routeId) {
                 bullet:               route.bullet || null,
                 createdDay,
                 daysInService:        createdDay != null ? currentDay - createdDay : null,
+                lifetimeProfit,
                 stationCount:         getRouteStationsInOrder(routeId, api).length,
                 trainTypeName:        trainTypeInfo?.name        || null,
                 trainTypeDescription: trainTypeInfo?.description || null,
@@ -276,7 +285,7 @@ function StatCard({ label, icon, value, sub, children, valueClass = '', tooltip 
     return (
         <div className="flex gap-3 rounded border bg-muted/20 p-4 pl-3 h-full">
             {icon && React.createElement(icons[icon], { size: 22, className: 'mt-0.5 shrink-0' })}
-            <div>
+            <div class={"flex-1 flex flex-col"}>
                 {label && <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                     {label}
                 </div>}
@@ -300,6 +309,23 @@ export function RouteContent({ routeId }) {
     // Reset to null whenever the route changes so CommuteFlow falls back to its default.
     const [clickedStationId, setClickedStationId] = React.useState(null);
     React.useEffect(() => { setClickedStationId(null); }, [routeId]);
+
+    // ── Route note ─────────────────────────────────────────────────────────────
+    // Independent from the polling hook — loads once per routeId, saves on blur.
+    const [note, setNote] = React.useState('');
+    React.useEffect(() => {
+        const storage = getStorage();
+        if (!storage || !routeId) return;
+        storage.get('routeNotes', {}).then(notes => setNote(notes[routeId] ?? ''));
+    }, [routeId]);
+
+    const saveNote = React.useCallback(async (text) => {
+        const storage = getStorage();
+        if (!storage) return;
+        const notes = await storage.get('routeNotes', {});
+        notes[routeId] = text;
+        await storage.set('routeNotes', notes);
+    }, [routeId]);
 
     // Ref on the Commute Flows section — scrolled into view on bar click.
     const commuteFlowRef = React.useRef(null);
@@ -394,53 +420,81 @@ export function RouteContent({ routeId }) {
                 {/* ── Info ── */}
                 <StatCard
                 >
-                    <div className="pl-2 flex gap-6">
+                    <div className="flex flex-col gap-3">
+                        <div className="pl-2 flex gap-6">
+                            {/* Route name */}
+                            <div className="shrink-0">
+                                <RouteBadge routeId={routeId} size="1.4rem" interactive={false}/>
+                            </div>
+                            <div className={`flex-1`}>
+                                <div>
+                                    {/* Train type */}
+                                    {data.routeInfo?.trainTypeName && (
+                                        <Tooltip content={data.routeInfo?.trainTypeDescription}>
+                                            <div className="flex items-center gap-1.5 text-xs mb-2">
+                                                    <span
+                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        style={{background: data.routeInfo.trainTypeColor}}
+                                                    />
+                                                <span className="font-medium">{data.routeInfo.trainTypeName}</span>
+                                            </div>
+                                        </Tooltip>
+                                    )}
+                                </div>
 
-                        {/* Route name */}
-                        <div className="shrink-0">
-                            <RouteBadge routeId={routeId} size="1.4rem" interactive={false} />
-                        </div>
-                        <div>
-
-                            {/* Creation day + time in service */}
-                            {data.routeInfo?.createdDay != null && (
-                                <div className="flex gap-4 text-xs pt-1 mb-3">
-                                            <span className="text-muted-foreground">
-                                                Created&nbsp;
-                                                <span className="text-foreground font-medium">
-                                                    Day {data.routeInfo.createdDay + 1}
-                                                </span>
-                                            </span>
-                                    {data.routeInfo.daysInService != null && (
+                                {/* Creation day + time in service */}
+                                {data.routeInfo?.createdDay != null && (
+                                    <div className="flex gap-4 text-xs pt-1 mb-3">
                                         <span className="text-muted-foreground">
-                                                    In service&nbsp;
+                                            Created&nbsp;
                                             <span className="text-foreground font-medium">
+                                                Day {data.routeInfo.createdDay + 1}
+                                            </span>
+                                        </span>
+                                        {data.routeInfo.daysInService != null && (
+                                            <span className="text-muted-foreground">
+                                                    In service&nbsp;
+                                                <span className="text-foreground font-medium">
                                                         {data.routeInfo.daysInService > 0
                                                             ? `${data.routeInfo.daysInService} day${data.routeInfo.daysInService !== 1 ? 's' : ''}`
                                                             : 'since today'}
-                                                    </span>
-                                                </span>
-                                    )}
-                                </div>
-                            )}
-
-                            <div>
-                                {/* Train type */}
-                                {data.routeInfo?.trainTypeName && (
-                                    <div className="flex items-center gap-1.5 text-xs mb-2">
+                                            </span>
+                                        </span>
+                                        )}
+                                        {data.routeInfo.lifetimeProfit != null && (
+                                            <span className="text-muted-foreground">
+                                            Overall Profit&nbsp;
                                                 <span
-                                                    className="w-2 h-2 rounded-full shrink-0"
-                                                    style={{ background: data.routeInfo.trainTypeColor }}
-                                                />
-                                        <span className="font-medium">{data.routeInfo.trainTypeName}</span>
+                                                    className={`font-medium ${data.routeInfo.lifetimeProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                                                {formatCurrencyCompact(data.routeInfo.lifetimeProfit)}
+                                            </span>
+                                        </span>
+                                        )}
                                     </div>
                                 )}
+                            </div>
+                        </div>
 
-                                {/* Train type description */}
-                                {data.routeInfo?.trainTypeDescription && (
-                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                        {data.routeInfo.trainTypeDescription}
-                                    </p>
+                        {/* ── Notes ── */}
+                        <div className="flex flex-col flex-1 h-full w-full">
+                            <div
+                                class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Notes
+                            </div>
+                            <div className={"relative flex-1 h-full border border-border rounded px-3 py-2 pb-6"}>
+                                <textarea
+                                    className="w-full text-xs font-mono bg-transparent border-0 focus:outline-none placeholder:text-muted-foreground/40 text-foreground"
+                                    placeholder="Add route notes…"
+                                    maxLength={200}
+                                    rows={4}
+                                    style={{resize: 'none'}}
+                                    value={note}
+                                    onChange={e => setNote(e.target.value)}
+                                    onBlur={e => saveNote(e.target.value)}
+                                />
+                                {note.length > 0 && (
+                                    <span className="absolute bottom-2 right-2 text-[10px] text-muted-foreground/50 pointer-events-none tabular-nums">
+                                        {note.length}/200
+                                    </span>
                                 )}
                             </div>
                         </div>

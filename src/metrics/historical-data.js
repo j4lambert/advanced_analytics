@@ -3,6 +3,7 @@
 
 import { CONFIG } from '../config.js';
 import { calculateDailyCostFromTimeline } from './train-config-tracking.js';
+import { getRouteTodayStats } from './accumulator.js';
 
 /**
  * Capture a day's route data as a historical snapshot.
@@ -102,6 +103,39 @@ export function getDataForDay(day, historicalData) {
         return null;
     }
     return dayData.routes;
+}
+
+/**
+ * Total profit for a route since it entered service.
+ *
+ * Sums the midnight-to-midnight daily snapshots for each completed day,
+ * then adds today's clean slice (midnight → now) from getRouteTodayStats().
+ * The two ranges share no overlap.
+ *
+ * Key convention (discovered via debug): onDayChange(N) receives the *new* day
+ * number, so captureHistoricalData stores the snapshot under days[N] — meaning
+ * days[N] holds data from day N-1. Completed-day data for a route created on
+ * `createdDay` therefore lives in days[createdDay+1 … currentDay] inclusive.
+ *
+ * @param {string} routeId       - Route ID
+ * @param {number} createdDay    - In-game day the route was created
+ * @param {Object} historicalData - { days: { [day]: { routes: [...] } } }
+ * @param {number} currentDay    - Current in-game day
+ * @returns {number} Cumulative profit (can be negative)
+ */
+export function getRouteLifetimeProfit(routeId, createdDay, historicalData, currentDay) {
+    // Snapshots are stored under the key of the *new* day — i.e. the snapshot
+    // captured when day N ends is written to days[N+1]. So completed-day data
+    // for a route created on `createdDay` lives in days[createdDay+1 … currentDay].
+    let total = 0;
+    for (let day = createdDay + 1; day <= currentDay; day++) {
+        const dayData = historicalData?.days[day];
+        if (!dayData?.routes) continue;
+        const route = dayData.routes.find(r => r.id === routeId);
+        total += route?.dailyProfit ?? 0;
+    }
+    // Add today's clean slice (midnight → now) — no overlap with completed snapshots.
+    return total + getRouteTodayStats(routeId).dailyProfit;
 }
 
 /**
