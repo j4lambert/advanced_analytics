@@ -252,6 +252,11 @@ export function GuideDialog({ isOpen, onClose }) {
                             <NavItem    id="aa-guide-m-cost"            label="Cost" icon="ArrowBigDownDash"           scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-profit"          label="Profit" icon='HandCoins'         scrollTo={scrollTo} />
                             <NavItem    id="aa-guide-m-profit-train"    label="Profit / Train" icon='TrainFrontTunnel' scrollTo={scrollTo} />
+                            <NavSection id="aa-guide-timetable"   label="Timetable Analysis" scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-headway"          label="Headway Regularity" icon="UnfoldHorizontal"  scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-schedule-drift"   label="Schedule Drift"     icon="CalendarClock"     scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-delay-profile"    label="Delay Profile"      icon="Timer" scrollTo={scrollTo} />
+                            <NavItem    id="aa-guide-m-dwell-compliance" label="Dwell Compliance"   icon="CirclePause" scrollTo={scrollTo} />
                             <NavSection id="aa-guide-storage"     label="Storage"       scrollTo={scrollTo} />
                         </ul>
                     </div>
@@ -698,6 +703,237 @@ export function GuideDialog({ isOpen, onClose }) {
                             A <b>small</b> route with high profit per train may be a candidate
                             for expansion. A large route with negative profit per train
                             is costing more the more it is used.
+                        </Note>
+                    </MetricEntry>
+
+                    {/* ── Timetable Analysis ── */}
+                    <SectionTitle id="aa-guide-timetable">Timetable Analysis</SectionTitle>
+                    <p className="text-foreground/80 mb-2">
+                        Ridership and load factor tell you how many passengers your routes are carrying.
+                        Timetable Analysis tells you whether those passengers are getting a reliable
+                        service — whether trains arrive on time and, critically, whether the gaps
+                        between them are consistent.
+                    </p>
+                    <p className="text-foreground/80 mb-4">
+                        These four metrics appear in the Route panel and update continuously throughout
+                        the day as trains complete each stop. They reset at midnight so they always
+                        reflect today's operation.
+                    </p>
+
+                    <MetricEntry id="aa-guide-m-headway" label="Headway Regularity" icon="UnfoldHorizontal">
+                        <p className="pb-1">
+                            Headway is the gap between two consecutive trains arriving at the same stop.
+                            Headway Regularity measures how <em>consistent</em> those gaps are — not whether
+                            trains are on time, but whether they are evenly spaced.
+                        </p>
+                        <p className="pb-1">
+                            Imagine waiting on a platform. Two trains 4 minutes apart, followed by two
+                            trains 4 minutes apart, is a reliable service. The same four trains arriving
+                            as 1 min, 7 min, 2 min, 6 min gaps makes the service feel unpredictable and
+                            forces passengers to wait far longer on average — even though the total number
+                            of trains is identical.
+                        </p>
+                        <p className="font-semibold pt-2 pb-1 text-primary">How it is calculated</p>
+                        <p className="pb-1">
+                            The mod collects the arrival times of every active train at the first stop
+                            of the route and measures consecutive gaps. It then computes the{' '}
+                            <strong>coefficient of variation</strong> (CV) — the ratio of the standard
+                            deviation of those gaps to their mean:
+                        </p>
+                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold flex-wrap">
+                            <span>CV =</span>
+                            <Badge style="text-xs bg-foreground text-background">std deviation of gaps</Badge>
+                            <span>÷</span>
+                            <Badge style="text-xs bg-foreground text-background">mean gap</Badge>
+                        </div>
+                        <p className="pb-1">
+                            A CV of 0 means perfect regularity — all gaps are identical. The higher the
+                            CV, the more uneven the spacing.
+                        </p>
+                        <ul className="list-disc pb-1">
+                            <li><span className="text-green-500 font-medium">Regular (CV &lt; 0.10)</span> — trains are evenly spaced. Passengers face predictable, short waits.</li>
+                            <li><span className="text-yellow-500 font-medium">Irregular (CV 0.10–0.25)</span> — noticeable unevenness. Some passengers will wait significantly longer than others.</li>
+                            <li><span className="text-red-500 font-medium">Bunching (CV &gt; 0.25)</span> — trains are clustering. Heavily loaded trains attract more passengers, slowing them further, which pulls the next train closer — a self-reinforcing cycle.</li>
+                        </ul>
+                        <p className="font-semibold pt-2 pb-1 text-primary">When to act on it</p>
+                        <p className="pb-1">
+                            Bunching on short, busy routes is common. The fix is usually to
+                            add more trains — smaller gaps reduce the snowball effect — or to
+                            review the timetable spacing. Routes with only two trains are
+                            especially susceptible, because one slow lap immediately pushes the
+                            two trains together.
+                        </p>
+                        <Note>
+                            Headway Regularity requires at least two trains on the route to produce
+                            a reading. Routes with a single train show N/A — there is no gap to measure.
+                        </Note>
+                    </MetricEntry>
+
+                    <MetricEntry id="aa-guide-m-schedule-drift" label="Schedule Drift" icon="CalendarClock">
+                        <p className="pb-1">
+                            Schedule Drift measures whether the entire route is running ahead of
+                            or behind its timetable — not at one specific stop, but on average
+                            across all trains and all stops.
+                        </p>
+                        <p className="pb-1">
+                            Where Headway Regularity asks "are trains evenly spaced?", Schedule Drift
+                            asks "has the whole timetable shifted?". A route with zero drift is
+                            running exactly on schedule. A positive drift means trains are
+                            systematically late; a negative drift means they are running early.
+                        </p>
+                        <p className="font-semibold pt-2 pb-1 text-primary">How it is calculated</p>
+                        <p className="pb-1">
+                            For every stop on every train, the mod compares the adjusted expected
+                            arrival time (what the schedule says after accounting for the current
+                            game time) against the original timetable baseline. The drift is
+                            averaged across all trains and all stops to produce a single figure:
+                        </p>
+                        <div className="flex items-center gap-2 pt-3 pb-4 text-foreground font-bold flex-wrap">
+                            <span>Drift =</span>
+                            <span>mean of (</span>
+                            <Badge style="text-xs bg-foreground text-background">adjusted expected arrival</Badge>
+                            <span>−</span>
+                            <Badge style="text-xs bg-foreground text-background">original scheduled arrival</Badge>
+                            <span>)</span>
+                        </div>
+                        <ul className="list-disc pb-1">
+                            <li><span className="text-green-500 font-medium">Good (&lt; 30 s)</span> — trains are running very close to schedule.</li>
+                            <li><span className="text-yellow-500 font-medium">Warning (30 s – 2 min)</span> — the timetable has slipped. Noticeable to passengers at stops that are already close together.</li>
+                            <li><span className="text-red-500 font-medium">Critical (&gt; 2 min)</span> — the route is significantly behind schedule. Connection passengers at interchange stations may be affected.</li>
+                        </ul>
+                        <p className="font-semibold pt-2 pb-1 text-primary">When to act on it</p>
+                        <p className="pb-1">
+                            Consistent drift usually means the scheduled loop time is tighter than what
+                            the route can physically achieve at its current speed and dwell times.
+                            Check the Delay Profile chart for which stops are contributing most.
+                            Increasing the number of trains does not fix drift — it only helps if
+                            the route is too busy for the current headway.
+                        </p>
+
+                        <p className="font-semibold pt-3 pb-2">Headway Regularity vs Schedule Drift — when to use each</p>
+                        <div className="grid grid-cols-2 gap-3 pb-2">
+                            <div className="rounded-lg border border-border p-3 space-y-1.5">
+                                <p className="font-semibold text-foreground">Use Headway Regularity when…</p>
+                                <ul className="list-disc text-foreground/70 space-y-1 text-xs">
+                                    <li>Passengers are complaining about unpredictable waits on a route that seems to have enough trains.</li>
+                                    <li>You suspect trains are clustering — look for a high CV even if delays are small.</li>
+                                    <li>Deciding whether to add more trains to break up a bunch.</li>
+                                    <li>Comparing two routes that have the same average headway but different reliability.</li>
+                                </ul>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 space-y-1.5">
+                                <p className="font-semibold text-foreground">Use Schedule Drift when…</p>
+                                <ul className="list-disc text-foreground/70 space-y-1 text-xs">
+                                    <li>Trains are evenly spaced but still feel slow — the whole route may be running late.</li>
+                                    <li>You have changed a route (added a stop, extended it) and want to check whether the timetable needs updating.</li>
+                                    <li>Investigating whether a route's connections to other lines are being met on time.</li>
+                                    <li>Looking for routes where the scheduled loop time is unrealistically optimistic.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <Warning>
+                            A route can score well on one metric while failing the other.
+                            Even spacing (good Headway) does not mean trains are on time (Schedule Drift).
+                            And a route running consistently 3 minutes late everywhere (bad Drift) can
+                            still have perfectly regular spacing (good Headway). Use both metrics together.
+                        </Warning>
+                    </MetricEntry>
+
+                    <MetricEntry id="aa-guide-m-delay-profile" label="Delay Profile" icon="Timer">
+                        <p className="pb-1">
+                            The Delay Profile chart breaks Schedule Drift down stop by stop. Instead of
+                            a single network-average figure, it shows the average arrival delay at
+                            each individual station on the route, accumulated across every train lap
+                            completed today.
+                        </p>
+                        <p className="pb-1">
+                            Each bar represents one station. A bar extending to the right means trains
+                            are arriving late at that stop; a bar to the left means they are
+                            arriving early. The colour follows the same thresholds as Schedule Drift:
+                            green for minor delays, yellow for noticeable, red for critical.
+                        </p>
+                        <p className="font-semibold pt-2 pb-1 text-primary">What to look for</p>
+                        <ul className="list-disc pb-1">
+                            <li>
+                                <strong>Delay growing progressively along the route</strong> — each stop is
+                                a little later than the previous one. This is a sign that the overall
+                                loop time is too tight; trains cannot recover between stops.
+                            </li>
+                            <li>
+                                <strong>A single stop with a sharp spike</strong> — one station is causing
+                                a disproportionate delay. This often points to a dwell problem at that
+                                stop (see Dwell Compliance below).
+                            </li>
+                            <li>
+                                <strong>Delay resetting to near-zero mid-route</strong> — a terminus or
+                                layover point where trains sit for a few minutes gives the schedule time
+                                to recover. If that recovery station disappears, delays can accumulate again.
+                            </li>
+                        </ul>
+                        <Note>
+                            The Delay Profile accumulates from the first completed stop of the day and
+                            resets at midnight. Early in a new day, stops that have not yet been
+                            visited by any train will not appear in the chart.
+                        </Note>
+                    </MetricEntry>
+
+                    <MetricEntry id="aa-guide-m-dwell-compliance" label="Dwell Compliance" icon="CirclePause">
+                        <p className="pb-1">
+                            Dwell time is the period a train spends stationary at a platform —
+                            from the moment it arrives to the moment it departs. The game assigns
+                            each stop a scheduled dwell time based on the route timetable.
+                            Dwell Compliance measures the gap between what was scheduled and
+                            what actually happened, averaged across all train laps today.
+                        </p>
+                        <p className="pb-1">
+                            A positive value means the train spent <em>longer</em> than scheduled at
+                            that stop — typically because there were more passengers boarding or
+                            alighting than the schedule anticipated. A negative value means the
+                            train left faster than scheduled, which can happen at quiet stops with
+                            little passenger activity.
+                        </p>
+                        <p className="font-semibold pt-2 pb-1 text-primary">Why it matters</p>
+                        <p className="pb-1">
+                            Dwell overruns are one of the most common sources of delay in urban rail.
+                            A train that spends 30 extra seconds at a busy station doesn't just
+                            arrive late at the next stop — it may push the following train closer,
+                            contributing to bunching further down the line. Repeated dwell overruns at
+                            the same station are a strong signal that the stop is under-served:
+                            either too many passengers are crowding the platform, or the scheduled
+                            dwell time is simply too short for the volume of passengers.
+                        </p>
+                        <ul className="list-disc pb-1">
+                            <li>
+                                <strong>Large positive dwell</strong> at a high-ridership station — the platform may be overcrowded. Consider adding trains to reduce crowding, or check whether the Load Factor for that segment is in the red.
+                            </li>
+                            <li>
+                                <strong>Consistent negative dwell</strong> at a quiet terminus — trains are ready to leave before the schedule expects. This spare time could absorb delays from earlier stops.
+                            </li>
+                        </ul>
+
+                        <p className="font-semibold pt-3 pb-2">Delay Profile vs Dwell Compliance — when to use each</p>
+                        <div className="grid grid-cols-2 gap-3 pb-2">
+                            <div className="rounded-lg border border-border p-3 space-y-1.5">
+                                <p className="font-semibold text-foreground">Use Delay Profile when…</p>
+                                <ul className="list-disc text-foreground/70 space-y-1 text-xs">
+                                    <li>You want to see where delays are <em>arriving</em> — which stations trains are running late into.</li>
+                                    <li>Diagnosing whether delays are cumulative (growing stop by stop) or isolated to one point on the route.</li>
+                                    <li>Checking whether the route can recover delays at layover points.</li>
+                                </ul>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 space-y-1.5">
+                                <p className="font-semibold text-foreground">Use Dwell Compliance when…</p>
+                                <ul className="list-disc text-foreground/70 space-y-1 text-xs">
+                                    <li>You want to see where delays are <em>created</em> — which stations are holding trains longer than planned.</li>
+                                    <li>Identifying overcrowded platforms that are slowing the entire route.</li>
+                                    <li>Checking whether any stop is consistently causing the downstream delay spikes you see in the Delay Profile.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <Note>
+                            Read both charts together for the most useful diagnosis. A spike in Dwell
+                            Compliance at stop A, followed by a spike in Delay Profile at stop B,
+                            is a strong signal that A is the root cause of delays at B and beyond.
                         </Note>
                     </MetricEntry>
 
