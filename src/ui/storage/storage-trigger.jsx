@@ -13,7 +13,7 @@ export function StorageTrigger() {
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className="inline-flex items-center justify-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="inline-flex items-center justify-center rounded-md p-1.5 pr-0 transition-colors hover:bg-accent hover:text-accent-foreground"
                 title="Storage Settings"
             >
                 <icons.DatabaseZap size={16} />

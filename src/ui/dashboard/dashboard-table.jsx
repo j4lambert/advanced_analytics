@@ -179,7 +179,7 @@ export function DashboardTable({
     
     return (
         <>
-            <section>
+            <section className={`px-6`}>
                 <div className="py-5 flex items-center justify-between gap-8">
                     <h3 className="whitespace-nowrap text-2xl font-semibold leading-none tracking-tight">Routes Stats</h3>
                 </div>

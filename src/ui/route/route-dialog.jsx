@@ -348,7 +348,7 @@ export function RouteContent({ routeId }) {
         : 'text-red-500';
 
     return (
-        <div className={"pb-6"}>
+        <div className={"pb-6 px-6 pt-4"}>
             <section className={'grid grid-cols-2 gap-4'}>
                 <div className="flex flex-col">
                     {/* ── Load Factor (hero) ── */}

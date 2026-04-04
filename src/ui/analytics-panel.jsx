@@ -172,6 +172,7 @@ export function AnalyticsPanel() {
             isOpen={isOpen}
             onClose={() => setIsOpen(false)}
             size={1280}
+            staticPanelPaddingClasses="pb-4"
         >
             {isOpen && view === 'dashboard' && (
                 <DashboardContent

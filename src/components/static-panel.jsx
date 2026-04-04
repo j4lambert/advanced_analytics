@@ -13,11 +13,13 @@ export function StaticPanel({
     isOpen,
     onClose,
     staticPanelCustomClasses,
+    staticPanelPaddingClasses,
     size,
 }) {
     const [state, setState] = React.useState('open');
     const staticPanelDefaultClasses = "aa-static-panel bg-black/50 rounded-lg overflow-hidden fixed flex flex-col z-[100] border sm:rounded-lg select-none max-w-[95vw] max-h-[90vh] p-0 right-0 mr-2 top-0 mt-2 bottom-24"
-    const staticPanelBodyClasses = "aa-static-panel-body bg-background dark:bg-background/50 backdrop-blur-md px-6 py-4 overflow-y-auto scrollbar-thin"
+    const staticPanelBodyClasses = "aa-static-panel-body bg-background dark:bg-background/50 backdrop-blur-md overflow-y-auto scrollbar-thin"
+    const bodyPaddingClasses = staticPanelPaddingClasses ? staticPanelPaddingClasses : "px-6 py-4";
     // Reset state to 'open' when dialog is opened
     React.useEffect(() => {
         if (isOpen) {
@@ -56,7 +58,7 @@ export function StaticPanel({
                     </div>
 
                     {/* Body */}
-                    <div className={staticPanelBodyClasses}>
+                    <div className={`${staticPanelBodyClasses}  ${bodyPaddingClasses}`}>
                         {children}
                     </div>
                 </div>

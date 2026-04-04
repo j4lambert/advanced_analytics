@@ -289,7 +289,7 @@ export function SystemStats({ liveRouteData }) {
     if (!stats) return null;
 
     return (
-        <div className="space-y-3 py-6">
+        <div className="space-y-3 py-6 px-6">
             <div className="flex gap-4">
                 {/* ── Stat chips ─────────────────────────────────────────────── */}
                 <div className="mr-auto">

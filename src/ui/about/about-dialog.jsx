@@ -46,7 +46,7 @@ export function AboutDialog({ isOpen, onClose }) {
                     ...and everyone who reported bugs, tested builds, proposed improvements and helped reverse-engineer the game's formulas.
                 </div>
                 <div class="italic text-muted-foreground mb-2">
-                    A huge thanks to Colin and the SubwayBuilder team for<br/> building something worth modding<br/>
+                    A huge thanks to Colin and the SubwayBuilder team for<br/> creating such a great game.<br/>
                 </div>
                 ❤️
             </div>

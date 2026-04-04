@@ -29,9 +29,9 @@ const { React, icons } = api.utils;
 export function DashboardContent({ liveRouteData, historicalData }) {
     return (
         <>
-            <section className="flex gap-2 border-b pb-4">
+            <section className="flex items-center gap-2 border-b px-6">
                 <GuideTrigger/>
-                <span className="border-foreground/20 border-r py-3"/>
+                <span className="border-foreground/20 border-r py-5"/>
                 <AboutTrigger/>
                 <div className="flex items-center gap-2 whitespace-nowrap ml-auto">
                     {!api.gameState.isPaused() && (
@@ -49,7 +49,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
                             <icons.Pause className="dark:text-amber-400 text-amber-600" size={14} />
                         </>
                     )}
-                    <span className="border-foreground/20 border-r ml-2 mr-2 py-3"/>
+                    <span className="border-foreground/20 border-r ml-2 mr-2 py-5"/>
                     <StorageTrigger/>
                 </div>
             </section>
@@ -64,7 +64,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
             />
 
             {/* Chart Section — receives both historical and live data */}
-            <section className="py-6">
+            <section className="py-6 px-6">
                 <div className="py-5">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Historical Trends</h3>
                 </div>
@@ -75,7 +75,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
             </section>
 
             {/* Transfer Hub Flow */}
-            <section className="py-6">
+            <section className="py-6 px-6">
                 <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">Transfer Hub Flow</h3>
                     <p className="text-xs text-muted-foreground mt-1">Passenger flows through interchange stations</p>
@@ -84,7 +84,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
             </section>
 
             {/* System Map */}
-            <section className="py-6">
+            <section className="py-6 px-6">
                 <div className="py-5 flex items-baseline gap-3">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">System Map</h3>
                     <p className="text-xs text-muted-foreground mt-1">Network schematic map</p>
@@ -139,6 +139,7 @@ export function Dashboard() {
         <StaticPanel
             id="aa-dashboard"
             title="Advanced Analytics — Dashboard"
+            staticPanelPaddingClasses="pb-4"
             isOpen={isOpen}
             onClose={() => setIsOpen(false)}
         >
