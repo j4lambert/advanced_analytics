@@ -28,21 +28,13 @@
 import { isZustandAvailable, getTransferGroups } from '../../core/api-support.js';
 import { formatCurrencyCompact } from '../../utils/formatting.js';
 import { getCurrentPhaseName } from '../../core/lifecycle.js';
+import { routeHealthScore, computeSystemAggregates } from '../../metrics/system-aggregates.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
-// ── Health score helpers ──────────────────────────────────────────────────────
-
-function routeHealthScore(utilization) {
-    const u = utilization ?? 0;
-    if (u <= 20)  return 0;
-    if (u <= 40)  return ((u - 20) / 20) * 0.5;
-    if (u <= 80)  return 1.0;
-    if (u <= 95)  return 1.0 - ((u - 80) / 15) * 0.3;
-    if (u <= 120) return 0.7 - ((u - 95) / 25) * 0.7;
-    return 0;
-}
+// ── Health score / load factor display helpers ────────────────────────────────
+// routeHealthScore() is imported from ../../metrics/system-aggregates.js
 
 function healthColor(score) {
     if (score < 40) return '#ef4444';
@@ -244,28 +236,8 @@ function StatChip({ Icon, label, value }) {
 
 export function SystemStats({ liveRouteData }) {
     const stats = React.useMemo(() => {
-        const routes = (liveRouteData ?? []).filter(r => !r.deleted);
-        if (!routes.length) return null;
-
-        const totalTrains  = routes.reduce((s, r) => s + (r.totalTrains  ?? 0), 0);
-        const totalRevenue = routes.reduce((s, r) => s + (r.dailyRevenue ?? 0), 0);
-        const totalRidership = routes.reduce((s, r) => s + (r.ridership  ?? 0), 0);
-
-        const aggRidership = routes.reduce((s, r) => s + (r.ridership ?? 0), 0);
-        const aggCapacity  = routes.reduce((s, r) => s + (r.capacity  ?? 0), 0);
-
-        const totalEfficiency = aggCapacity > 0 ? aggRidership / (2 * aggCapacity) : 0;
-
-        // Ridership-weighted average of per-route load factors (each already 0–100)
-        const loadFactor = aggRidership > 0
-            ? routes.reduce((s, r) => s + (r.ridership ?? 0) * (r.loadFactor ?? 0), 0) / aggRidership
-            : 0;
-
-        const healthScore = aggRidership > 0
-            ? routes.reduce((s, r) =>
-                s + (r.ridership ?? 0) * routeHealthScore(r.loadFactor ?? 0)
-              , 0) / aggRidership * 100
-            : 0;
+        const agg = computeSystemAggregates(liveRouteData);
+        if (agg.totalLines === 0) return null;
 
         let hubCount = 0;
         try {
@@ -274,16 +246,7 @@ export function SystemStats({ liveRouteData }) {
                 : api.gameState.getStations().filter(s => (s.routeIds?.length ?? 0) >= 2).length;
         } catch { /* non-fatal */ }
 
-        return {
-            routeCount: routes.length,
-            totalTrains,
-            hubCount,
-            totalRidership,
-            totalRevenue,
-            totalEfficiency,
-            loadFactor,
-            healthScore,
-        };
+        return { ...agg, hubCount };
     }, [liveRouteData]);
 
     if (!stats) return null;
@@ -306,7 +269,7 @@ export function SystemStats({ liveRouteData }) {
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <StatChip Icon={icons.Route}     label="Routes"    value={stats.routeCount} />
+                    <StatChip Icon={icons.Route}     label="Routes"    value={stats.totalLines} />
                     <StatChip Icon={icons.TramFront} label="Trains"    value={stats.totalTrains.toLocaleString()} />
                     <StatChip Icon={icons.Component} label="Hubs"      value={stats.hubCount} />
                     <StatChip Icon={icons.Users}     label="Ridership" value={`${Math.round(stats.totalRidership).toLocaleString()} / day`} />

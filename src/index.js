@@ -6,6 +6,8 @@
 
 import { CONFIG } from './config.js';
 import { initLifecycleHooks, getStorage, handleMapReadyFallback } from './core/lifecycle.js';
+import { getRoute24hStats } from './metrics/accumulator.js';
+import { computeSystemAggregates } from './metrics/system-aggregates.js';
 import { injectStyles } from './assets/styles.js';
 import { AnalyticsPanel } from './ui/analytics-panel.jsx';
 import { Panel }           from './ui/panel.jsx';
@@ -23,7 +25,35 @@ const AdvancedAnalytics = {
     api,
     config: CONFIG,
     initialized: false,
-    
+
+    getNetworkMetrics() {
+        const routes = api.gameState.getRoutes() ?? [];
+
+        // Build per-route stat objects (same shape as liveRouteData in the dashboard)
+        const routeStats = routes.map(route => {
+            const s = getRoute24hStats(route.id);
+            return { ...s, id: route.id, name: route.name || route.bullet };
+        });
+
+        // Use the shared aggregation (ridership-weighted, identical to SystemStats)
+        const agg = computeSystemAggregates(routeStats);
+
+        return {
+            ...agg,
+            // Expose per-route breakdown for advisor insights
+            routeStats: routeStats.map(s => ({
+                id:          s.id,
+                name:        s.name,
+                ridership:   s.ridership    ?? 0,
+                revenue:     s.dailyRevenue ?? 0,
+                cost:        s.dailyCost    ?? 0,
+                profit:      s.dailyProfit  ?? 0,
+                loadFactor:  s.loadFactor   ?? 0,  // 0–100 %
+                totalTrains: s.totalTrains  ?? 0,
+            })),
+        };
+    },
+
     init() {
         if (!api) {
             console.error(`${CONFIG.LOG_PREFIX} SubwayBuilderAPI not available`);
