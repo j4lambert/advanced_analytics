@@ -374,7 +374,7 @@ export function RouteContent({ routeId }) {
                     />
                     <StatCard
                         label="Stops"
-                        icon="FlagTriangleRight"
+                        icon="GitCommitVertical"
                         value={data.stations || '–'}
                         sub={`${data.routeInfo?.stationCount ?? '–'} station${data.routeInfo?.stationCount !== 1 ? 's' : ''}`}
                     />
