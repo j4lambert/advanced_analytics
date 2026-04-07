@@ -46,8 +46,6 @@ function _applyDemandPhasesFromAPI(api) {
         const hours = { high: 0, medium: 0, low: 0 };
         for (const p of CONFIG.DEMAND_PHASES) hours[p.type] += (p.endHour - p.startHour);
         CONFIG.DEMAND_HOURS = hours;
-
-        console.log(`${CONFIG.LOG_PREFIX} Demand phases loaded from API:`, CONFIG.DEMAND_PHASES);
     } catch (e) {
         console.warn(`${CONFIG.LOG_PREFIX} Could not load demand phases from API, using defaults:`, e);
     }
