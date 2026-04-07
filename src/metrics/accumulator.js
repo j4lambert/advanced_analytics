@@ -234,123 +234,6 @@ function _computeStaticCapacity(route, trainType) {
     );
 }
 
-// ── Weighted capacity helpers ──────────────────────────────────────────────
-
-/**
- * Time-weighted full-day capacity over [windowStartSec, windowEndSec].
- *
- * Merges yesterday's and today's config timelines so that the rolling 24h
- * window correctly uses each day's own schedule history on both sides of
- * midnight — eliminating the jump that would otherwise occur at day change.
- * Falls back to _computeStaticCapacity when no history is available.
- *
- * @param {Object}     route
- * @param {Object}     trainType
- * @param {Array|null} todayTimeline     - Today's entries: { timestamp (min from today's midnight), high, medium, low }
- * @param {Array|null} yesterdayTimeline - Yesterday's entries (same shape, relative to yesterday's midnight)
- * @param {number}     windowStartSec
- * @param {number}     windowEndSec
- * @returns {number}
- */
-function _computeWeightedCapacity(route, trainType, todayTimeline, yesterdayTimeline, windowStartSec, windowEndSec) {
-    const hasToday     = todayTimeline?.length     > 0;
-    const hasYesterday = yesterdayTimeline?.length > 0;
-    if (!hasToday && !hasYesterday) return _computeStaticCapacity(route, trainType);
-
-    if (!route.stComboTimings?.length) return 0;
-    const timings     = route.stComboTimings;
-    const loopTimeSec = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
-    if (loopTimeSec <= 0) return 0;
-
-    const loopsPerHour     = 3600 / loopTimeSec;
-    const carsPerTrain     = route.carsPerTrain !== undefined ? route.carsPerTrain : trainType.stats.carsPerCarSet;
-    const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
-
-    const windowDuration = windowEndSec - windowStartSec;
-    if (windowDuration <= 0) return _computeStaticCapacity(route, trainType);
-
-    // Convert both timelines to absolute elapsed seconds and merge into one
-    // sorted list. Yesterday's entries are relative to yesterday's midnight;
-    // today's entries are relative to today's midnight.
-    const todayStart     = Math.floor(windowEndSec / 86400) * 86400;
-    const yesterdayStart = todayStart - 86400;
-
-    const entries = [];
-    if (hasYesterday) {
-        for (const e of yesterdayTimeline) {
-            entries.push({ absSec: yesterdayStart + e.timestamp * 60, high: e.high, medium: e.medium, low: e.low });
-        }
-    }
-    if (hasToday) {
-        for (const e of todayTimeline) {
-            entries.push({ absSec: todayStart + e.timestamp * 60, high: e.high, medium: e.medium, low: e.low });
-        }
-    }
-    entries.sort((a, b) => a.absSec - b.absSec);
-
-    let weighted = 0;
-    for (let i = 0; i < entries.length; i++) {
-        // The first entry extends back to windowStartSec so the entire window is covered.
-        const segStart = i === 0
-            ? windowStartSec
-            : Math.max(entries[i].absSec, windowStartSec);
-        const segEnd   = i + 1 < entries.length
-            ? Math.min(entries[i + 1].absSec, windowEndSec)
-            : windowEndSec;
-        if (segEnd <= segStart) continue;
-
-        const frac = (segEnd - segStart) / windowDuration;
-        const cap  = (entries[i].high   * CONFIG.DEMAND_HOURS.high   +
-                      entries[i].medium * CONFIG.DEMAND_HOURS.medium +
-                      entries[i].low    * CONFIG.DEMAND_HOURS.low)
-                     * loopsPerHour * capacityPerTrain;
-        weighted += cap * frac;
-    }
-    return Math.round(weighted);
-}
-
-/**
- * Time-weighted phase capacities over a full day.
- *
- * Weights each phase capacity by how long the corresponding schedule was
- * active across the 1440-minute day.  Falls back to _computePhaseCapacities
- * when no history is available.
- *
- * @param {Object} route
- * @param {Object} trainType
- * @param {Array|null} configTimeline  - Sorted entries: { timestamp (min), high, medium, low }
- * @returns {{ high: number, medium: number, low: number }}
- */
-function _computeWeightedPhaseCapacities(route, trainType, configTimeline) {
-    if (!configTimeline?.length) return _computePhaseCapacities(route, trainType);
-
-    if (!route.stComboTimings?.length) return { high: 0, medium: 0, low: 0 };
-    const timings     = route.stComboTimings;
-    const loopTimeSec = timings[timings.length - 1].arrivalTime - timings[0].departureTime;
-    if (loopTimeSec <= 0) return { high: 0, medium: 0, low: 0 };
-
-    const loopsPerHour     = 3600 / loopTimeSec;
-    const carsPerTrain     = route.carsPerTrain !== undefined ? route.carsPerTrain : trainType.stats.carsPerCarSet;
-    const capacityPerTrain = carsPerTrain * trainType.stats.capacityPerCar;
-
-    const sorted = [...configTimeline].sort((a, b) => a.timestamp - b.timestamp);
-    const result = { high: 0, medium: 0, low: 0 };
-
-    for (let i = 0; i < sorted.length; i++) {
-        const segStart = sorted[i].timestamp;
-        const segEnd   = i + 1 < sorted.length ? sorted[i + 1].timestamp : 1440;
-        const frac     = (segEnd - segStart) / 1440;
-        result.high   += sorted[i].high   * CONFIG.DEMAND_HOURS.high   * loopsPerHour * capacityPerTrain * frac;
-        result.medium += sorted[i].medium * CONFIG.DEMAND_HOURS.medium * loopsPerHour * capacityPerTrain * frac;
-        result.low    += sorted[i].low    * CONFIG.DEMAND_HOURS.low    * loopsPerHour * capacityPerTrain * frac;
-    }
-    return {
-        high:   Math.round(result.high),
-        medium: Math.round(result.medium),
-        low:    Math.round(result.low),
-    };
-}
-
 // ── Core stats computation ─────────────────────────────────────────────────
 
 /**
@@ -406,24 +289,21 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     let scheduleChangedRecently  = false;
 
     if (trainType) {
-        const day              = Math.floor(now / 86400);
+        const day = Math.floor(now / 86400);
+
+        // scheduleChangedRecently: kept for backward compat in historical snapshots.
         const dayHistory       = _configCacheSnapshot[day]?.[routeId]       || null;
         const yesterdayHistory = _configCacheSnapshot[day - 1]?.[routeId]   || null;
-
-        const todayStart     = day * 86400;
-        const yesterdayStart = todayStart - 86400;
-
-        // scheduleChangedRecently: kept for backward compat in historical snapshots,
-        // but no longer used for metric corrections (timestamps on commutes make
-        // the correction unnecessary).
-        const hasRecentChange = (timeline, baselineSec) =>
+        const todayStart       = day * 86400;
+        const yesterdayStart   = todayStart - 86400;
+        const hasRecentChange  = (timeline, baselineSec) =>
             Array.isArray(timeline) &&
             timeline.some(e => e.timestamp > 0 && (baselineSec + e.timestamp * 60) > cutoff);
         scheduleChangedRecently =
             hasRecentChange(dayHistory, todayStart) ||
             hasRecentChange(yesterdayHistory, yesterdayStart);
 
-        capacity = _computeWeightedCapacity(route, trainType, dayHistory, yesterdayHistory, cutoff, now);
+        capacity = _computeStaticCapacity(route, trainType);
 
         utilization = capacity > 0 ? Math.round((ridership / capacity) * 100) : 0;
         efficiency  = capacity > 0 ? ridership / (2 * capacity) : 0;
