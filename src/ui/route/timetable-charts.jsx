@@ -26,9 +26,11 @@ function makeColoredBar(getValue) {
         if (!width || !height) return null;
         const val   = getValue(props);
         const color = delayColor(Math.abs(val));
+        const absW  = Math.abs(width);
         const absH  = Math.abs(height);
+        const xLeft = width  < 0 ? x + width  : x;
         const yTop  = height < 0 ? y + height : y;
-        return h('rect', { x, y: yTop, width, height: absH, fill: color, fillOpacity: 0.8, rx: 2 });
+        return h('rect', { x: xLeft, y: yTop, width: absW, height: absH, fill: color, fillOpacity: 0.8, rx: 2 });
     };
 }
 
@@ -99,6 +101,7 @@ function TimetableBarChart({ data, dataKey, mode, hideYAxis = false, yAxisWidth 
                 h(charts.Tooltip, {
                     key:     'tooltip',
                     content: (props) => h(ChartTooltip, { ...props, mode }),
+                    cursor:  { fill: 'currentColor', opacity: 0.04 },
                 }),
                 h(charts.Bar, {
                     key:               dataKey,

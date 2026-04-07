@@ -412,7 +412,7 @@ function RouteMetricsChart({ data, selectedMetrics, timeframe, chartType, axisUn
 
     const makeLiveBar = (color) => function LiveBar(props) {
         const { x, y, width, height, payload } = props;
-        if (!width || !height) return null;
+        if (width <= 0 || !height) return null;
         const rectY      = height < 0 ? y + height : y;
         const rectHeight = Math.abs(height);
         return h('rect', {
