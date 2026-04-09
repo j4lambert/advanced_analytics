@@ -23,7 +23,7 @@
 
 import { getRouteStationsInOrder } from '../../utils/route-utils.js';
 import { getStationTransferRoutes } from '../../utils/transfer-utils.js';
-import { getStationGroups, isZustandAvailable } from '../../core/api-support.js';
+import { getStationGroups } from '../../utils/station-groups.js';
 import { Dropdown } from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge } from '../../components/route-badge.jsx';
@@ -69,11 +69,9 @@ function buildTransferMap(routes, stationsByRoute, api) {
     const allStations = api.gameState.getStations();
 
     const stationToGroup = {};
-    if (isZustandAvailable()) {
-        getStationGroups().forEach(group => {
-            group.stationIds.forEach(sid => { stationToGroup[sid] = group.id; });
-        });
-    }
+    getStationGroups().forEach(group => {
+        group.stationIds.forEach(sid => { stationToGroup[sid] = group.id; });
+    });
     allStations.forEach(s => {
         if (!stationToGroup[s.id]) stationToGroup[s.id] = s.id;
     });
@@ -116,10 +114,10 @@ function buildTransferMap(routes, stationsByRoute, api) {
 
 function buildStationToGroup(transferMap) {
     const map = {};
-    const zustandGroups = isZustandAvailable() ? getStationGroups() : [];
+    const groups = getStationGroups();
     Object.entries(transferMap).forEach(([groupId, data]) => {
         map[data.canonicalStationId] = groupId;
-        const zg = zustandGroups.find(g => g.id === groupId);
+        const zg = groups.find(g => g.id === groupId);
         if (zg) zg.stationIds.forEach(sid => { map[sid] = groupId; });
     });
     return map;

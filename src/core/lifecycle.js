@@ -4,7 +4,6 @@
 import { CONFIG } from '../config.js';
 import { Storage } from './storage.js';
 import { captureHistoricalData } from '../metrics/historical-data.js';
-import { getZustandSaveName } from './api-support.js';
 import {
     initAccumulator,
     stopAccumulating,
@@ -69,9 +68,9 @@ export function getCurrentPhaseName() {
  * @param {Object} api - SubwayBuilderAPI instance
  */
 export async function handleMapReadyFallback(api) {
-    const zustandName  = getZustandSaveName();
-    const resolvedName = zustandName || `session_${Date.now()}`;
-    const source       = zustandName ? 'Zustand' : 'temp ID';
+    const apiName      = api.gameState.getSaveName?.();
+    const resolvedName = apiName || `session_${Date.now()}`;
+    const source       = apiName ? 'getSaveName()' : 'temp ID';
 
     storage = _initStorage(resolvedName);
 
@@ -230,6 +229,7 @@ export function initLifecycleHooks(api) {
         setAccumulatorStorage(storage);
         const configCache = await storage.get('configCache', {});
         setConfigCacheSnapshot(configCache);
+
     });
 
     // ── onGameSaved ─────────────────────────────────────────────────────────

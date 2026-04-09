@@ -25,7 +25,7 @@
 //
 //   Displayed as a semi-circle gauge + a word rating (Poor → Excellent).
 
-import { isZustandAvailable, getTransferGroups } from '../../core/api-support.js';
+import { getTransferGroups } from '../../utils/station-groups.js';
 import { formatCurrencyCompact } from '../../utils/formatting.js';
 import { getCurrentPhaseName } from '../../core/lifecycle.js';
 import { routeHealthScore, computeSystemAggregates } from '../../metrics/system-aggregates.js';
@@ -241,9 +241,7 @@ export function SystemStats({ liveRouteData }) {
 
         let hubCount = 0;
         try {
-            hubCount = isZustandAvailable()
-                ? getTransferGroups().length
-                : api.gameState.getStations().filter(s => (s.routeIds?.length ?? 0) >= 2).length;
+            hubCount = getTransferGroups().length;
         } catch { /* non-fatal */ }
 
         return { ...agg, hubCount };

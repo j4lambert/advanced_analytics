@@ -40,7 +40,7 @@ const AdvancedAnalytics = {
 
         return {
             ...agg,
-            // Expose per-route breakdown for advisor insights
+            // Expose per-route breakdown
             routeStats: routeStats.map(s => ({
                 id:          s.id,
                 name:        s.name,

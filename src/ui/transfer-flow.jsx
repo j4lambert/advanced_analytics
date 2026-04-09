@@ -31,7 +31,7 @@
 
 import { CONFIG }                               from '../config.js';
 import { getRouteStationsInOrder }              from '../utils/route-utils.js';
-import { isZustandAvailable, getTransferGroups } from '../core/api-support.js';
+import { getTransferGroups } from '../utils/station-groups.js';
 import { Dropdown }                             from '../components/dropdown.jsx';
 import { DropdownItem }                         from '../components/dropdown-item.jsx';
 import { RouteBadge }                           from '../components/route-badge.jsx';
@@ -46,33 +46,18 @@ const COLOR_WORK_HOME  = '#ef4444'; // red-500
 const COLOR_AGGREGATOR = '#64748b'; // slate-500 — Boarding / Alighting aggregator nodes
 
 // ── Transfer Hub list hook ────────────────────────────────────────────────────
-// Zustand path  → station groups with 2+ stations.
-// Fallback path → stations that directly serve 2+ routes.
 
 function useTransferHubs() {
     const [hubs, setHubs] = React.useState([]);
 
     React.useEffect(() => {
         const compute = () => {
-            if (isZustandAvailable()) {
-                const groups = getTransferGroups();
-                setHubs(groups.map(g => ({
-                    id:         g.id,
-                    name:       g.name || g.id,
-                    stationIds: g.stationIds,
-                })));
-            } else {
-                const allStations = api.gameState.getStations();
-                setHubs(
-                    allStations
-                        .filter(s => s.routeIds?.length >= 2)
-                        .map(s => ({
-                            id:         s.id,
-                            name:       s.name || s.id,
-                            stationIds: [s.id],
-                        }))
-                );
-            }
+            const groups = getTransferGroups();
+            setHubs(groups.map(g => ({
+                id:         g.id,
+                name:       g.name || g.id,
+                stationIds: g.stationIds,
+            })));
         };
 
         compute();

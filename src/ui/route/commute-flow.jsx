@@ -12,15 +12,12 @@
 //   • The current route's RouteBadge in the legend is non-interactive.
 //   • The chart title is the selected station's name (not the group/hub name).
 //
-// Hub resolution:
-//   Zustand available → getGroupForStation(selectedId).stationIds (canonical)
-//   Fallback          → [selectedId] + any nearby transfer station IDs
-//                       (covers the nearbyStations walkingTime heuristic)
+// Hub resolution: getGroupForStation(selectedId).stationIds via gameState API
 
 import { CONFIG }                                      from '../../config.js';
 import { getRouteStationsInOrder }                     from '../../utils/route-utils.js';
 import { getStationTransferRoutes }                    from '../../utils/transfer-utils.js';
-import { isZustandAvailable, getGroupForStation }      from '../../core/api-support.js';
+import { getGroupForStation }                           from '../../utils/station-groups.js';
 import { useTransferFlowData, TransferSankey, TransferFlowLegend } from '../transfer-flow.jsx';
 import { Dropdown }                                    from '../../components/dropdown.jsx';
 import { DropdownItem }                                from '../../components/dropdown-item.jsx';
@@ -189,23 +186,9 @@ export function CommuteFlow({ routeId, externalStationId }) {
     }, [selectedId]);
 
     // ── Hub resolution ────────────────────────────────────────────────────────
-    // Zustand: use the full station group so all connecting routes are visible.
-    // Fallback: include the selected station + any nearby transfer station IDs
-    //           (nearbyStations walking-time heuristic).
     const stationIds = React.useMemo(() => {
         if (!selectedId) return [];
-
-        if (isZustandAvailable()) {
-            return getGroupForStation(selectedId)?.stationIds ?? [selectedId];
-        }
-
-        // Fallback: gather sibling station IDs via nearbyStations
-        const allStations = api.gameState.getStations();
-        const station     = allStations.find(s => s.id === selectedId);
-        const nearbyIds   = (station?.nearbyStations ?? [])
-            .filter(ns => ns.walkingTime < CONFIG.TRANSFER_WALKING_TIME_THRESHOLD)
-            .map(ns => ns.stationId);
-        return [selectedId, ...nearbyIds];
+        return getGroupForStation(selectedId)?.stationIds ?? [selectedId];
     }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const routesData     = useTransferFlowData(stationIds);

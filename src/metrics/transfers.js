@@ -1,10 +1,9 @@
 // Transfer calculation module
 // Calculates transfer connections between routes for the analytics table.
 //
-// Transfer detection (both paths):
-//   1. Shared station:    station.routeIds has more than one route → direct transfer
-//   2. Zustand primary:  getSiblingStationIds() → stations in the same group
-//   3. Fallback:         nearbyStations walkingTime heuristic
+// Transfer detection:
+//   1. Shared station:  station.routeIds has more than one route → direct transfer
+//   2. Station groups:  getSiblingStationIds() → stations in the same group (gameState API)
 //
 // Result shape per route:
 // {
@@ -15,10 +14,7 @@
 // }
 
 import { CONFIG } from '../config.js';
-import {
-    isZustandAvailable,
-    getSiblingStationIds,
-} from '../core/api-support.js';
+import { getSiblingStationIds } from '../utils/station-groups.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -32,13 +28,9 @@ import {
  * @returns {Object} Map of routeId -> { count, routes, routeIds, stationIds }
  */
 export function calculateTransfers(routes, api) {
-    return isZustandAvailable()
-        ? _calculateTransfersZustand(routes, api)
-        : _calculateTransfersFallback(routes, api);
+    return _calculateTransfers(routes, api);
 }
 
-// ---------------------------------------------------------------------------
-// Zustand-based implementation
 // ---------------------------------------------------------------------------
 
 /**
@@ -50,7 +42,7 @@ export function calculateTransfers(routes, api) {
  *
  * @private
  */
-function _calculateTransfersZustand(routes, api) {
+function _calculateTransfers(routes, api) {
     const allStations = api.gameState.getStations();
     const transferMap = {};
 
@@ -65,7 +57,7 @@ function _calculateTransfersZustand(routes, api) {
             // 1. Shared station: multiple routes stop here directly
             _addDirectRoutes(station, route.id, transfersByRoute);
 
-            // 2. Sibling stations in the same group (Zustand)
+            // 2. Sibling stations in the same group (gameState API)
             const siblingIds = getSiblingStationIds(station.id);
             siblingIds.forEach(sibId => {
                 const sibling = allStations.find(s => s.id === sibId);
@@ -89,55 +81,7 @@ function _calculateTransfersZustand(routes, api) {
 }
 
 // ---------------------------------------------------------------------------
-// Fallback: original nearbyStations walking-time heuristic
-// ---------------------------------------------------------------------------
-
-/**
- * Fallback implementation using nearbyStations walking-time heuristic.
- * Also handles shared stations (routeIds.length > 1) just like the Zustand path.
- *
- * @private
- */
-function _calculateTransfersFallback(routes, api) {
-    const allStations = api.gameState.getStations();
-    const THRESHOLD   = CONFIG.TRANSFER_WALKING_TIME_THRESHOLD;
-    const transferMap = {};
-
-    routes.forEach(route => {
-        const transfersByRoute = new Map();
-
-        allStations.forEach(station => {
-            if (!station.routeIds?.includes(route.id)) return;
-
-            // 1. Shared station: multiple routes stop here directly
-            _addDirectRoutes(station, route.id, transfersByRoute);
-
-            // 2. Nearby stations within walking threshold
-            station.nearbyStations?.forEach(nearby => {
-                if (nearby.walkingTime >= THRESHOLD) return;
-
-                const nearbyStation = allStations.find(s => s.id === nearby.stationId);
-                if (!nearbyStation?.routeIds) return;
-
-                nearbyStation.routeIds.forEach(otherRouteId => {
-                    if (otherRouteId === route.id) return;
-
-                    if (!transfersByRoute.has(otherRouteId)) {
-                        transfersByRoute.set(otherRouteId, new Set());
-                    }
-                    transfersByRoute.get(otherRouteId).add(station.id);
-                });
-            });
-        });
-
-        transferMap[route.id] = _buildResult(transfersByRoute, routes);
-    });
-
-    return transferMap;
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 /**

@@ -19,7 +19,7 @@ import { Dropdown } from '../../components/dropdown.jsx';
 import { DropdownItem } from '../../components/dropdown-item.jsx';
 import { RouteBadge } from '../../components/route-badge.jsx';
 import { PickerDialog, PICKER_THRESHOLD } from '../../components/picker-dialog.jsx';
-import { isZustandAvailable, getStationGroups } from '../../core/api-support.js';
+import { getStationGroups } from '../../utils/station-groups.js';
 import { getStorage } from '../../core/lifecycle.js';
 import { loadPrefs, savePrefs } from '../../hooks/useUIPreferences.js';
 
@@ -79,34 +79,23 @@ export function DashboardTrends({ historicalData, liveRouteData = [] }) {
     const routes = api.gameState.getRoutes();
 
     // ── Route PickerDialog data ──────────────────────────────────────────────
-    // Compute transfer-hub count per route using Zustand groups (preferred) or
-    // a direct station.routeIds check (fallback).  Also pulls live ridership.
+    // Compute transfer-hub count per route via station groups. Also pulls live ridership.
     const routePickerItems = React.useMemo(() => {
         const allStations = api.gameState.getStations();
         const transferCountByRoute = {};
 
-        if (isZustandAvailable()) {
-            getStationGroups().forEach(group => {
-                const routesInGroup = new Set();
-                group.stationIds.forEach(sid => {
-                    const s = allStations.find(st => st.id === sid);
-                    (s?.routeIds ?? []).forEach(rid => routesInGroup.add(rid));
+        getStationGroups().forEach(group => {
+            const routesInGroup = new Set();
+            group.stationIds.forEach(sid => {
+                const s = allStations.find(st => st.id === sid);
+                (s?.routeIds ?? []).forEach(rid => routesInGroup.add(rid));
+            });
+            if (routesInGroup.size >= 2) {
+                routesInGroup.forEach(rid => {
+                    transferCountByRoute[rid] = (transferCountByRoute[rid] ?? 0) + 1;
                 });
-                if (routesInGroup.size >= 2) {
-                    routesInGroup.forEach(rid => {
-                        transferCountByRoute[rid] = (transferCountByRoute[rid] ?? 0) + 1;
-                    });
-                }
-            });
-        } else {
-            allStations.forEach(s => {
-                if ((s.routeIds?.length ?? 0) >= 2) {
-                    s.routeIds.forEach(rid => {
-                        transferCountByRoute[rid] = (transferCountByRoute[rid] ?? 0) + 1;
-                    });
-                }
-            });
-        }
+            }
+        });
 
         return routes.map(r => ({
             id:            r.id,
