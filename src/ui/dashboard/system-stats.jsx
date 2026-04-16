@@ -258,7 +258,7 @@ export function SystemStats({ liveRouteData }) {
                         {getCityName(api.utils.getCityCode())}
                     </div>
                     <div className={'text-xs text-muted-foregound'}>
-                        Day {api.gameState.getCurrentDay() + 1}
+                        Day {api.gameState.getCurrentDay()}
                         {getCurrentPhaseName() && (
                             <span className={'text-xs text-muted-foreground ml-1'}>
                                 - {getCurrentPhaseName()}

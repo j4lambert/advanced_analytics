@@ -349,6 +349,17 @@ export class Storage {
     }
 
     /**
+     * Apply a transformation function to the saves metadata object.
+     * Used by data migrations that need to patch fields (e.g. day offsets).
+     * @param {Function} fn - Receives the metadata object; mutate it in place.
+     */
+    static async patchAllSavesMeta(fn) {
+        const meta = await _getMeta();
+        fn(meta);
+        await _setMeta(meta);
+    }
+
+    /**
      * Delete a specific save and all its associated IDB keys.
      * @param {string} saveName
      */

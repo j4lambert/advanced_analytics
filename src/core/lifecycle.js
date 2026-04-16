@@ -168,10 +168,11 @@ async function _pruneFutureHistoricalData(storage, api) {
         let   pruned         = false;
 
         for (const day of Object.keys(historicalData.days)) {
-            // Use strict greater-than: the current day may already have a completed
-            // snapshot (onDayChange fires before getCurrentDay() advances), so we
-            // must NOT prune it.  Only days strictly beyond currentDay are future
-            // data that can appear after a save-rewind.
+            // Use strict greater-than: getCurrentDay() returns the current UI day
+            // (fixed in game v1.3.0 — it now advances before the onDayChange callback
+            // runs). The last completed snapshot key equals getCurrentDay()-1, so
+            // the condition > currentDay correctly keeps all completed snapshots and
+            // prunes only genuine future-day data that can appear after a save-rewind.
             if (parseInt(day) > currentDay) {
                 delete historicalData.days[day];
                 pruned = true;
@@ -416,6 +417,16 @@ async function _runMigrations(saveName, storageInstance) {
         }
         // ────────────────────────────────────────────────────────────────────
 
+        // ── v1.4.5: shift day-indexed data from elapsed-day (0-based) to ────
+        // UI-day (1-based) now that getCurrentDay() is fixed in game v1.3.0.
+        // Affects: configCache keys, routeStatuses.createdDay/deletedDay,
+        // and the meta::saves.day field used by _findMatchingSave.
+        // historicalData.days keys are unchanged (always onDayChange arg).
+        if (!storedVersion || _compareVersions(storedVersion, '1.4.5') < 0) {
+            await _migrateV130(storageInstance);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         console.log(`${CONFIG.LOG_PREFIX} [Migration] ${storedVersion ?? 'pre-versioning'} → ${__MOD_VERSION__}`);
     } catch (e) {
         console.error(`${CONFIG.LOG_PREFIX} [Migration] Failed:`, e);
@@ -447,6 +458,49 @@ async function _migrateLoadFactorV1_2_8(storageInstance) {
     if (changed) {
         await storageInstance.set('historicalData', historicalData);
         console.log(`${CONFIG.LOG_PREFIX} [Migration v1.2.8] Cleared stale loadFactor values from historical snapshots.`);
+    }
+}
+
+/**
+ * v1.4.5 migration: shift day-indexed IDB data from elapsed-day (0-based) to
+ * UI-day (1-based) after game v1.3.0 fixed getCurrentDay().
+ *
+ * Three stores are affected:
+ *   configCache        — shift all top-level integer keys by +1
+ *   routeStatuses      — increment createdDay and deletedDay by +1
+ *   meta::saves.day    — increment by +1 (via Storage.patchAllSavesMeta)
+ *
+ * historicalData.days keys are NOT migrated — they were always the raw
+ * onDayChange arg, whose numeric value has not changed.
+ */
+async function _migrateV130(storageInstance) {
+    try {
+        // a) configCache keys
+        const configCache = await storageInstance.get('configCache', {});
+        const shiftedCache = {};
+        for (const [key, val] of Object.entries(configCache)) {
+            shiftedCache[parseInt(key, 10) + 1] = val;
+        }
+        await storageInstance.set('configCache', shiftedCache);
+
+        // b) routeStatuses createdDay / deletedDay
+        const statuses = await storageInstance.get('routeStatuses', {});
+        for (const s of Object.values(statuses)) {
+            if (s.createdDay != null) s.createdDay += 1;
+            if (s.deletedDay  != null) s.deletedDay  += 1;
+        }
+        await storageInstance.set('routeStatuses', statuses);
+
+        // c) meta::saves.day (global, not per-save)
+        await Storage.patchAllSavesMeta(meta => {
+            for (const entry of Object.values(meta)) {
+                if (entry.day != null) entry.day += 1;
+            }
+        });
+
+        console.log(`${CONFIG.LOG_PREFIX} [Migration v1.4.5] Shifted day-indexed data to UI-day (getCurrentDay fix).`);
+    } catch (e) {
+        console.error(`${CONFIG.LOG_PREFIX} [Migration v1.4.5] Failed:`, e);
     }
 }
 

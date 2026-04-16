@@ -124,9 +124,14 @@ export function getDataForDay(day, historicalData) {
  * @returns {number} Cumulative profit (can be negative)
  */
 export function getRouteLifetimeProfit(routeId, createdDay, historicalData, currentDay) {
-    // Snapshots are stored under the key of the *new* day — i.e. the snapshot
-    // captured when day N ends is written to days[N+1]. So completed-day data
-    // for a route created on `createdDay` lives in days[createdDay+1 … currentDay].
+    // Key convention (game v1.3.0+): onDayChange(N) fires with N = the day that
+    // just closed. captureHistoricalData stores the snapshot at days[N], so
+    // days[N] holds data for game day N.
+    //
+    // createdDay is stored as getCurrentDay() at route creation (UI day, 1-based).
+    // The route's first *full* day snapshot lives at days[createdDay+1] (the day
+    // after creation). The upper bound currentDay is the in-progress day whose
+    // key doesn't exist yet and is gracefully skipped by the null-check below.
     let total = 0;
     for (let day = createdDay + 1; day <= currentDay; day++) {
         const dayData = historicalData?.days[day];

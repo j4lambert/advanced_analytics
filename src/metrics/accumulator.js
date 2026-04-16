@@ -289,12 +289,13 @@ function _computeStatsForWindow(routeId, cutoff, now) {
     let scheduleChangedRecently  = false;
 
     if (trainType) {
-        const day = Math.floor(now / 86400);
+        const elapsedDay       = Math.floor(now / 86400);   // seconds-based, for time-window math only
+        const currentDay       = _api.gameState.getCurrentDay(); // UI day key, matches configCache
 
         // scheduleChangedRecently: kept for backward compat in historical snapshots.
-        const dayHistory       = _configCacheSnapshot[day]?.[routeId]       || null;
-        const yesterdayHistory = _configCacheSnapshot[day - 1]?.[routeId]   || null;
-        const todayStart       = day * 86400;
+        const dayHistory       = _configCacheSnapshot[currentDay]?.[routeId]     || null;
+        const yesterdayHistory = _configCacheSnapshot[currentDay - 1]?.[routeId] || null;
+        const todayStart       = elapsedDay * 86400;
         const yesterdayStart   = todayStart - 86400;
         const hasRecentChange  = (timeline, baselineSec) =>
             Array.isArray(timeline) &&
@@ -451,7 +452,7 @@ function _tick() {
     // ── Schedule change detection ────────────────────────────────────────
     const currentHour   = Math.floor((elapsed % 86400) / 3600);
     const currentMinute = Math.floor((elapsed % 3600) / 60);
-    const day           = Math.floor(elapsed / 86400);
+    const day           = _api.gameState.getCurrentDay();
 
     for (const route of routes) {
         const s = route.trainSchedule;

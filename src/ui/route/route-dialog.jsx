@@ -448,7 +448,7 @@ export function RouteContent({ routeId }) {
                                         <span className="text-muted-foreground">
                                             Created&nbsp;
                                             <span className="text-foreground font-medium">
-                                                Day {data.routeInfo.createdDay + 1}
+                                                Day {data.routeInfo.createdDay}
                                             </span>
                                         </span>
                                         {data.routeInfo.daysInService != null && (
