@@ -10,6 +10,7 @@ import { getRoute24hStats } from './metrics/accumulator.js';
 import { computeSystemAggregates } from './metrics/system-aggregates.js';
 import { injectStyles } from './assets/styles.js';
 import { AnalyticsPanel } from './ui/analytics-panel.jsx';
+import { TopBar }         from './ui/topbar/topbar.jsx';
 import { Panel }           from './ui/panel.jsx';
 import { PortalHost }   from './hooks/portal-host.jsx';
 
@@ -70,6 +71,13 @@ const AdvancedAnalytics = {
         // Setup game initialization hook
         function registerUI() {
             injectStyles();
+
+            // Persistent compact metrics bar — always visible at the top of
+            // the viewport, centered between the game's left/right chrome.
+            api.ui.registerComponent('top-bar', {
+                id: 'aa-topbar',
+                component: TopBar
+            });
 
             // Single panel — manages both the dashboard and route views.
             // Replaces the previous Dashboard + RouteDialog dual-panel system.

@@ -2,7 +2,9 @@
 // Injects custom styles for the analytics panel
 
 export function injectStyles() {
-    const style = document.createElement('style');
+    const existing = document.getElementById('aa-stylesheet');
+    const style = existing ?? document.createElement('style');
+    style.id = 'aa-stylesheet';
     style.textContent = `
         /* ===== General ==================================================== */
         html.dark .aa-dialog-dialog, html.dark #aa-panel,
@@ -66,6 +68,24 @@ export function injectStyles() {
             min-width: 900px;
         }
            
+        /* ===== Top Bar ==================================================== */
+        .aa-topbar-bar {
+        }
+
+        html.dark .aa-topbar-bar {
+            color-scheme: dark;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+
+        .aa-topbar-chip {
+            border-radius: calc(var(--radius) - 2px);
+            transition: background-color 150ms ease;
+        }
+
+        .aa-topbar-chip:hover {
+            background-color: hsl(var(--accent));
+        }
+
         /* ===== Charts ===================================================== */
         html .aa-chart [fill="#ccc"] {
             fill: #000!important;
@@ -77,5 +97,5 @@ export function injectStyles() {
             opacity: 0.05;
         }
     `;
-    document.head.appendChild(style);
+    if (!existing) document.head.appendChild(style);
 }

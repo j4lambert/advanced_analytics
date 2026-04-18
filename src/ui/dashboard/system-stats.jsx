@@ -280,27 +280,33 @@ export function SystemStats({ liveRouteData }) {
 
                 {/* Load Factor */}
                 <div className="rounded border border-border bg-muted/20 px-4 py-3 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider">
-                            System Load Factor
-                        </p>
+                    <div className="flex gap-3">
+                        <icons.Gauge size={22} className="shrink-0" />
+                        <div className="flex flex-col gap-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider">
+                                System Load Factor
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1 pb-3">
+                                Ridership-weighted avg. peak segment load
+                            </p>
+                        </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 pb-3">
-                        Ridership-weighted avg. peak segment load
-                    </p>
                     <LoadFactorBar pct={stats.loadFactor} />
                 </div>
 
                 {/* Network Health Score */}
                 <div className="rounded border border-border bg-muted/20 px-4 py-3">
-                    <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider">
-                            Network Health Score
-                        </p>
+                    <div className="flex gap-3">
+                        <icons.HeartPulse size={22} className="shrink-0" />
+                        <div className="flex flex-col gap-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider">
+                                Network Health Score
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1 pb-3">
+                                Ridership-weighted load factor quality (0–100)
+                            </p>
+                        </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 pb-3">
-                        Ridership-weighted load factor quality (0–100)
-                    </p>
                     <div className="flex items-center gap-4">
                         <div className="w-28 shrink-0">
                             <GaugeArc score={stats.healthScore} />

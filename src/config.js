@@ -53,6 +53,11 @@ export const CONFIG = {
     TRANSFER_WALKING_TIME_THRESHOLD: 100,  // seconds
     
     COLORS: {
+        TEXT: {
+            SUCCESS: 'text-green-600 dark:text-green-400',
+            WARNING: 'text-orange-500 dark:text-orange-400',
+            DANGER: 'text-red-600 dark:text-red-400',
+        },
         // Train Schedule Colors (Labels only)
         TRAINS: {
             HIGH: 'text-red-600 dark:text-red-400',
