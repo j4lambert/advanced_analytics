@@ -43,7 +43,8 @@ export function Dialog({ id, title, backdropClasses, children, isOpen, onClose, 
                     {/* Header */}
                     <div className="aa-dialog-dialog-header bg-background flex flex-col space-y-1.5 text-center sm:text-left px-6 py-4 border-b h-fit">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold leading-none tracking-tight">
+                            <h2 className="flex items-center text-lg font-semibold leading-none tracking-tight">
+                                <icons.Eclipse size={16} className="shrink-0 mr-2" />
                                 {title}
                             </h2>
                             <button

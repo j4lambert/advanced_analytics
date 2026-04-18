@@ -45,6 +45,7 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
     if (view === 'dashboard') {
         return (
             <span className="flex items-center gap-1.5">
+                <icons.Eclipse size={14} className="shrink-0" />
                 <span className="text-muted-foreground text-xs">Advanced Analytics</span>
                 <span class="border-foreground/20 border-r py-20 mx-4"/>
                 <span className="text-xs text-muted-foreground">Dashboard</span>
@@ -56,6 +57,7 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
 
     return (
         <span className="flex items-center gap-1.5">
+            <icons.Eclipse size={14} className="shrink-0" />
             <span className="text-muted-foreground text-xs">Advanced Analytics</span>
             <span class="border-foreground/20 border-r py-20 mx-4"/>
 
