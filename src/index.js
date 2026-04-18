@@ -100,8 +100,8 @@ const AdvancedAnalytics = {
 
             api.ui.addButton('bottom-bar', {
                 id: 'advanced-analytics-btn',
-                label: 'AA Dashboard',
-                icon: 'ChartPie',
+                label: 'Dashboard',
+                icon: 'Eclipse',
                 onClick: () => {
                     if (window.AdvancedAnalytics.toggleDialog) {
                         window.AdvancedAnalytics.toggleDialog();
@@ -112,7 +112,7 @@ const AdvancedAnalytics = {
             api.ui.addFloatingPanel({
                 id: 'advanced-analytics-lite',
                 title: 'Advanced Analytics',
-                icon: 'ChartPie',
+                icon: 'Eclipse',
                 width: 640,
                 render: Panel
             });
