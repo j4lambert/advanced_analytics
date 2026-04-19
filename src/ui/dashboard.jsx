@@ -30,7 +30,7 @@ const { React, icons } = api.utils;
 export function DashboardContent({ liveRouteData, historicalData }) {
     return (
         <>
-            <section className="flex items-center gap-2 border-b px-6">
+            <section className="sticky z-10 top-0 backdrop-blur bg-background/50 flex items-center gap-2 border-b px-6">
                 <GuideTrigger/>
                 <span className="border-foreground/20 border-r py-5"/>
                 <AboutTrigger/>

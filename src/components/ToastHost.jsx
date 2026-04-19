@@ -6,7 +6,7 @@ const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
 
 const CloseButton = ({ closeToast }) => (
-    <span className="absolute mb-auto ml-auto right-2 shrink-0 top-2" onClick={closeToast}>
+    <span className="absolute mb-auto ml-auto right-2 shrink-0 top-2 cursor-pointer" onClick={closeToast}>
         {React.createElement(icons.X, { size: 16 })}
     </span>
 );
