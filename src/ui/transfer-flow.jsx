@@ -544,15 +544,15 @@ export function TransferFlowLegend({ routesData, hoveredRouteId, onHover, onLeav
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-muted-foreground">
             {/* Journey-type swatches */}
             <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_HOME_WORK }} />
+                <div className="w-3 h-3 rounded-[2px]" style={{ background: COLOR_HOME_WORK }} />
                 <span>Home → Work</span>
             </div>
             <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_WORK_HOME }} />
+                <div className="w-3 h-3 rounded-[2px]" style={{ background: COLOR_WORK_HOME }} />
                 <span>Work → Home</span>
             </div>
             <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: COLOR_AGGREGATOR }} />
+                <div className="w-3 h-3 rounded-[2px]" style={{ background: COLOR_AGGREGATOR }} />
                 <span>Boarding / Alighting</span>
             </div>
 

@@ -574,7 +574,7 @@ export function RouteContent({ routeId }) {
             {/* ── Route Metrics chart ── */}
             <div className="pt-8">
                 <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Route Metrics</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">Route Metrics</h3>
                     <p className="text-xs text-muted-foreground mt-1">Historical trends for key performance indicators</p>
                 </div>
                 <RouteMetrics routeId={routeId} />
@@ -583,7 +583,7 @@ export function RouteContent({ routeId }) {
             {/* ── Timetable Analysis ── */}
             <div className="pt-8">
                 <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Realtime Timetable Analysis</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">Realtime Timetable Analysis</h3>
                     <p className="text-xs text-muted-foreground mt-1">Per-stop delay and dwell, averaged across completed laps today</p>
                 </div>
                 <TimetableCharts routeId={routeId} accum={data.timetableAccum} />
@@ -593,7 +593,7 @@ export function RouteContent({ routeId }) {
             {/* ── Station Flow chart ── */}
             <div className="pt-8">
                 <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Stations Flow</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">Stations Flow</h3>
                 </div>
                 <StationFlow routeId={routeId} onStationClick={handleStationClick} />
             </div>
@@ -601,7 +601,7 @@ export function RouteContent({ routeId }) {
             {/* ── Commute Flow chart ── */}
             <div ref={commuteFlowRef} className="pt-8">
                 <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Commute Flows</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">Commute Flows</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                         Completed commuter journeys boarding and alighting at each station
                     </p>

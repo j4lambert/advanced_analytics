@@ -68,7 +68,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
             {/* Chart Section — receives both historical and live data */}
             <section className="py-6 px-6">
                 <div className="py-5">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Historical Trends</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">Historical Trends</h3>
                 </div>
                 <DashboardTrends
                     historicalData={historicalData}
@@ -79,7 +79,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
             {/* Transfer Hub Flow */}
             <section className="py-6 px-6">
                 <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Transfer Hub Flow</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">Transfer Hub Flow</h3>
                     <p className="text-xs text-muted-foreground mt-1">Passenger flows through interchange stations</p>
                 </div>
                 <TransferFlow />
@@ -88,7 +88,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
             {/* System Map */}
             <section className="py-6 px-6">
                 <div className="py-5 flex items-baseline gap-3">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">System Map</h3>
+                    <h3 className="text-xl font-semibold leading-none tracking-tight">System Map</h3>
                     <p className="text-xs text-muted-foreground mt-1">Network schematic map</p>
                 </div>
                 <DashboardMap />

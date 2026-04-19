@@ -218,15 +218,17 @@ function LoadFactorBar({ pct }) {
 
 // ── Stat chip ─────────────────────────────────────────────────────────────────
 
-function StatChip({ Icon, label, value }) {
+function StatChip({ Icon, label, value, daily = false }) {
     return (
-        <div className="flex gap-2 px-3 py-2 rounded border border-border bg-muted/20">
-            {Icon && <Icon size={13} className="shrink-0" />}
-            <div className="leading-none">
+        <div className="flex gap-2 pl-3 pr-4 py-2 rounded border border-border bg-muted/20">
+            {Icon && <Icon size={13} className="shrink-0 mt-0.5" />}
+            <div className="leading-none mt-0.5">
                 <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
                     {label}
                 </div>
-                <div className="text-sm font-semibold tabular-nums">{value}</div>
+                <div className="text-sm font-semibold tabular-nums">
+                    {value} { daily && (<span className={`text-[0.7rem] font-medium text-muted-foreground`}>/day</span>)}
+                </div>
             </div>
         </div>
     );
@@ -254,7 +256,7 @@ export function SystemStats({ liveRouteData }) {
             <div className="flex gap-4">
                 {/* ── Stat chips ─────────────────────────────────────────────── */}
                 <div className="mr-auto">
-                    <div className={'leading-none mb-1.5 text-lg'}>
+                    <div className={'whitespace-nowrap text-xl font-semibold tracking-tight leading-none mb-1.5'}>
                         {getCityName(api.utils.getCityCode())}
                     </div>
                     <div className={'text-xs text-muted-foregound'}>
@@ -267,11 +269,11 @@ export function SystemStats({ liveRouteData }) {
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <StatChip Icon={icons.Route}     label="Routes"    value={stats.totalLines} />
-                    <StatChip Icon={icons.TramFront} label="Trains"    value={stats.totalTrains.toLocaleString()} />
-                    <StatChip Icon={icons.Component} label="Hubs"      value={stats.hubCount} />
-                    <StatChip Icon={icons.Users}     label="Ridership" value={`${Math.round(stats.totalRidership).toLocaleString()} / day`} />
-                    <StatChip Icon={icons.TrendingUp} label="Revenue"  value={`${formatCurrencyCompact(stats.totalRevenue)} / day`} />
+                    <StatChip Icon={icons.Route}      label="Routes"    value={stats.totalLines} />
+                    <StatChip Icon={icons.TramFront}  label="Trains"    value={stats.totalTrains.toLocaleString()} />
+                    <StatChip Icon={icons.Component}  label="Hubs"      value={stats.hubCount} />
+                    <StatChip Icon={icons.Users}      label="Ridership" value={Math.round(stats.totalRidership).toLocaleString()} daily={true} />
+                    <StatChip Icon={icons.TrendingUp} label="Revenue"   value={formatCurrencyCompact(stats.totalRevenue)} daily={true} />
                 </div>
             </div>
 
