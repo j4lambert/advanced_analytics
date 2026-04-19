@@ -15,10 +15,16 @@ import { Panel }           from './ui/panel.jsx';
 import { PortalHost }   from './hooks/portal-host.jsx';
 import { ToastHost }    from './components/ToastHost.jsx';
 import { notify, notifyDialog } from './hooks/toast.js';
+import { DebugPanel } from './ui/debug/DebugPanel.jsx';
+import { showChangelogIfNeeded } from './ui/changelog/ChangelogToast.jsx';
 
 // Debug: revenue fluctuation debug
 import { startRevenueDebug } from './debug/revenue-debug.js';
 const DEBUG_REVENUE = false;
+
+// Set via "debug" key in package.json — injected at build time.
+// When true, registers the debug floating panel.
+const DEBUG = __DEBUG__;
 
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
@@ -125,6 +131,16 @@ const AdvancedAnalytics = {
                 width: 640,
                 render: Panel
             });
+
+            if (DEBUG) {
+                api.ui.addFloatingPanel({
+                    id: 'advanced-analytics-debug',
+                    title: 'AA Debug',
+                    icon: 'Bug',
+                    width: 320,
+                    render: DebugPanel
+                });
+            }
         }
 
         api.hooks.onMapReady(() => {
@@ -136,6 +152,7 @@ const AdvancedAnalytics = {
             }
 
             registerUI();
+            showChangelogIfNeeded();
 
             // Debug Revenues
             if (DEBUG_REVENUE) {

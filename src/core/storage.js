@@ -471,6 +471,28 @@ export class Storage {
     }
 
     /**
+     * Read a value from a global (non-save-specific) IDB slot.
+     * Used for cross-save flags like the changelog-seen version.
+     * @param {string} key
+     * @param {*} defaultValue
+     * @returns {Promise<*>}
+     */
+    static async getGlobal(key, defaultValue = null) {
+        const value = await _idbGet(`global::${key}`);
+        return value !== null ? value : defaultValue;
+    }
+
+    /**
+     * Write a value to a global (non-save-specific) IDB slot.
+     * @param {string} key
+     * @param {*} value
+     * @returns {Promise<void>}
+     */
+    static async setGlobal(key, value) {
+        return _idbSet(`global::${key}`, value);
+    }
+
+    /**
      * Estimate IndexedDB usage (Chrome/Electron only).
      * @returns {Promise<{usedMB: string, quotaMB: string, pct: string}|null>}
      */

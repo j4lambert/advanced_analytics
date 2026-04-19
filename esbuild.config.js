@@ -1,5 +1,6 @@
 const esbuild = require('esbuild');
 const { version } = require('./manifest.json');
+const { debug }   = require('./package.json');
 
 // Check if --watch flag is present
 const isWatch = process.argv.includes('--watch');
@@ -21,6 +22,7 @@ const buildOptions = {
   // the literal string at build time. To bump the version, edit package.json only.
   define: {
     __MOD_VERSION__: JSON.stringify(version),
+    __DEBUG__:       JSON.stringify(debug ?? false),
   },
   alias: {
     'react': './src/react-shim.js',

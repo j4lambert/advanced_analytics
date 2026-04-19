@@ -38,7 +38,7 @@ export function ToastHost() {
             draggable:    false,
             transition:   Flip,
             theme:        'dark',
-            className:    'aa-dialog-container',
+            className:    'aa-dialog-container top-14',
         }),
     );
 }
