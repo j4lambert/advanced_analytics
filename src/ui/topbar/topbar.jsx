@@ -14,7 +14,7 @@
 //   window.AdvancedAnalytics.topBar.openSettings()           — open dialog
 //   renderFn signature: (metrics: AggregateObject | null) => ReactElement
 
-import { Dialog }                  from '../../components/dialog.jsx';
+import { SettingsDialog }          from '../settings/settings-dialog.jsx';
 import { Tooltip }                 from '../../components/tooltip.jsx';
 import { getStorage }              from '../../core/lifecycle.js';
 import { getRoute24hStats }        from '../../metrics/accumulator.js';
@@ -101,70 +101,15 @@ function MetricChip({ value, unit, label, color, Icon, onClick, tooltipTitle, to
     return chip;
 }
 
-// ── Settings dialog ───────────────────────────────────────────────────────────
-
-function TopBarSettingsDialog({ isOpen, onClose, showLoadFactor, showPerformance,
-                                onToggleLoadFactor, onTogglePerformance }) {
-    const checkboxWrapperClasses = "relative inline-flex items-center cursor-pointer";
-    const checkboxBgClasses = "w-8 h-4 border-2 border-transparent rounded-full transition-colors peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ring peer-focus:ring-offset-2 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 hover:bg-primary/80"
-    const checkboxCircleClasses = "absolute top-0.5 w-3 h-3 bg-background rounded-full transition-all";
-    return (
-        <Dialog
-            id="aa-topbar-settings"
-            title="Settings"
-            isOpen={isOpen}
-            onClose={onClose}
-            size="360px"
-        >
-            <div className="space-y-4">
-                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
-                    Top Bar
-                </p>
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                    <div className={checkboxWrapperClasses}>
-                        <input
-                            type="checkbox"
-                            checked={showLoadFactor}
-                            onChange={onToggleLoadFactor}
-                            className="sr-only"
-                        />
-                        <div className={`${checkboxBgClasses} ${showLoadFactor ? "bg-primary" : "bg-input"}`}/>
-                        <div
-                            className={`${checkboxCircleClasses} ${showLoadFactor ? "" : "left-0.5"}`}
-                            style={{right: showLoadFactor ? "0.125rem" : "auto" }}
-                        />
-                    </div>
-                    <span className="text-sm">System Load Factor</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                    <div className={checkboxWrapperClasses}>
-                        <input
-                            type="checkbox"
-                            checked={showPerformance}
-                            onChange={onTogglePerformance}
-                            className="sr-only"
-                        />
-                        <div className={`${checkboxBgClasses} ${showPerformance ? "bg-primary" : "bg-input"}`}/>
-                        <div
-                            className={`${checkboxCircleClasses} ${showPerformance ? "" : "left-0.5"}`}
-                            style={{right: showPerformance ? "0.125rem" : "auto" }}
-                        />
-                    </div>
-                    <span className="text-sm">Network Health Score</span>
-                </label>
-            </div>
-        </Dialog>
-    );
-}
-
 // ── Root component ────────────────────────────────────────────────────────────
 
 export function TopBar() {
-    const [metrics,         setMetrics]         = React.useState(null);
-    const [isSettingsOpen,  setIsSettingsOpen]  = React.useState(false);
-    const [showLoadFactor,  setShowLoadFactor]  = React.useState(true);
-    const [showPerformance, setShowPerformance] = React.useState(true);
-    const [extChips,        setExtChips]        = React.useState(new Map());
+    const [metrics,           setMetrics]           = React.useState(null);
+    const [isSettingsOpen,    setIsSettingsOpen]    = React.useState(false);
+    const [isTopbarElevated,  setIsTopbarElevated]  = React.useState(false);
+    const [showLoadFactor,    setShowLoadFactor]    = React.useState(true);
+    const [showPerformance,   setShowPerformance]   = React.useState(true);
+    const [extChips,          setExtChips]          = React.useState(new Map());
 
     const storage        = getStorage();
     const prefsSaveable  = React.useRef(false);
@@ -227,24 +172,32 @@ export function TopBar() {
     const hasBuiltinChips = metrics && (showLoadFactor || showPerformance);
     const hasExtChips     = extChips.size > 0;
 
+    function handleClose() {
+        setIsSettingsOpen(false);
+        setIsTopbarElevated(false);
+    }
+
+    const settingsDialog = (
+        <SettingsDialog
+            isOpen={isSettingsOpen}
+            onClose={handleClose}
+            showLoadFactor={showLoadFactor}
+            showPerformance={showPerformance}
+            onToggleLoadFactor={() => setShowLoadFactor(v => !v)}
+            onTogglePerformance={() => setShowPerformance(v => !v)}
+            onTopbarSectionHover={setIsTopbarElevated}
+        />
+    );
+
     if (!hasBuiltinChips && !hasExtChips) {
         // Still render the Settings dialog even when the bar is hidden,
         // so the cog button in the dashboard remains functional.
-        return (
-            <TopBarSettingsDialog
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                showLoadFactor={showLoadFactor}
-                showPerformance={showPerformance}
-                onToggleLoadFactor={() => setShowLoadFactor(v => !v)}
-                onTogglePerformance={() => setShowPerformance(v => !v)}
-            />
-        );
+        return settingsDialog;
     }
 
     return (
         <>
-            <section className="aa-topbar-wrapper overflow-visible flex justify-center fixed top-0 pt-2 left-0 w-full pointer-events-none gap-2">
+            <section className={`aa-topbar-wrapper overflow-visible flex justify-center fixed top-0 pt-2 left-0 w-full pointer-events-none gap-2${isTopbarElevated ? ' z-[1000]' : ''}`}>
                 <div className="aa-topbar-bar bg-background border rounded-lg flex gap-1 p-2 pointer-events-auto">
 
                     {/* Load Factor chip */}
@@ -295,14 +248,7 @@ export function TopBar() {
                 </div>
             </section>
 
-            <TopBarSettingsDialog
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                showLoadFactor={showLoadFactor}
-                showPerformance={showPerformance}
-                onToggleLoadFactor={() => setShowLoadFactor(v => !v)}
-                onTogglePerformance={() => setShowPerformance(v => !v)}
-            />
+            {settingsDialog}
         </>
     );
 }

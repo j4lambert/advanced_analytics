@@ -11,7 +11,7 @@ import { StaticPanel } from '../components/static-panel';
 import { AboutTrigger } from './about/about-trigger.jsx';
 import { GuideTrigger } from './guide/guide-trigger.jsx';
 import { StorageTrigger } from './storage/storage-trigger.jsx';
-import { TopBarSettingsTrigger } from './topbar/topbar-settings-trigger.jsx';
+import { SettingsDialogTrigger } from './settings/settings-dialog-trigger.jsx';
 import { SystemStats } from './dashboard/system-stats.jsx';
 import { DashboardTable } from './dashboard/dashboard-table.jsx';
 import { DashboardTrends } from './dashboard/dashboard-trends.jsx';
@@ -52,7 +52,7 @@ export function DashboardContent({ liveRouteData, historicalData }) {
                     )}
                     <span className="border-foreground/20 border-r ml-2 mr-2 py-5"/>
                     <StorageTrigger/>
-                    <TopBarSettingsTrigger/>
+                    <SettingsDialogTrigger/>
                 </div>
             </section>
 
