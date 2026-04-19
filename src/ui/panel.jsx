@@ -77,15 +77,13 @@ export function Panel() {
             {/* Status indicator */}
             <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
                 <GuideTrigger/>
-                <Tooltip content="Open the full analytics dialog with all metrics" side="left" delayDuration={300}>
-                    <button
-                        onClick={() => window.AdvancedAnalytics?.openDialog?.()}
-                        className="inline-flex items-center justify-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground text-xs"
-                    >
-                        <icons.SquareArrowOutUpRight size={16} className="mr-2" />
-                        Dashboard
-                    </button>
-                </Tooltip>
+                <button
+                    onClick={() => window.AdvancedAnalytics?.openDialog?.()}
+                    className="inline-flex items-center justify-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground text-xs"
+                >
+                    <icons.SquareArrowOutUpRight size={16} className="mr-2" />
+                    Dashboard
+                </button>
             </div>
             
             {/* Table */}
