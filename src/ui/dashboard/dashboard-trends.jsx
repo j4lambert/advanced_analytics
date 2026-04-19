@@ -70,7 +70,7 @@ function buildTodayPoint(liveRouteData, metricKey) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function DashboardTrends({ historicalData, liveRouteData = [] }) {
-    const [chartType,       setChartType]       = React.useState('line');
+    const [chartType,       setChartType]       = React.useState('bar');
     const [selectedRoutes,  setSelectedRoutes]  = React.useState([]);
     const [selectedMetric,  setSelectedMetric]  = React.useState('loadFactor');
     const [timeframe,       setTimeframe]        = React.useState('7');

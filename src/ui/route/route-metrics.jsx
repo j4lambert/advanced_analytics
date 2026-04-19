@@ -160,7 +160,7 @@ function useRouteMetricsData(routeId) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function RouteMetrics({ routeId }) {
-    const [chartType,       setChartType]       = React.useState('line');
+    const [chartType,       setChartType]       = React.useState('bar');
     const [selectedMetrics, setSelectedMetrics] = React.useState(DEFAULT_METRICS);
     const [timeframe,       setTimeframe]       = React.useState('7');
 
