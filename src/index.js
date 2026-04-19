@@ -13,6 +13,8 @@ import { AnalyticsPanel } from './ui/analytics-panel.jsx';
 import { TopBar }         from './ui/topbar/topbar.jsx';
 import { Panel }           from './ui/panel.jsx';
 import { PortalHost }   from './hooks/portal-host.jsx';
+import { ToastHost }    from './components/ToastHost.jsx';
+import { notify, notifyDialog } from './hooks/toast.js';
 
 // Debug: revenue fluctuation debug
 import { startRevenueDebug } from './debug/revenue-debug.js';
@@ -26,6 +28,8 @@ const AdvancedAnalytics = {
     api,
     config: CONFIG,
     initialized: false,
+    notify,
+    notifyDialog,
 
     getNetworkMetrics() {
         const routes = api.gameState.getRoutes() ?? [];
@@ -96,6 +100,11 @@ const AdvancedAnalytics = {
             api.ui.registerComponent('top-bar', {
                 id: 'aa-portal-host',
                 component: PortalHost
+            });
+
+            api.ui.registerComponent('top-bar', {
+                id: 'aa-toast-host',
+                component: ToastHost
             });
 
             api.ui.addButton('bottom-bar', {

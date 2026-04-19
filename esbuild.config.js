@@ -22,6 +22,9 @@ const buildOptions = {
   define: {
     __MOD_VERSION__: JSON.stringify(version),
   },
+  alias: {
+    'react': './src/react-shim.js',
+  },
   external: [],
   minify: false,
   sourcemap: false,
