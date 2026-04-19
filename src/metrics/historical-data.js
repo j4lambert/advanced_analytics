@@ -3,7 +3,74 @@
 
 import { CONFIG } from '../config.js';
 import { calculateDailyCostFromTimeline } from './train-config-tracking.js';
-import { getRouteTodayStats } from './accumulator.js';
+import { getRouteTodayStats, getTimetableAccum } from './accumulator.js';
+import { getRouteStationsInOrder } from '../utils/route-utils.js';
+import { getGroupForStation } from '../utils/station-groups.js';
+
+/**
+ * Compute a system-wide timetable adherence snapshot from the current accumulators.
+ * Called just before resetTimetableAccum() so the day's data is still in memory.
+ * Also used by system-stats for the live KPI card (via import).
+ *
+ * @param {Object} api - SubwayBuilderAPI instance
+ * @returns {{ systemAdherenceScore: number|null, avgDelayByRoute: Object, avgDelayByHub: Object }}
+ */
+export function computeAdherenceSnapshot(api) {
+    try {
+        const routes = api.gameState.getRoutes();
+        const { ON_TIME_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
+        let totalStops = 0;
+        let onTimeStops = 0;
+        const avgDelayByRoute = {};
+        const hubAccum = {}; // groupId → { name, sumDelay, count }
+
+        for (const route of routes) {
+            const accum    = getTimetableAccum(route.id);
+            const stations = getRouteStationsInOrder(route.id, api);
+            let routeSum = 0, routeCount = 0;
+
+            for (const station of stations) {
+                const bucket = accum?.[station.stNodeId];
+                if (!bucket || bucket.count === 0) continue;
+                const delay = bucket.sumDelaySec / bucket.count;
+
+                routeSum += delay;
+                routeCount++;
+                totalStops++;
+                if (Math.abs(delay) <= ON_TIME_SEC) onTimeStops++;
+
+                const group = getGroupForStation(station.id);
+                if (group && group.stationIds.length > 1) {
+                    if (!hubAccum[group.id]) {
+                        hubAccum[group.id] = { name: group.name, sumDelay: 0, count: 0 };
+                    }
+                    hubAccum[group.id].sumDelay += delay;
+                    hubAccum[group.id].count++;
+                }
+            }
+
+            if (routeCount > 0) {
+                avgDelayByRoute[route.id] = +(routeSum / routeCount).toFixed(1);
+            }
+        }
+
+        const avgDelayByHub = {};
+        for (const [groupId, hub] of Object.entries(hubAccum)) {
+            avgDelayByHub[groupId] = +(hub.sumDelay / hub.count).toFixed(1);
+        }
+
+        return {
+            systemAdherenceScore: totalStops > 0
+                ? Math.round((onTimeStops / totalStops) * 100)
+                : null,
+            avgDelayByRoute,
+            avgDelayByHub,
+        };
+    } catch (e) {
+        console.error(`${CONFIG.LOG_PREFIX} computeAdherenceSnapshot failed:`, e);
+        return { systemAdherenceScore: null, avgDelayByRoute: {}, avgDelayByHub: {} };
+    }
+}
 
 /**
  * Capture a day's route data as a historical snapshot.
@@ -19,7 +86,7 @@ import { getRouteTodayStats } from './accumulator.js';
  * @param {Object} configCache   - In-memory config cache snapshot for scheduleChangedAt detection
  * @returns {Promise<void>}
  */
-export async function captureHistoricalData(day, api, storage, routeStatsMap = {}, configCache = {}) {
+export async function captureHistoricalData(day, api, storage, routeStatsMap = {}, configCache = {}, adherenceSnapshot = null) {
     try {
         const routes     = api.gameState.getRoutes();
         const trainTypes = api.trains.getTrainTypes();
@@ -65,8 +132,11 @@ export async function captureHistoricalData(day, api, storage, routeStatsMap = {
 
         // Store snapshot for this day
         historicalData.days[day] = {
-            timestamp: Date.now(),
-            routes:    processedData,
+            timestamp:            Date.now(),
+            routes:               processedData,
+            systemAdherenceScore: adherenceSnapshot?.systemAdherenceScore ?? null,
+            avgDelayByRoute:      adherenceSnapshot?.avgDelayByRoute ?? {},
+            avgDelayByHub:        adherenceSnapshot?.avgDelayByHub ?? {},
         };
 
         await storage.set('historicalData', historicalData);

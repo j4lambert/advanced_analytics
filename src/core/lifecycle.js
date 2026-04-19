@@ -3,7 +3,7 @@
 
 import { CONFIG } from '../config.js';
 import { Storage } from './storage.js';
-import { captureHistoricalData } from '../metrics/historical-data.js';
+import { captureHistoricalData, computeAdherenceSnapshot } from '../metrics/historical-data.js';
 import {
     initAccumulator,
     stopAccumulating,
@@ -284,11 +284,14 @@ export function initLifecycleHooks(api) {
         // Persist event log before the new day continues accumulating
         await persistEvents(storage);
 
+        // Snapshot timetable adherence before the per-day accumulators are cleared
+        const adherenceSnapshot = computeAdherenceSnapshot(api);
+
         // Reset per-day timetable accumulation (delay/dwell charts)
         resetTimetableAccum();
 
         // Save historical snapshot for the day that ended (include config cache for scheduleChangedAt)
-        await captureHistoricalData(dayThatEnded, api, storage, routeStatsMap, getConfigCacheSnapshot());
+        await captureHistoricalData(dayThatEnded, api, storage, routeStatsMap, getConfigCacheSnapshot(), adherenceSnapshot);
 
         // Capture baseline config at midnight for the new day
         const newDay = dayThatEnded + 1;

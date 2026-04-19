@@ -1,0 +1,100 @@
+// useSystemAdherence — live per-stop delay snapshot for the timetable heatmap.
+// Polls every REFRESH_INTERVAL and returns full per-route, per-stop data
+// plus hub averages and a system-wide on-time percentage.
+
+import { getTimetableAccum }       from '../metrics/accumulator.js';
+import { getRouteStationsInOrder } from '../utils/route-utils.js';
+import { getGroupForStation }      from '../utils/station-groups.js';
+import { CONFIG }                  from '../config.js';
+
+const api = window.SubwayBuilderAPI;
+const { React } = api.utils;
+
+export function useSystemAdherence() {
+    const [snapshot, setSnapshot] = React.useState(null);
+
+    React.useEffect(() => {
+        function compute() {
+            try {
+                const routes = api.gameState.getRoutes();
+                if (!routes.length) { setSnapshot(null); return; }
+
+                const { ON_TIME_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
+                let totalStops = 0, onTimeStops = 0;
+                const hubMap = {}; // groupId → { name, sumDelay, count }
+
+                const routeData = routes.map(route => {
+                    const accum    = getTimetableAccum(route.id);
+                    const stations = getRouteStationsInOrder(route.id, api);
+                    let routeSum = 0, routeCount = 0;
+
+                    const stops = stations.map(station => {
+                        const bucket   = accum?.[station.stNodeId];
+                        const hasData  = bucket && bucket.count > 0;
+                        const delaySec = hasData
+                            ? +(bucket.sumDelaySec / bucket.count).toFixed(1)
+                            : null;
+
+                        const group = getGroupForStation(station.id);
+                        const isHub = Boolean(group && group.stationIds.length > 1);
+
+                        if (hasData) {
+                            totalStops++;
+                            if (Math.abs(delaySec) <= ON_TIME_SEC) onTimeStops++;
+                            routeSum += delaySec;
+                            routeCount++;
+                            if (isHub) {
+                                if (!hubMap[group.id]) {
+                                    hubMap[group.id] = { name: group.name, sumDelay: 0, count: 0 };
+                                }
+                                hubMap[group.id].sumDelay += delaySec;
+                                hubMap[group.id].count++;
+                            }
+                        }
+
+                        return {
+                            stationId:   station.id,
+                            stationName: station.name,
+                            stNodeId:    station.stNodeId,
+                            delaySec,
+                            isHub,
+                        };
+                    });
+
+                    return {
+                        routeId:    route.id,
+                        routeName:  route.name || route.bullet,
+                        stops,
+                        avgDelaySec: routeCount > 0
+                            ? +(routeSum / routeCount).toFixed(1)
+                            : null,
+                    };
+                });
+
+                const hubAverages = {};
+                for (const [groupId, hub] of Object.entries(hubMap)) {
+                    hubAverages[groupId] = {
+                        name:       hub.name,
+                        avgDelaySec: +(hub.sumDelay / hub.count).toFixed(1),
+                    };
+                }
+
+                setSnapshot({
+                    routes: routeData,
+                    hubAverages,
+                    systemAdherenceScore: totalStops > 0
+                        ? Math.round((onTimeStops / totalStops) * 100)
+                        : null,
+                });
+            } catch (e) {
+                console.error(`${CONFIG.LOG_PREFIX} useSystemAdherence error:`, e);
+            }
+        }
+
+        compute();
+        const id = setInterval(compute, CONFIG.REFRESH_INTERVAL);
+        return () => clearInterval(id);
+    }, []);
+
+    return snapshot;
+}

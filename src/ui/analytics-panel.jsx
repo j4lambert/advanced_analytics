@@ -31,6 +31,7 @@ import { DropdownItem }    from '../components/dropdown-item.jsx';
 import { RouteBadge }      from '../components/route-badge.jsx';
 import { DashboardContent } from './dashboard.jsx';
 import { RouteContent }    from './route/route-dialog.jsx';
+import { TimetableView }   from './timetable/timetable-view.jsx';
 import { useRouteMetrics } from '../hooks/useRouteMetrics.js';
 import { getStorage }      from '../core/lifecycle.js';
 import { INITIAL_STATE }   from '../config.js';
@@ -49,6 +50,27 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
                 <span className="text-muted-foreground text-xs">Advanced Analytics</span>
                 <span class="border-foreground/20 border-r py-20 mx-4"/>
                 <span className="text-xs text-muted-foreground">Dashboard</span>
+            </span>
+        );
+    }
+
+    if (view === 'timetable') {
+        return (
+            <span className="flex items-center gap-1.5">
+                <icons.Eclipse size={14} className="shrink-0" />
+                <span className="text-muted-foreground text-xs">Advanced Analytics</span>
+                <span class="border-foreground/20 border-r py-20 mx-4"/>
+                <button
+                    className="text-xs text-foreground/70 hover:text-foreground hover:underline underline-offset-2 transition-colors"
+                    onClick={onNavDashboard}
+                >
+                    Dashboard
+                </button>
+                {React.createElement(icons.ChevronRight, {
+                    size: 20,
+                    className: 'text-muted-foreground shrink-0',
+                })}
+                <span className="text-xs">Timetable Adherence</span>
             </span>
         );
     }
@@ -100,7 +122,7 @@ function PanelBreadcrumb({ view, routeId, onNavDashboard, onRouteChange }) {
 
 export function AnalyticsPanel() {
     const [isOpen,         setIsOpen]         = React.useState(false);
-    const [view,           setView]           = React.useState('dashboard'); // 'dashboard' | 'route'
+    const [view,           setView]           = React.useState('dashboard'); // 'dashboard' | 'route' | 'timetable'
     const [routeId,        setRouteId]        = React.useState(null);
     const [historicalData, setHistoricalData] = React.useState({ days: {} });
 
@@ -151,12 +173,18 @@ export function AnalyticsPanel() {
         // Navigates back to dashboard (panel stays open)
         window.AdvancedAnalytics.closeRouteDialog = () => setView('dashboard');
 
+        window.AdvancedAnalytics.openTimetableDialog = () => {
+            setView('timetable');
+            setIsOpen(true);
+        };
+
         return () => {
             delete window.AdvancedAnalytics.openDialog;
             delete window.AdvancedAnalytics.closeDialog;
             delete window.AdvancedAnalytics.toggleDialog;
             delete window.AdvancedAnalytics.openRouteDialog;
             delete window.AdvancedAnalytics.closeRouteDialog;
+            delete window.AdvancedAnalytics.openTimetableDialog;
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -185,6 +213,10 @@ export function AnalyticsPanel() {
 
             {isOpen && view === 'route' && routeId && (
                 <RouteContent routeId={routeId} />
+            )}
+
+            {isOpen && view === 'timetable' && (
+                <TimetableView />
             )}
         </StaticPanel>
     );

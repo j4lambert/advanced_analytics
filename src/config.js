@@ -50,6 +50,11 @@ export const CONFIG = {
         WARNING: 120,  // < 120 s → moderate drift
     },
 
+    ADHERENCE_THRESHOLDS: {
+        ON_TIME_SEC:  60,   // |delay| ≤ 60 s → on time
+        WARNING_SEC: 120,   // |delay| ≤ 120 s → warning; above → severe
+    },
+
     TRANSFER_WALKING_TIME_THRESHOLD: 100,  // seconds
     
     COLORS: {

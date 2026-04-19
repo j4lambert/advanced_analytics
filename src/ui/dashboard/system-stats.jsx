@@ -29,6 +29,8 @@ import { getTransferGroups } from '../../utils/station-groups.js';
 import { formatCurrencyCompact } from '../../utils/formatting.js';
 import { getCurrentPhaseName } from '../../core/lifecycle.js';
 import { routeHealthScore, computeSystemAggregates } from '../../metrics/system-aggregates.js';
+import { computeAdherenceSnapshot } from '../../metrics/historical-data.js';
+import { CONFIG } from '../../config.js';
 
 const api = window.SubwayBuilderAPI;
 const { React, icons } = api.utils;
@@ -234,6 +236,34 @@ function StatChip({ Icon, label, value, daily = false }) {
     );
 }
 
+// ── Timetable adherence helpers ───────────────────────────────────────────────
+
+function adherenceColor(score) {
+    if (score >= 90) return '#22c55e';
+    if (score >= 70) return '#f59e0b';
+    return '#ef4444';
+}
+
+function adherenceLabel(score) {
+    if (score >= 90) return 'Good';
+    if (score >= 70) return 'Fair';
+    return 'Poor';
+}
+
+function useAdherenceScore() {
+    const [score, setScore] = React.useState(null);
+    React.useEffect(() => {
+        const compute = () => {
+            const snap = computeAdherenceSnapshot(api);
+            setScore(snap.systemAdherenceScore);
+        };
+        compute();
+        const id = setInterval(compute, 5000);
+        return () => clearInterval(id);
+    }, []);
+    return score;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function SystemStats({ liveRouteData }) {
@@ -249,26 +279,30 @@ export function SystemStats({ liveRouteData }) {
         return { ...agg, hubCount };
     }, [liveRouteData]);
 
+    const adherenceScore = useAdherenceScore();
+
     if (!stats) return null;
 
     return (
-        <div className="space-y-3 py-6 px-6">
+        <div className="space-y-5 py-6 px-6">
             <div className="flex gap-4">
                 {/* ── Stat chips ─────────────────────────────────────────────── */}
-                <div className="mr-auto">
-                    <div className={'whitespace-nowrap text-xl font-semibold tracking-tight leading-none mb-1.5'}>
-                        {getCityName(api.utils.getCityCode())}
-                    </div>
-                    <div className={'text-xs text-muted-foregound'}>
-                        Day {api.gameState.getCurrentDay()}
-                        {getCurrentPhaseName() && (
-                            <span className={'text-xs text-muted-foreground ml-1'}>
+                <div className="flex items-center mr-auto">
+                    <div>
+                        <div className={'whitespace-nowrap text-xl font-semibold tracking-tight leading-none mb-1.5'}>
+                            {getCityName(api.utils.getCityCode())}
+                        </div>
+                        <div className={'text-xs text-muted-foregound'}>
+                            Day {api.gameState.getCurrentDay()}
+                            {getCurrentPhaseName() && (
+                                <span className={'text-xs text-muted-foreground ml-1'}>
                                 - {getCurrentPhaseName()}
                             </span>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                     <StatChip Icon={icons.Route}      label="Routes"    value={stats.totalLines} />
                     <StatChip Icon={icons.TramFront}  label="Trains"    value={stats.totalTrains.toLocaleString()} />
                     <StatChip Icon={icons.Component}  label="Hubs"      value={stats.hubCount} />
@@ -278,10 +312,10 @@ export function SystemStats({ liveRouteData }) {
             </div>
 
             {/* ── Metric cards ───────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-12 gap-3">
 
                 {/* Load Factor */}
-                <div className="rounded border border-border bg-muted/20 px-4 py-3 space-y-1">
+                <div className="col-span-4 rounded border border-border bg-muted/20 px-4 py-3 space-y-1">
                     <div className="flex gap-3">
                         <icons.Gauge size={22} className="shrink-0" />
                         <div className="flex flex-col gap-1">
@@ -297,7 +331,10 @@ export function SystemStats({ liveRouteData }) {
                 </div>
 
                 {/* Network Health Score */}
-                <div className="rounded border border-border bg-muted/20 px-4 py-3">
+                <div
+                    className="rounded border border-border bg-muted/20 px-4 py-3"
+                    style={{ gridColumn: 'span 5 / span 4'}}
+                >
                     <div className="flex gap-3">
                         <icons.HeartPulse size={22} className="shrink-0" />
                         <div className="flex flex-col gap-1">
@@ -324,6 +361,52 @@ export function SystemStats({ liveRouteData }) {
                             </p>
                         </div>
                     </div>
+                </div>
+                {/* Timetable Adherence — click to open heatmap */}
+                <div
+                    className="col-span-3 rounded border border-border bg-muted/20 px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors"
+                    onClick={() => window.AdvancedAnalytics?.openTimetableDialog?.()}
+                    title="Open Timetable Adherence view"
+                >
+                    <div className="flex gap-3">
+                        <icons.CalendarClock size={22} className="shrink-0" />
+                        <div className="flex flex-col gap-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider">
+                                Timetable Adherence
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                % of stops within ±{CONFIG.ADHERENCE_THRESHOLDS.ON_TIME_SEC}s of schedule
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-3">
+                        {adherenceScore !== null ? (
+                            <div className="flex items-baseline gap-1.5">
+                                <span
+                                    className="text-3xl font-bold tabular-nums leading-none"
+                                    style={{ color: adherenceColor(adherenceScore) }}
+                                >
+                                    {adherenceScore}
+                                </span>
+                                <span
+                                    className="text-base font-semibold"
+                                    style={{ color: adherenceColor(adherenceScore) }}
+                                >
+                                    %
+                                </span>
+                                <span className="text-xs text-muted-foreground ml-1">
+                                    {adherenceLabel(adherenceScore)}
+                                </span>
+                            </div>
+                        ) : (
+                            <span className="text-sm text-muted-foreground">Waiting for data…</span>
+                        )}
+                    </div>
+
+                    <p className="mt-2 text-[9px] text-muted-foreground">
+                        Click to view full heatmap →
+                    </p>
                 </div>
 
             </div>
