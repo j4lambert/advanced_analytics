@@ -1,6 +1,7 @@
 // Timetable Analysis Charts
 // Delay Profile + Dwell Compliance — two side-by-side vertical bar charts.
-// Renders per-stop averages accumulated by the accumulator across completed laps today.
+// Each stop shows one combined bar. When the route is pendulum, the tooltip
+// breaks down Outbound / Return / Combined; otherwise just the single value.
 
 import { CONFIG }                   from '../../config.js';
 import { formatSecondsAsTime }      from '../../utils/formatting.js';
@@ -12,20 +13,32 @@ const h = React.createElement;
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 
-function delayColor(absSec) {
-    const { GOOD, WARNING } = CONFIG.SCHEDULE_DRIFT_THRESHOLDS;
-    if (absSec < GOOD)    return 'var(--color-green-500, #22c55e)';
-    if (absSec < WARNING) return 'var(--color-yellow-500, #eab308)';
+const { EARLY_SEC, ON_TIME_SEC, WARNING_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
+const { ADHERENCE } = CONFIG.COLORS;
+
+// Bar fill colour — signed value so early bars (negative) get blue.
+function delayColor(delaySec) {
+    if (delaySec >= -EARLY_SEC && delaySec <= ON_TIME_SEC) return 'var(--color-green-500, #22c55e)';
+    if (delaySec < -EARLY_SEC)   return 'var(--color-blue-400, #60a5fa)';
+    if (delaySec <= WARNING_SEC) return 'var(--color-orange-500, #f97316)';
     return 'var(--color-red-500, #ef4444)';
 }
 
-// Custom bar shape — colored individually based on the bar's value
-function makeColoredBar(getValue) {
+// Tailwind text colour for tooltip values
+function delayTextClass(delaySec) {
+    if (delaySec >= -EARLY_SEC && delaySec <= ON_TIME_SEC) return ADHERENCE.ON_TIME;
+    if (delaySec < -EARLY_SEC)   return ADHERENCE.EARLY;
+    if (delaySec <= WARNING_SEC) return ADHERENCE.SLIGHTLY_LATE;
+    return ADHERENCE.LATE;
+}
+
+// Custom bar shape — colored individually by value
+function makeColoredBar(dataKey) {
     return function ColoredBar(props) {
         const { x, y, width, height } = props;
-        if (!width || !height) return null;
-        const val   = getValue(props);
-        const color = delayColor(Math.abs(val));
+        const val = props[dataKey] ?? props.value;
+        if (!width || !height || val === undefined || val === null) return null;
+        const color = delayColor(val);  // signed — direction matters for colour
         const absW  = Math.abs(width);
         const absH  = Math.abs(height);
         const xLeft = width  < 0 ? x + width  : x;
@@ -36,23 +49,47 @@ function makeColoredBar(getValue) {
 
 // ── Tooltip ────────────────────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label, mode }) {
+function tooltipRow(label, delaySec) {
+    return h('tr', { key: label },
+        h('td', { className: 'text-muted-foreground pr-3 whitespace-nowrap' }, label),
+        h('td', { className: `tabular-nums text-right ${delayTextClass(delaySec)}` },
+            formatSecondsAsTime(delaySec, true)
+        ),
+    );
+}
+
+function ChartTooltip({ active, payload, label }) {
     if (!active || !payload?.length) return null;
-    const val = payload[0]?.value ?? 0;
+
+    // Full data row is in payload[0].payload (Recharts always passes the full row)
+    const row     = payload[0]?.payload ?? {};
+    const isDelay = payload[0]?.dataKey?.includes('Delay');
+    const fwdVal  = isDelay ? row.fwdDelaySec  : row.fwdDwellDiff;
+    const revVal  = isDelay ? row.revDelaySec  : row.revDwellDiff;
+    const avgVal  = isDelay ? row.avgDelaySec  : row.avgDwellDiff;
+
+    const hasBothDirs = fwdVal != null && revVal != null;
+
     return h('div', { className: 'rounded border bg-popover px-3 py-2 text-xs shadow-md' },
-        h('div', { className: 'font-semibold mb-1' }, label),
-        h('div', { className: 'tabular-nums' },
-            mode === 'delay'
-                ? `Avg delay: ${formatSecondsAsTime(val, true)}`
-                : `Dwell diff: ${formatSecondsAsTime(val, true)}`
-        )
+        h('div', { className: 'font-semibold mb-1.5' }, label),
+        hasBothDirs
+            ? h('table', null,
+                h('tbody', null,
+                    tooltipRow('→ Outbound', fwdVal),
+                    tooltipRow('← Return',   revVal),
+                    tooltipRow('Combined',   avgVal ?? 0),
+                )
+              )
+            : h('span', { className: `tabular-nums ${delayTextClass(avgVal ?? 0)}` },
+                formatSecondsAsTime(avgVal ?? 0, true)
+              )
     );
 }
 
 // ── Chart ──────────────────────────────────────────────────────────────────────
 
-function TimetableBarChart({ data, dataKey, mode, hideYAxis = false, yAxisWidth }) {
-    const chartHeight = Math.max(data.length * 32, 200);
+function TimetableBarChart({ data, dataKey, hideYAxis = false, yAxisWidth }) {
+    const chartHeight = Math.max(data.length * 20, 80);
     const computedYAxisWidth = yAxisWidth ?? Math.min(
         Math.max(...data.map(d => d.name.length)) * 7,
         160
@@ -64,6 +101,7 @@ function TimetableBarChart({ data, dataKey, mode, hideYAxis = false, yAxisWidth 
                 layout: 'vertical',
                 data,
                 margin: { top: 4, right: 16, left: 8, bottom: 4 },
+                barCategoryGap: '20%',
             },
                 h(charts.CartesianGrid, {
                     key:             'grid',
@@ -82,6 +120,7 @@ function TimetableBarChart({ data, dataKey, mode, hideYAxis = false, yAxisWidth 
                     tickLine: false,
                     axisLine: false,
                     hide:     hideYAxis,
+                    interval: 0,
                 }),
                 h(charts.XAxis, {
                     key:           'xaxis',
@@ -100,13 +139,14 @@ function TimetableBarChart({ data, dataKey, mode, hideYAxis = false, yAxisWidth 
                 }),
                 h(charts.Tooltip, {
                     key:     'tooltip',
-                    content: (props) => h(ChartTooltip, { ...props, mode }),
+                    content: (props) => h(ChartTooltip, props),
                     cursor:  { fill: 'currentColor', opacity: 0.04 },
                 }),
                 h(charts.Bar, {
                     key:               dataKey,
                     dataKey,
-                    shape:             makeColoredBar(p => p[dataKey] ?? p.value ?? 0),
+                    barSize:           2,
+                    shape:             makeColoredBar(dataKey),
                     animationDuration: 400,
                 })
             )
@@ -117,19 +157,30 @@ function TimetableBarChart({ data, dataKey, mode, hideYAxis = false, yAxisWidth 
 // ── Root export ────────────────────────────────────────────────────────────────
 
 export function TimetableCharts({ routeId, accum }) {
-    // Map accum (keyed by stNodeId) → ordered array with station names
     const chartData = React.useMemo(() => {
         if (!accum) return [];
         const stations = getRouteStationsInOrder(routeId, api);
         const rows = [];
         for (const station of stations) {
-            const bucket = accum[station.stNodeId];
-            if (!bucket || bucket.count === 0) continue;
+            const raw        = accum[station.stNodeId];
+            const fwd        = raw?.fwd, rev = raw?.rev;
+            const fwdCount   = fwd?.count ?? 0;
+            const revCount   = rev?.count ?? 0;
+            const totalCount = fwdCount + revCount;
+            if (totalCount === 0) continue;
+
             rows.push({
                 name:         station.name,
-                avgDelaySec:  +(bucket.sumDelaySec    / bucket.count).toFixed(1),
-                avgDwellDiff: +((bucket.sumDwellActual - bucket.sumDwellExpected) / bucket.count).toFixed(1),
-                count:        bucket.count,
+                fwdDelaySec:  fwdCount > 0 ? +(fwd.sumDelaySec / fwdCount).toFixed(1) : null,
+                revDelaySec:  revCount > 0 ? +(rev.sumDelaySec / revCount).toFixed(1) : null,
+                avgDelaySec:  +(((fwd?.sumDelaySec ?? 0) + (rev?.sumDelaySec ?? 0)) / totalCount).toFixed(1),
+                fwdDwellDiff: fwdCount > 0
+                    ? +((fwd.sumDwellActual - fwd.sumDwellExpected) / fwdCount).toFixed(1) : null,
+                revDwellDiff: revCount > 0
+                    ? +((rev.sumDwellActual - rev.sumDwellExpected) / revCount).toFixed(1) : null,
+                avgDwellDiff: +(((fwd?.sumDwellActual ?? 0) - (fwd?.sumDwellExpected ?? 0)
+                               + (rev?.sumDwellActual ?? 0) - (rev?.sumDwellExpected ?? 0)) / totalCount).toFixed(1),
+                count: totalCount,
             });
         }
         return rows;
@@ -141,25 +192,24 @@ export function TimetableCharts({ routeId, accum }) {
         );
     }
 
-    // Compute shared YAxis width so both charts align horizontally
     const yAxisWidth = Math.min(
         Math.max(...chartData.map(d => d.name.length)) * 7,
         160
     );
 
     const chartDefs = [
-        { key: 'delay', dataKey: 'avgDelaySec',  mode: 'delay', label: 'Delay Profile',    desc: 'Avg arrival delay per stop vs adjusted schedule',          hideYAxis: false },
-        { key: 'dwell', dataKey: 'avgDwellDiff',  mode: 'dwell', label: 'Dwell Compliance', desc: 'Avg difference between actual and expected dwell time',     hideYAxis: true  },
+        { key: 'delay', dataKey: 'avgDelaySec',  label: 'Delay Profile',    desc: 'Avg arrival delay per stop vs adjusted schedule',      hideYAxis: false },
+        { key: 'dwell', dataKey: 'avgDwellDiff',  label: 'Dwell Compliance', desc: 'Avg difference between actual and expected dwell time', hideYAxis: true  },
     ];
 
     return h('div', { className: 'flex gap-6 w-full' },
-        ...chartDefs.map(({ key, dataKey, mode, label, desc, hideYAxis }) =>
+        ...chartDefs.map(({ key, dataKey, label, desc, hideYAxis }) =>
             h('div', { key, className: 'flex-1 min-w-0' },
                 h('div', { className: 'mb-2' },
                     h('p', { className: 'text-xs font-medium text-foreground' }, label),
                     h('p', { className: 'text-xs text-muted-foreground' }, desc),
                 ),
-                h(TimetableBarChart, { data: chartData, dataKey, mode, hideYAxis, yAxisWidth })
+                h(TimetableBarChart, { data: chartData, dataKey, hideYAxis, yAxisWidth })
             )
         )
     );

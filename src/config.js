@@ -51,8 +51,9 @@ export const CONFIG = {
     },
 
     ADHERENCE_THRESHOLDS: {
-        ON_TIME_SEC:  60,   // |delay| ≤ 60 s → on time
-        WARNING_SEC: 120,   // |delay| ≤ 120 s → warning; above → severe
+        EARLY_SEC:    5,   // early  if delaySec < -EARLY_SEC
+        ON_TIME_SEC: 30,   // on-time upper bound  (-EARLY_SEC … ON_TIME_SEC]
+        WARNING_SEC: 60,   // slightly-late upper bound; late above
     },
 
     TRANSFER_WALKING_TIME_THRESHOLD: 100,  // seconds
@@ -101,6 +102,14 @@ export const CONFIG = {
             GOOD:     'text-green-600 dark:text-green-400',
             WARNING:  'text-yellow-600 dark:text-yellow-400',
             CRITICAL: 'text-red-600 dark:text-red-400',
+        },
+
+        // Adherence / delay status colors (text classes; used in heatmap + charts)
+        ADHERENCE: {
+            EARLY:         'text-blue-400',
+            ON_TIME:       'text-green-500',
+            SLIGHTLY_LATE: 'text-orange-400',
+            LATE:          'text-red-500',
         },
 
         // Comparison mode colors

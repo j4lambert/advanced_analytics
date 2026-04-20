@@ -17,7 +17,12 @@ vi.mock('../metrics/accumulator.js', () => ({
 }));
 
 vi.mock('../metrics/historical-data.js', () => ({
-    captureHistoricalData: vi.fn(() => Promise.resolve()),
+    captureHistoricalData:    vi.fn(() => Promise.resolve()),
+    computeAdherenceSnapshot: vi.fn(() => ({
+        systemAdherenceScore: null,
+        avgDelayByRoute: {},
+        avgDelayByHub:   {},
+    })),
 }));
 
 vi.mock('../metrics/train-config-tracking.js', () => ({

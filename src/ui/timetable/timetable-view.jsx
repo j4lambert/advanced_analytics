@@ -47,7 +47,7 @@ export function TimetableView() {
     const hubAverages    = snapshot?.hubAverages ?? {};
     const score          = snapshot?.systemAdherenceScore ?? null;
 
-    const { ON_TIME_SEC, WARNING_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
+    const { EARLY_SEC, ON_TIME_SEC, WARNING_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
 
     return (
         <div className="px-6 py-5 space-y-5">
@@ -99,21 +99,17 @@ export function TimetableView() {
             </div>
 
             {/* ── Legend ───────────────────────────────────────────────────── */}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[10px] text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[10px] text-muted-foreground">
                 <div className="flex items-center gap-1.5">
-                    <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: 'rgba(37,99,235,0.75)' }} />
-                    <span>Early (&gt; {WARNING_SEC}s)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: 'rgba(59,130,246,0.4)' }} />
-                    <span>Slightly early ({ON_TIME_SEC}–{WARNING_SEC}s)</span>
+                    <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: 'rgba(96,165,250,0.5)' }} />
+                    <span>Early (&gt; {EARLY_SEC}s)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                     <div className="w-4 h-3 rounded-sm border border-border/60" />
-                    <span>On time (±{ON_TIME_SEC}s)</span>
+                    <span>On time (−{EARLY_SEC}s to +{ON_TIME_SEC}s)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                    <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239,68,68,0.4)' }} />
+                    <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: 'rgba(249,115,22,0.45)' }} />
                     <span>Slightly late ({ON_TIME_SEC}–{WARNING_SEC}s)</span>
                 </div>
                 <div className="flex items-center gap-1.5">

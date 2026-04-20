@@ -30,9 +30,11 @@ export function computeAdherenceSnapshot(api) {
             let routeSum = 0, routeCount = 0;
 
             for (const station of stations) {
-                const bucket = accum?.[station.stNodeId];
-                if (!bucket || bucket.count === 0) continue;
-                const delay = bucket.sumDelaySec / bucket.count;
+                const raw        = accum?.[station.stNodeId];
+                const fwd        = raw?.fwd, rev = raw?.rev;
+                const totalCount = (fwd?.count ?? 0) + (rev?.count ?? 0);
+                if (totalCount === 0) continue;
+                const delay = ((fwd?.sumDelaySec ?? 0) + (rev?.sumDelaySec ?? 0)) / totalCount;
 
                 routeSum += delay;
                 routeCount++;

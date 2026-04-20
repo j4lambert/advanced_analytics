@@ -19,7 +19,7 @@ export function useSystemAdherence() {
                 const routes = api.gameState.getRoutes();
                 if (!routes.length) { setSnapshot(null); return; }
 
-                const { ON_TIME_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
+                const { EARLY_SEC, ON_TIME_SEC } = CONFIG.ADHERENCE_THRESHOLDS;
                 let totalStops = 0, onTimeStops = 0;
                 const hubMap = {}; // groupId → { name, sumDelay, count }
 
@@ -29,18 +29,24 @@ export function useSystemAdherence() {
                     let routeSum = 0, routeCount = 0;
 
                     const stops = stations.map(station => {
-                        const bucket   = accum?.[station.stNodeId];
-                        const hasData  = bucket && bucket.count > 0;
-                        const delaySec = hasData
-                            ? +(bucket.sumDelaySec / bucket.count).toFixed(1)
+                        const raw        = accum?.[station.stNodeId];
+                        const fwd        = raw?.fwd, rev = raw?.rev;
+                        const fwdCount   = fwd?.count ?? 0;
+                        const revCount   = rev?.count ?? 0;
+                        const totalCount = fwdCount + revCount;
+                        const hasData    = totalCount > 0;
+                        const delaySec   = hasData
+                            ? +(((fwd?.sumDelaySec ?? 0) + (rev?.sumDelaySec ?? 0)) / totalCount).toFixed(1)
                             : null;
+                        const fwdDelaySec = fwdCount > 0 ? +(fwd.sumDelaySec / fwdCount).toFixed(1) : null;
+                        const revDelaySec = revCount > 0 ? +(rev.sumDelaySec / revCount).toFixed(1) : null;
 
                         const group = getGroupForStation(station.id);
                         const isHub = Boolean(group && group.stationIds.length > 1);
 
                         if (hasData) {
                             totalStops++;
-                            if (Math.abs(delaySec) <= ON_TIME_SEC) onTimeStops++;
+                            if (delaySec >= -EARLY_SEC && delaySec <= ON_TIME_SEC) onTimeStops++;
                             routeSum += delaySec;
                             routeCount++;
                             if (isHub) {
@@ -53,10 +59,12 @@ export function useSystemAdherence() {
                         }
 
                         return {
-                            stationId:   station.id,
-                            stationName: station.name,
-                            stNodeId:    station.stNodeId,
+                            stationId:    station.id,
+                            stationName:  station.name,
+                            stNodeId:     station.stNodeId,
                             delaySec,
+                            fwdDelaySec,
+                            revDelaySec,
                             isHub,
                         };
                     });
@@ -65,9 +73,8 @@ export function useSystemAdherence() {
                         routeId:    route.id,
                         routeName:  route.name || route.bullet,
                         stops,
-                        avgDelaySec: routeCount > 0
-                            ? +(routeSum / routeCount).toFixed(1)
-                            : null,
+                        avgDelaySec:   routeCount > 0 ? +(routeSum / routeCount).toFixed(1) : null,
+                        totalDelaySec: routeCount > 0 ? +routeSum.toFixed(1) : null,
                     };
                 });
 

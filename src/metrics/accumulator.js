@@ -71,8 +71,13 @@ let _segmentLoadsCache  = {};   // { routeId: maxLoadPerDirection }
 let _trainsByRoute      = new Map(); // routeId → Train[] (from getTrains())
 
 // Per-day timetable accumulation (reset at midnight via resetTimetableAccum())
-let _timetableAccum  = {}; // { [routeId]: { [stNodeId]: { sumDelaySec, sumDwellActual, sumDwellExpected, count } } }
+// Bucket shape: { fwd: { sumDelaySec, sumDwellActual, sumDwellExpected, count },
+//                 rev: <same> | null }
+// rev is null for circular/one-way routes; both legs exist for pendulum routes.
+// Terminal stations on pendulum routes accumulate into fwd only (rev stays count=0).
+let _timetableAccum  = {}; // { [routeId]: { [stNodeId]: { fwd, rev } } }
 let _lastSeenArrival = {}; // { [trainId]: { [stNodeIndex]: number } } — last arrivalTime accumulated per stop
+let _routeLegMap     = {}; // { [routeId]: { isPendulum: bool, turnaroundIdx: number|null } }
 
 // Timers
 let _pollTimer  = null;
@@ -381,6 +386,69 @@ function _registerMoneyHook(api) {
     });
 }
 
+// ── Helper: route leg info for timetable direction split ─────────────────────
+// Returns { isPendulum, turnaroundIdx, returnToFwd } for a given route.
+//
+// turnaroundIdx: array position in stComboTimings of the last outbound stop.
+//   Stops with stNodeIndex <= turnaroundIdx are outbound; the rest are return.
+//   Falls back to array position when stComboTimings entries lack stNodeIndex.
+//
+// returnToFwd: { returnStNodeId → outboundStNodeId }
+//   For pendulum routes where the return leg uses a DIFFERENT stNodeId than the
+//   outbound leg, this map lets us accumulate both legs under the outbound key.
+//   When both legs share the same stNodeId, the entry maps id → id (identity).
+function _getRouteLegInfo(routeId) {
+    if (_routeLegMap[routeId] !== undefined) return _routeLegMap[routeId];
+
+    const route = _routesCache?.find(r => r.id === routeId);
+    if (!route?.stComboTimings?.length) {
+        return (_routeLegMap[routeId] = { isPendulum: false, turnaroundIdx: null, returnToFwd: {} });
+    }
+
+    const allStations  = _api?.gameState?.getStations?.() ?? [];
+    const stNodeToStId = new Map(); // stNodeId → station.id
+    allStations.forEach(s => s.stNodeIds?.forEach(n => stNodeToStId.set(n, s.id)));
+
+    const seenByStId   = {}; // station.id → first (outbound) stNodeId
+    const seenNodeIds  = new Set(); // direct stNodeId tracking (fallback when station map is unavailable)
+    const returnToFwd  = {}; // returnStNodeId → outboundStNodeId
+    let turnaroundIdx  = null;
+    let isPendulum     = false;
+
+    for (let i = 0; i < route.stComboTimings.length; i++) {
+        const timing  = route.stComboTimings[i];
+        const { stNodeId } = timing;
+        const stId    = stNodeToStId.get(stNodeId); // may be undefined if station map unavailable
+
+        if (stId) {
+            if (stId in seenByStId) {
+                // Return-leg stop with a different stNodeId (or same — mapped either way)
+                if (!isPendulum) {
+                    isPendulum    = true;
+                    // Use the stNodeIndex from the timing if present; fall back to array position
+                    turnaroundIdx = route.stComboTimings[i - 1]?.stNodeIndex ?? (i - 1);
+                }
+                returnToFwd[stNodeId] = seenByStId[stId];
+            } else {
+                seenByStId[stId] = stNodeId;
+            }
+        } else {
+            // Station map unavailable — fall back to direct stNodeId repeat detection
+            if (seenNodeIds.has(stNodeId)) {
+                if (!isPendulum) {
+                    isPendulum    = true;
+                    turnaroundIdx = route.stComboTimings[i - 1]?.stNodeIndex ?? (i - 1);
+                }
+                returnToFwd[stNodeId] = stNodeId; // same stNodeId: identity mapping
+            } else {
+                seenNodeIds.add(stNodeId);
+            }
+        }
+    }
+
+    return (_routeLegMap[routeId] = { isPendulum, turnaroundIdx, returnToFwd });
+}
+
 // ── Poll tick (wall-clock, 500 ms) ─────────────────────────────────────────
 // Updates weight caches on every real-time tick so that onMoneyChanged
 // events are always attributed with up-to-date per-route proportions.
@@ -421,6 +489,20 @@ function _tick() {
         // (catches both first-time visits and new-lap revisits).
         for (const train of trains) {
             if (!train.timings) continue;
+
+            // Skip deposit-bound trains — their stops produce phantom delay data once
+            // the game recalls them to the depot at a phase change. The game signals
+            // this several ticks before the train leaves getTrains() by setting
+            // futureCycleArrivalTimes = [] at stop 0 (confirmed via in-game diagnostic).
+            // We guard only on the explicit empty array; undefined (field not exposed)
+            // is not a deposit signal and must fall through to accumulate normally.
+            const stop0 = train.timings[0];
+            if (stop0
+                    && Array.isArray(stop0.futureCycleArrivalTimes)
+                    && stop0.futureCycleArrivalTimes.length === 0) {
+                continue;
+            }
+
             const trainSeen = _lastSeenArrival[train.id] ?? {};
 
             for (const stop of train.timings) {
@@ -431,12 +513,36 @@ function _tick() {
                 if (arrivalTime === null || departureTime === null) continue;
                 if (arrivalTime === trainSeen[stNodeIndex]) continue;
 
-                // New completed stop — accumulate
-                if (!_timetableAccum[train.routeId])            _timetableAccum[train.routeId] = {};
-                if (!_timetableAccum[train.routeId][stNodeId])  _timetableAccum[train.routeId][stNodeId] = {
-                    sumDelaySec: 0, sumDwellActual: 0, sumDwellExpected: 0, count: 0,
-                };
-                const bucket = _timetableAccum[train.routeId][stNodeId];
+                // New completed stop — accumulate into fwd or rev leg.
+                // returnToFwd handles the case where outbound/return passes use
+                // different stNodeIds: we always store under the outbound stNodeId.
+                const { isPendulum, turnaroundIdx, returnToFwd } = _getRouteLegInfo(train.routeId);
+
+                let leg, accumNodeId;
+                if (!isPendulum) {
+                    leg = 'fwd'; accumNodeId = stNodeId;
+                } else {
+                    const mapped = returnToFwd[stNodeId];
+                    if (mapped !== undefined && mapped !== stNodeId) {
+                        // Different stNodeId per direction: definitively a return-leg stop
+                        leg = 'rev'; accumNodeId = mapped;
+                    } else {
+                        // Same stNodeId both directions (or no mapping): use stNodeIndex
+                        leg = turnaroundIdx !== null && stNodeIndex > turnaroundIdx ? 'rev' : 'fwd';
+                        accumNodeId = stNodeId;
+                    }
+                }
+
+                if (!_timetableAccum[train.routeId])                  _timetableAccum[train.routeId] = {};
+                if (!_timetableAccum[train.routeId][accumNodeId]) {
+                    const emptyBucket = () => ({ sumDelaySec: 0, sumDwellActual: 0, sumDwellExpected: 0, count: 0 });
+                    _timetableAccum[train.routeId][accumNodeId] = {
+                        fwd: emptyBucket(),
+                        rev: isPendulum ? emptyBucket() : null,
+                    };
+                }
+                const bucket = _timetableAccum[train.routeId][accumNodeId][leg];
+                if (!bucket) { trainSeen[stNodeIndex] = arrivalTime; continue; }
                 bucket.sumDelaySec    += arrivalTime - adjustedExpectedArrivalTime;
                 bucket.sumDwellActual += departureTime - arrivalTime;
                 bucket.sumDwellExpected += expectedDepartureTime - expectedArrivalTime;
@@ -446,6 +552,13 @@ function _tick() {
             }
 
             _lastSeenArrival[train.id] = trainSeen;
+        }
+
+        // Prune stale entries for trains that went to deposit and left getTrains().
+        // Prevents stale state if the game reuses a train ID in a later phase.
+        const liveIds = new Set(trains.map(t => t.id));
+        for (const id of Object.keys(_lastSeenArrival)) {
+            if (!liveIds.has(id)) delete _lastSeenArrival[id];
         }
     }
 
@@ -658,8 +771,9 @@ export function getTimetableAccum(routeId) {
  * Called at midnight (onDayChange) so charts reflect the current day only.
  */
 export function resetTimetableAccum() {
-    _timetableAccum  = {};
-    _lastSeenArrival = {};
+    _timetableAccum    = {};
+    _lastSeenArrival   = {};
+    _routeLegMap       = {};
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────

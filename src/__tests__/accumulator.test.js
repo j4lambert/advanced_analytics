@@ -154,3 +154,100 @@ describe('restoreEvents — unsaved-quit rollback', () => {
         await expect(acc.restoreEvents(storage, 5000)).resolves.not.toThrow();
     });
 });
+
+// ── _tick() — deposit-bound train filtering ────────────────────────────────
+
+describe('_tick() — deposit-bound train filtering', () => {
+    let acc;
+
+    beforeEach(async () => {
+        vi.useFakeTimers();
+        acc = await freshAccumulator();
+        acc.clearAccumulatorState();
+    });
+
+    afterEach(() => {
+        acc?.stopAccumulating();
+        vi.useRealTimers();
+    });
+
+    // Build a minimal train. futureCycleArrivalTimes is attached to stop0 only
+    // when explicitly provided so we can distinguish "absent" from "= []".
+    function makeTrain(id, routeId, { futureCycleArrivalTimes, arrivalTime = 1000, departureTime = 1020 } = {}) {
+        const stop = {
+            stNodeId:                    'N1',
+            stNodeIndex:                 0,
+            arrivalTime,
+            departureTime,
+            adjustedExpectedArrivalTime: 1000,
+            expectedArrivalTime:         1000,
+            expectedDepartureTime:       1020,
+        };
+        if (futureCycleArrivalTimes !== undefined) {
+            stop.futureCycleArrivalTimes = futureCycleArrivalTimes;
+        }
+        return { id, routeId, timings: [stop] };
+    }
+
+    function makeApi(getTrainsFn) {
+        return {
+            hooks:     { onMoneyChanged: vi.fn() },
+            gameState: {
+                isPaused:          vi.fn(() => false),
+                getElapsedSeconds: vi.fn(() => 5000),
+                getRoutes:         vi.fn(() => []),
+                getLineMetrics:    vi.fn(() => []),
+                getCurrentDay:     vi.fn(() => 1),
+                getTrains:         getTrainsFn,
+            },
+            trains: { getTrainTypes: vi.fn(() => ({})) },
+        };
+    }
+
+    it('does NOT accumulate stops for a deposit-bound train (futureCycleArrivalTimes = [])', async () => {
+        const train = makeTrain('T1', 'R1', { futureCycleArrivalTimes: [] });
+        const api   = makeApi(vi.fn(() => [train]));
+        acc.initAccumulator(api);
+        vi.advanceTimersByTime(500);
+        expect(acc.getTimetableAccum('R1')).toBeNull();
+    });
+
+    it('DOES accumulate for a train with futureCycleArrivalTimes absent (field not exposed)', async () => {
+        const train = makeTrain('T1', 'R1'); // no futureCycleArrivalTimes key
+        const api   = makeApi(vi.fn(() => [train]));
+        acc.initAccumulator(api);
+        vi.advanceTimersByTime(500);
+        expect(acc.getTimetableAccum('R1')?.['N1']?.fwd.count).toBe(1);
+    });
+
+    it('DOES accumulate for a train with futureCycleArrivalTimes = [2000, 3000] (cycling train)', async () => {
+        const train = makeTrain('T1', 'R1', { futureCycleArrivalTimes: [2000, 3000] });
+        const api   = makeApi(vi.fn(() => [train]));
+        acc.initAccumulator(api);
+        vi.advanceTimersByTime(500);
+        expect(acc.getTimetableAccum('R1')?.['N1']?.fwd.count).toBe(1);
+    });
+
+    it('prunes _lastSeenArrival when a train leaves getTrains(); reused ID accumulates again', async () => {
+        const getTrains = vi.fn();
+        const api       = makeApi(getTrains);
+
+        // Tick 1: T1 live with arrivalTime=1000 → accumulated, count=1.
+        const trainV1 = makeTrain('T1', 'R1');
+        getTrains.mockReturnValueOnce([trainV1]);
+        acc.initAccumulator(api);
+        vi.advanceTimersByTime(500);
+        expect(acc.getTimetableAccum('R1')?.['N1']?.fwd.count).toBe(1);
+
+        // Tick 2: T1 gone (went to deposit) → _lastSeenArrival['T1'] pruned.
+        getTrains.mockReturnValueOnce([]);
+        vi.advanceTimersByTime(500);
+
+        // Tick 3: T1 reappears (ID reuse) with NEW arrivalTime=9999.
+        // Without cleanup the stale entry would suppress this, leaving count at 1.
+        const trainV2 = makeTrain('T1', 'R1', { arrivalTime: 9999, departureTime: 10010 });
+        getTrains.mockReturnValueOnce([trainV2]);
+        vi.advanceTimersByTime(500);
+        expect(acc.getTimetableAccum('R1')?.['N1']?.fwd.count).toBe(2);
+    });
+});
