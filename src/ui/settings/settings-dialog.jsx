@@ -4,8 +4,8 @@ import { ToggleSwitch } from '../../components/toggle-switch.jsx';
 const api = window.SubwayBuilderAPI;
 const { React } = api.utils;
 
-export function SettingsDialog({ isOpen, onClose, showLoadFactor, showPerformance,
-                                 onToggleLoadFactor, onTogglePerformance, onTopbarSectionHover }) {
+export function SettingsDialog({ isOpen, onClose, showLoadFactor, showPerformance, showAdherence,
+                                 onToggleLoadFactor, onTogglePerformance, onToggleAdherence, onTopbarSectionHover }) {
     return (
         <Dialog
             id="aa-dialog-settings"
@@ -32,6 +32,11 @@ export function SettingsDialog({ isOpen, onClose, showLoadFactor, showPerformanc
                         checked={showPerformance}
                         onChange={onTogglePerformance}
                         label="Network Health Score"
+                    />
+                    <ToggleSwitch
+                        checked={showAdherence}
+                        onChange={onToggleAdherence}
+                        label="Schedule Adherence"
                     />
                 </div>
             </div>

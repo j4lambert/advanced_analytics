@@ -369,7 +369,7 @@ export function SystemStats({ liveRouteData }) {
                     title="Open Timetable Adherence view"
                 >
                     <div className="flex gap-3">
-                        <icons.CalendarClock size={38} strokeWidth={1} className="shrink-0" />
+                        <icons.CalendarClock size={36} strokeWidth={1} className="shrink-0" />
                         <div className="flex flex-col gap-1">
                             <p className="text-[10px] font-semibold uppercase tracking-wider">
                                 Timetable Adherence

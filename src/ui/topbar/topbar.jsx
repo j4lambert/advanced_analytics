@@ -19,6 +19,7 @@ import { Tooltip }                 from '../../components/tooltip.jsx';
 import { getStorage }              from '../../core/lifecycle.js';
 import { getRoute24hStats }        from '../../metrics/accumulator.js';
 import { computeSystemAggregates } from '../../metrics/system-aggregates.js';
+import { computeAdherenceSnapshot } from '../../metrics/historical-data.js';
 import { loadPrefs, savePrefs }    from '../../hooks/useUIPreferences.js';
 import { CONFIG } from "../../config";
 
@@ -58,6 +59,18 @@ function healthLabel(score) {
     if (score < 75) return 'Good';
     if (score < 90) return 'Very Good';
     return 'Excellent';
+}
+function adherenceColor(score) {
+    if (score === null) return 'text-muted-foreground';
+    if (score >= 90) return CONFIG.COLORS.TEXT.SUCCESS;
+    if (score >= 70) return CONFIG.COLORS.TEXT.WARNING;
+    return CONFIG.COLORS.TEXT.DANGER;
+}
+function adherenceLabel(score) {
+    if (score === null) return 'N/A';
+    if (score >= 90) return 'Good';
+    if (score >= 70) return 'Fair';
+    return 'Poor';
 }
 
 // ── Compact metric chip ───────────────────────────────────────────────────────
@@ -105,10 +118,12 @@ function MetricChip({ value, unit, label, color, Icon, onClick, tooltipTitle, to
 
 export function TopBar() {
     const [metrics,           setMetrics]           = React.useState(null);
+    const [adherenceScore,    setAdherenceScore]    = React.useState(null);
     const [isSettingsOpen,    setIsSettingsOpen]    = React.useState(false);
     const [isTopbarElevated,  setIsTopbarElevated]  = React.useState(false);
     const [showLoadFactor,    setShowLoadFactor]    = React.useState(true);
     const [showPerformance,   setShowPerformance]   = React.useState(true);
+    const [showAdherence,     setShowAdherence]     = React.useState(true);
     const [extChips,          setExtChips]          = React.useState(new Map());
 
     const storage        = getStorage();
@@ -121,6 +136,7 @@ export function TopBar() {
         loadPrefs(storage, 'topbar').then(prefs => {
             if (prefs.showLoadFactor  !== undefined) setShowLoadFactor(prefs.showLoadFactor);
             if (prefs.showPerformance !== undefined) setShowPerformance(prefs.showPerformance);
+            if (prefs.showAdherence   !== undefined) setShowAdherence(prefs.showAdherence);
             prefsSaveable.current = true;
         });
     }, [storage]);
@@ -128,7 +144,7 @@ export function TopBar() {
     // ── Save preferences ──────────────────────────────────────────────────────
     React.useEffect(() => {
         if (!prefsSaveable.current || !storage) return;
-        savePrefs(storage, 'topbar', { showLoadFactor, showPerformance });
+        savePrefs(storage, 'topbar', { showLoadFactor, showPerformance, showAdherence });
     }, [storage, showLoadFactor, showPerformance]);
 
     // ── Metrics polling ───────────────────────────────────────────────────────
@@ -141,6 +157,9 @@ export function TopBar() {
             }));
             const agg = computeSystemAggregates(routeStats);
             setMetrics(agg.totalLines > 0 ? agg : null);
+
+            const { systemAdherenceScore } = computeAdherenceSnapshot(api);
+            setAdherenceScore(systemAdherenceScore);
         }
         poll();
         const id = setInterval(poll, 2000);
@@ -169,7 +188,8 @@ export function TopBar() {
     }, []);
 
     // ── Render ────────────────────────────────────────────────────────────────
-    const hasBuiltinChips = metrics && (showLoadFactor || showPerformance);
+    const hasBuiltinChips = (metrics && (showLoadFactor || showPerformance)) ||
+                            (adherenceScore !== null && showAdherence);
     const hasExtChips     = extChips.size > 0;
 
     function handleClose() {
@@ -183,8 +203,10 @@ export function TopBar() {
             onClose={handleClose}
             showLoadFactor={showLoadFactor}
             showPerformance={showPerformance}
+            showAdherence={showAdherence}
             onToggleLoadFactor={() => setShowLoadFactor(v => !v)}
             onTogglePerformance={() => setShowPerformance(v => !v)}
+            onToggleAdherence={() => setShowAdherence(v => !v)}
             onTopbarSectionHover={setIsTopbarElevated}
         />
     );
@@ -214,7 +236,7 @@ export function TopBar() {
                         />
                     )}
 
-                    {/* Divider between built-in chips */}
+                    {/* Divider between Load Factor and Performance chips */}
                     {metrics && showLoadFactor && showPerformance && (
                         <div className="w-px bg-border/50 self-stretch my-1" />
                     )}
@@ -230,6 +252,25 @@ export function TopBar() {
                             onClick={() => window.AdvancedAnalytics.openDialog?.()}
                             tooltipTitle="Network Health Score"
                             tooltipDesc="Ridership-weighted load factor quality (0–100)"
+                        />
+                    )}
+
+                    {/* Divider before Adherence chip */}
+                    {(metrics && (showLoadFactor || showPerformance)) && adherenceScore !== null && showAdherence && (
+                        <div className="w-px bg-border/50 self-stretch my-1" />
+                    )}
+
+                    {/* Schedule Adherence chip */}
+                    {adherenceScore !== null && showAdherence && (
+                        <MetricChip
+                            value={adherenceScore}
+                            unit="%"
+                            label={adherenceLabel(adherenceScore)}
+                            color={adherenceColor(adherenceScore)}
+                            Icon={icons.Clock}
+                            onClick={() => window.AdvancedAnalytics.openDialog?.('timetable')}
+                            tooltipTitle="Schedule Adherence"
+                            tooltipDesc={`% of stops within ±${CONFIG.ADHERENCE_THRESHOLDS.ON_TIME_SEC}s of schedule`}
                         />
                     )}
 
