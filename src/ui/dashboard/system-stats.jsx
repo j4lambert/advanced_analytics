@@ -317,7 +317,7 @@ export function SystemStats({ liveRouteData }) {
                 {/* Load Factor */}
                 <div className="col-span-4 rounded border border-border bg-muted/20 px-4 py-3 space-y-1">
                     <div className="flex gap-3">
-                        <icons.Gauge size={22} className="shrink-0" />
+                        <icons.Gauge size={38} strokeWidth={1} className="shrink-0" />
                         <div className="flex flex-col gap-1">
                             <p className="text-[10px] font-semibold uppercase tracking-wider">
                                 System Load Factor
@@ -336,7 +336,7 @@ export function SystemStats({ liveRouteData }) {
                     style={{ gridColumn: 'span 5 / span 4'}}
                 >
                     <div className="flex gap-3">
-                        <icons.HeartPulse size={22} className="shrink-0" />
+                        <icons.HeartPulse size={38} strokeWidth={1} className="shrink-0" />
                         <div className="flex flex-col gap-1">
                             <p className="text-[10px] font-semibold uppercase tracking-wider">
                                 Network Health Score
@@ -364,12 +364,12 @@ export function SystemStats({ liveRouteData }) {
                 </div>
                 {/* Timetable Adherence — click to open heatmap */}
                 <div
-                    className="col-span-3 rounded border border-border bg-muted/20 px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors"
+                    className="col-span-3 rounded border border-border bg-muted/20 px-4 py-3 cursor-pointer hover:bg-accent/50 hover:border-muted-foreground/50"
                     onClick={() => window.AdvancedAnalytics?.openTimetableDialog?.()}
                     title="Open Timetable Adherence view"
                 >
                     <div className="flex gap-3">
-                        <icons.CalendarClock size={22} className="shrink-0" />
+                        <icons.CalendarClock size={38} strokeWidth={1} className="shrink-0" />
                         <div className="flex flex-col gap-1">
                             <p className="text-[10px] font-semibold uppercase tracking-wider">
                                 Timetable Adherence
@@ -380,11 +380,11 @@ export function SystemStats({ liveRouteData }) {
                         </div>
                     </div>
 
-                    <div className="mt-3">
+                    <div className="mt-8">
                         {adherenceScore !== null ? (
                             <div className="flex items-baseline gap-1.5">
                                 <span
-                                    className="text-3xl font-bold tabular-nums leading-none"
+                                    className="text-5xl font-bold tabular-nums leading-none"
                                     style={{ color: adherenceColor(adherenceScore) }}
                                 >
                                     {adherenceScore}
@@ -398,15 +398,14 @@ export function SystemStats({ liveRouteData }) {
                                 <span className="text-xs text-muted-foreground ml-1">
                                     {adherenceLabel(adherenceScore)}
                                 </span>
+                                <p className="ml-auto text-[9px] text-muted-foreground">
+                                    Full heatmap →
+                                </p>
                             </div>
                         ) : (
                             <span className="text-sm text-muted-foreground">Waiting for data…</span>
                         )}
                     </div>
-
-                    <p className="mt-2 text-[9px] text-muted-foreground">
-                        Click to view full heatmap →
-                    </p>
                 </div>
 
             </div>
