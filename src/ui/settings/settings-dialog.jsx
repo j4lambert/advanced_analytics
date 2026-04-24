@@ -2,7 +2,7 @@ import { Dialog }        from '../../components/dialog.jsx';
 import { ToggleSwitch } from '../../components/toggle-switch.jsx';
 
 const api = window.SubwayBuilderAPI;
-const { React } = api.utils;
+const { React, icons } = api.utils;
 
 export function SettingsDialog({ isOpen, onClose, showLoadFactor, showPerformance, showAdherence,
                                  onToggleLoadFactor, onTogglePerformance, onToggleAdherence, onTopbarSectionHover }) {
@@ -26,17 +26,17 @@ export function SettingsDialog({ isOpen, onClose, showLoadFactor, showPerformanc
                     <ToggleSwitch
                         checked={showLoadFactor}
                         onChange={onToggleLoadFactor}
-                        label="System Load Factor"
+                        label={<span className="flex items-center gap-2"><icons.Gauge size={14} className="shrink-0 text-muted-foreground" />System Load Factor</span>}
                     />
                     <ToggleSwitch
                         checked={showPerformance}
                         onChange={onTogglePerformance}
-                        label="Network Health Score"
+                        label={<span className="flex items-center gap-2"><icons.HeartPulse size={14} className="shrink-0 text-muted-foreground" />Network Health Score</span>}
                     />
                     <ToggleSwitch
                         checked={showAdherence}
                         onChange={onToggleAdherence}
-                        label="Schedule Adherence"
+                        label={<span className="flex items-center gap-2"><icons.CalendarClock size={14} className="shrink-0 text-muted-foreground" />Schedule Adherence</span>}
                     />
                 </div>
             </div>

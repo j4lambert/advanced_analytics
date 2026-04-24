@@ -268,7 +268,7 @@ export function TopBar() {
                             label={adherenceLabel(adherenceScore)}
                             color={adherenceColor(adherenceScore)}
                             Icon={icons.Clock}
-                            onClick={() => window.AdvancedAnalytics.openDialog?.('timetable')}
+                            onClick={() => window.AdvancedAnalytics.openTimetableDialog?.()}
                             tooltipTitle="Schedule Adherence"
                             tooltipDesc={`% of stops within ±${CONFIG.ADHERENCE_THRESHOLDS.ON_TIME_SEC}s of schedule`}
                         />
