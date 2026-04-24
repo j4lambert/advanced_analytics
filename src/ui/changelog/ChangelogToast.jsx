@@ -12,7 +12,7 @@ const IMP = [
     'Updated design for better readability and UX',
 ];
 const FIX = [
-    'NEW: Added toast and changelog system',
+    'To ease edition, the toolbar becomes temporarily visible while the Settings dialog is open'
 ];
 
 // Prevents showing the changelog twice in the same browser session
