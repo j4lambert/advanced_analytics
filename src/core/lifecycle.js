@@ -17,6 +17,7 @@ import {
     resetTimetableAccum,
 } from '../metrics/accumulator.js';
 import { captureInitialDayConfig, recordConfigChange, pruneConfigCache } from '../metrics/train-config-tracking.js';
+import { initAlertsEngine, stopAlertsEngine } from '../ui/alerts/alerts-engine.js';
 
 let storage = null;
 
@@ -99,6 +100,8 @@ export async function handleMapReadyFallback(api) {
     setAccumulatorStorage(storage);
     const configCache = await storage.get('configCache', {});
     setConfigCacheSnapshot(configCache);
+
+    initAlertsEngine(api, storage);
 }
 
 /**
@@ -231,6 +234,8 @@ export function initLifecycleHooks(api) {
         const configCache = await storage.get('configCache', {});
         setConfigCacheSnapshot(configCache);
 
+        initAlertsEngine(api, storage);
+
     });
 
     // ── onGameSaved ─────────────────────────────────────────────────────────
@@ -263,6 +268,7 @@ export function initLifecycleHooks(api) {
         currentSaveName = null;
 
         stopAccumulating();
+        stopAlertsEngine();
     });
 
     // ── onDayChange ─────────────────────────────────────────────────────────

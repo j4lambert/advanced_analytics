@@ -35,6 +35,12 @@ vi.mock('../core/game-timing.js', () => ({
     gameTiming: { init: vi.fn(), onEveryNGameSeconds: vi.fn(), stop: vi.fn(), reset: vi.fn() },
 }));
 
+vi.mock('../ui/alerts/alerts-engine.js', () => ({
+    initAlertsEngine: vi.fn(),
+    stopAlertsEngine: vi.fn(),
+    setAlertsMuted:   vi.fn(),
+}));
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function uniqueSave() {

@@ -21,6 +21,7 @@ import { getRoute24hStats }        from '../../metrics/accumulator.js';
 import { computeSystemAggregates } from '../../metrics/system-aggregates.js';
 import { computeAdherenceSnapshot } from '../../metrics/historical-data.js';
 import { loadPrefs, savePrefs }    from '../../hooks/useUIPreferences.js';
+import { setAlertsMuted }          from '../alerts/alerts-engine.js';
 import { CONFIG } from "../../config";
 
 const api = window.SubwayBuilderAPI;
@@ -124,28 +125,44 @@ export function TopBar() {
     const [showLoadFactor,    setShowLoadFactor]    = React.useState(true);
     const [showPerformance,   setShowPerformance]   = React.useState(true);
     const [showAdherence,     setShowAdherence]     = React.useState(true);
+    const [showAlertsButton,  setShowAlertsButton]  = React.useState(true);
+    const [alertsMuted,       setAlertsMutedState]  = React.useState(false);
+    const [isAlertHovered,    setIsAlertHovered]    = React.useState(false);
     const [extChips,          setExtChips]          = React.useState(new Map());
 
     const storage        = getStorage();
     const prefsSaveable  = React.useRef(false);
+    const alertHoverTimer = React.useRef(null);
 
     // ── Load preferences ──────────────────────────────────────────────────────
     React.useEffect(() => {
         if (prefsSaveable.current) return;
         if (!storage) return;
         loadPrefs(storage, 'topbar').then(prefs => {
-            if (prefs.showLoadFactor  !== undefined) setShowLoadFactor(prefs.showLoadFactor);
-            if (prefs.showPerformance !== undefined) setShowPerformance(prefs.showPerformance);
-            if (prefs.showAdherence   !== undefined) setShowAdherence(prefs.showAdherence);
+            if (prefs.showLoadFactor    !== undefined) setShowLoadFactor(prefs.showLoadFactor);
+            if (prefs.showPerformance   !== undefined) setShowPerformance(prefs.showPerformance);
+            if (prefs.showAdherence     !== undefined) setShowAdherence(prefs.showAdherence);
+            if (prefs.showAlertsButton  !== undefined) setShowAlertsButton(prefs.showAlertsButton);
             prefsSaveable.current = true;
+        });
+        loadPrefs(storage, 'alerts').then(prefs => {
+            if (prefs.muted !== undefined) {
+                setAlertsMutedState(prefs.muted);
+                setAlertsMuted(prefs.muted);
+            }
         });
     }, [storage]);
 
     // ── Save preferences ──────────────────────────────────────────────────────
     React.useEffect(() => {
         if (!prefsSaveable.current || !storage) return;
-        savePrefs(storage, 'topbar', { showLoadFactor, showPerformance, showAdherence });
-    }, [storage, showLoadFactor, showPerformance]);
+        savePrefs(storage, 'topbar', { showLoadFactor, showPerformance, showAdherence, showAlertsButton });
+    }, [storage, showLoadFactor, showPerformance, showAdherence, showAlertsButton]);
+
+    React.useEffect(() => {
+        if (!prefsSaveable.current || !storage) return;
+        savePrefs(storage, 'alerts', { muted: alertsMuted });
+    }, [storage, alertsMuted]);
 
     // ── Metrics polling ───────────────────────────────────────────────────────
     React.useEffect(() => {
@@ -188,8 +205,7 @@ export function TopBar() {
     }, []);
 
     // ── Render ────────────────────────────────────────────────────────────────
-    const hasBuiltinChips = (metrics && (showLoadFactor || showPerformance)) ||
-                            (adherenceScore !== null && showAdherence);
+    const hasBuiltinChips = (metrics && (showLoadFactor || showPerformance)) || showAdherence;
     const hasExtChips     = extChips.size > 0;
 
     function handleClose() {
@@ -197,16 +213,34 @@ export function TopBar() {
         setIsTopbarElevated(false);
     }
 
+    function handleToggleMute() {
+        const next = !alertsMuted;
+        setAlertsMutedState(next);
+        setAlertsMuted(next);
+    }
+
+    function handleAlertAreaEnter() {
+        if (alertHoverTimer.current) clearTimeout(alertHoverTimer.current);
+        setIsAlertHovered(true);
+    }
+
+    function handleAlertAreaLeave() {
+        alertHoverTimer.current = setTimeout(() => setIsAlertHovered(false), 200);
+    }
+
     const settingsDialog = (
         <SettingsDialog
             isOpen={isSettingsOpen}
             onClose={handleClose}
+            storage={storage}
             showLoadFactor={showLoadFactor}
             showPerformance={showPerformance}
             showAdherence={showAdherence}
             onToggleLoadFactor={() => setShowLoadFactor(v => !v)}
             onTogglePerformance={() => setShowPerformance(v => !v)}
             onToggleAdherence={() => setShowAdherence(v => !v)}
+            showAlertsButton={showAlertsButton}
+            onToggleAlertsButton={() => setShowAlertsButton(v => !v)}
             onTopbarSectionHover={setIsTopbarElevated}
         />
     );
@@ -256,14 +290,14 @@ export function TopBar() {
                     )}
 
                     {/* Divider before Adherence chip */}
-                    {(metrics && (showLoadFactor || showPerformance)) && adherenceScore !== null && showAdherence && (
+                    {(metrics && (showLoadFactor || showPerformance)) && showAdherence && (
                         <div className="w-px bg-border/50 self-stretch my-1" />
                     )}
 
                     {/* Schedule Adherence chip */}
-                    {adherenceScore !== null && showAdherence && (
+                    {showAdherence && (
                         <MetricChip
-                            value={adherenceScore}
+                            value={adherenceScore ?? 0}
                             unit="%"
                             label={adherenceLabel(adherenceScore)}
                             color={adherenceColor(adherenceScore)}
@@ -285,6 +319,57 @@ export function TopBar() {
                             {renderFn(metrics)}
                         </React.Fragment>
                     ))}
+
+                    {/* Alerts mute toggle + hover-reveal settings cog */}
+                    {showAlertsButton && (
+                        <>
+                            <div className="w-px bg-border/50 self-stretch my-1" />
+
+                            {/* Hover container — covers bell + floating cog so no gap triggers leave */}
+                            <div
+                                className="relative flex items-center"
+                                onMouseEnter={handleAlertAreaEnter}
+                                onMouseLeave={handleAlertAreaLeave}
+                            >
+                                <Tooltip side="bottom" content={
+                                    <div>
+                                        <div className="font-semibold">{alertsMuted ? 'Alerts muted' : 'Alerts active'}</div>
+                                        <div className="text-xs opacity-75 mt-0.5">Click to {alertsMuted ? 'enable' : 'mute'} alerts</div>
+                                    </div>
+                                }>
+                                    <button
+                                        className={`aa-topbar-chip flex items-center px-2 py-0.5 cursor-pointer ${alertsMuted ? 'text-muted-foreground' : ''}`}
+                                        onClick={handleToggleMute}
+                                        type="button"
+                                    >
+                                        {alertsMuted
+                                            ? <icons.BellOff size={14} />
+                                            : <icons.Bell    size={14} />
+                                        }
+                                    </button>
+                                </Tooltip>
+
+                                {/* Floating cog panel — appears on hover, reachable via pointer */}
+                                {isAlertHovered && (
+                                    <div
+                                        className="absolute top-1/2 -translate-y-1/2 bg-background border rounded-lg flex gap-1 p-2 pointer-events-auto z-10"
+                                        style={{ left: 'calc(100% + 4px)' }}
+                                        onMouseEnter={handleAlertAreaEnter}
+                                        onMouseLeave={handleAlertAreaLeave}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                                            onClick={() => setIsSettingsOpen(true)}
+                                            title="Alert settings"
+                                        >
+                                            <icons.Settings size={13} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
 
                 </div>
             </section>
