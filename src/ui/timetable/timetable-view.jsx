@@ -79,7 +79,31 @@ export function TimetableView() {
         <div className="px-6 py-5 space-y-5">
 
             <section className={"flex justify-between items-end py-5"}>
-                <h3 class="text-xl font-semibold leading-none tracking-tight">Schedule Adherence by Route &amp; Stop</h3>
+                <div>
+                    <h1 class="text-xl font-semibold leading-none tracking-tight mb-4">Timetable Adherence</h1>
+                    {/* ── Controls bar ─────────────────────────────────────────────── */}
+                    <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground shrink-0">Show </span>
+                            {routes.length > 0 ? (
+                                <RouteSelector
+                                    routes={routes}
+                                    selectedIds={effectiveIds}
+                                    onChange={setSelectedIds}
+                                />
+                            ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground shrink-0">Order </span>
+                            <ButtonsGroup value={routeOrder} onChange={setRouteOrder}>
+                                <ButtonsGroupItem value="default" text="Default"/>
+                                <ButtonsGroupItem value="most-delayed" text="Most Delayed First"/>
+                            </ButtonsGroup>
+                        </div>
+                    </div>
+                </div>
 
                 {/* System on-time KPI */}
                 <div className="flex items-center gap-2.5 rounded border border-border bg-muted/20 px-4 py-2 shrink-0">
@@ -103,29 +127,6 @@ export function TimetableView() {
                     )}
                 </div>
             </section>
-
-            {/* ── Controls bar ─────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between gap-6">
-                <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground shrink-0">Show routes:</span>
-                    {routes.length > 0 ? (
-                        <RouteSelector
-                            routes={routes}
-                            selectedIds={effectiveIds}
-                            onChange={setSelectedIds}
-                        />
-                    ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground shrink-0">Order:</span>
-                    <ButtonsGroup value={routeOrder} onChange={setRouteOrder}>
-                        <ButtonsGroupItem value="default"      text="Default" />
-                        <ButtonsGroupItem value="most-delayed" text="Most Delayed First" />
-                    </ButtonsGroup>
-                </div>
-            </div>
 
 
             {/* ── Heatmap ──────────────────────────────────────────────────── */}
